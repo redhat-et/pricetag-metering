@@ -331,7 +331,7 @@ footer .mono{font-size:12px}
 <!-- ============ KEY ============ -->
 <section id="key">
   <h2><span class="no">01</span>Get a key</h2>
-  <p class="lede">One key works on both routes. Keys are issued by a gateway admin — <strong>Noy Itzikowitz</strong> or <strong>Yossi Ovadia</strong>: ask for one and you will get a claim link; open it, sign in with SSO, and your <span class="mono">pk-…</span> key is revealed exactly once.</p>
+  <p class="lede">One key works across every API path on the gateway. Keys are issued by a gateway admin — <strong>Noy Itzikowitz</strong> or <strong>Yossi Ovadia</strong>: ask for one and you will get a claim link; open it, sign in with SSO, and your <span class="mono">pk-…</span> key is revealed exactly once.</p>
 </section>
 
 <!-- ============ QUICKSTART ============ -->
@@ -341,8 +341,8 @@ footer .mono{font-size:12px}
   <div class="duo">
     <div class="card">
       <h3>Smoke test with curl</h3>
-      <p class="cap">A chat completion on the OpenAI route.</p>
-      <div class="codebox hasname"><div class="fname">bash</div><button class="copy">copy</button><pre>curl <span class="s">{{OPENAI_URL}}</span>/chat/completions \
+      <p class="cap">A chat completion through the gateway.</p>
+      <div class="codebox hasname"><div class="fname">bash</div><button class="copy">copy</button><pre>curl <span class="s">{{GATEWAY_URL}}/v1</span>/chat/completions \
   -H <span class="k">"Authorization: Bearer $PRICETAG_KEY"</span> \
   -H <span class="k">"content-type: application/json"</span> \
   -d <span class="k">'{"model":"gpt-5.6-luna","messages":[
@@ -350,13 +350,13 @@ footer .mono{font-size:12px}
     </div>
     <div class="card">
       <h3>Claude Code in two lines</h3>
-      <p class="cap">Point it at the unified route and go.</p>
+      <p class="cap">Point it at the gateway and go.</p>
       <div class="callout warn"><span class="glyph">!</span><div class="cbody">
         <p>If you've used Vertex or BedLab before, leftover variables silently bypass the gateway — run this <strong>before</strong> the block below, and clear it out of your <code>.zshrc</code> too.</p>
         <div class="codebox"><button class="copy">copy</button><pre><span class="k">unset</span> CLAUDE_CODE_USE_VERTEX
 <span class="k">unset</span> ANTHROPIC_VERTEX_PROJECT_ID</pre></div>
       </div></div>
-      <div class="codebox hasname"><div class="fname">bash</div><button class="copy">copy</button><pre><span class="k">export</span> ANTHROPIC_BASE_URL=<span class="s">{{UNIFIED_URL}}</span>
+      <div class="codebox hasname"><div class="fname">bash</div><button class="copy">copy</button><pre><span class="k">export</span> ANTHROPIC_BASE_URL=<span class="s">{{GATEWAY_URL}}</span>
 <span class="k">export</span> ANTHROPIC_API_KEY=<span class="s">$PRICETAG_KEY</span>
 
 claude</pre></div>
@@ -375,7 +375,7 @@ claude</pre></div>
       <p>Everything Claude Code needs lives under <span class="mono">env</span> — no shell exports required.</p>
       <div class="codebox hasname"><div class="fname">~/.claude/settings.json</div><button class="copy">copy</button><pre>{
   <span class="k">"env"</span>: {
-    <span class="k">"ANTHROPIC_BASE_URL"</span>: <span class="s">"{{UNIFIED_URL}}"</span>,
+    <span class="k">"ANTHROPIC_BASE_URL"</span>: <span class="s">"{{GATEWAY_URL}}"</span>,
     <span class="k">"ANTHROPIC_API_KEY"</span>: <span class="s">"pk-your-key"</span>,
     <span class="k">"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"</span>: <span class="s">"1"</span>
   }
@@ -401,7 +401,7 @@ claude</pre></div>
     <span class="s">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>: { <span class="k">"effortLevel"</span>: <span class="s">"medium"</span> }
   }
 }</pre></div>
-      <div class="callout warn"><span class="glyph">!</span><p>Use the model id <strong>exactly</strong> as shown — on the unified route an unknown id falls through to Anthropic and 404s. And keep <span class="mono">effortLevel</span> at <span class="mono">"medium"</span>: the hosted endpoint accepts <span class="mono">low/medium/xhigh</span> and rejects <span class="mono">"high"</span>.</p></div>
+      <div class="callout warn"><span class="glyph">!</span><p>Use the model id <strong>exactly</strong> as shown — an unknown id falls through to Anthropic and 404s. And keep <span class="mono">effortLevel</span> at <span class="mono">"medium"</span>: the hosted endpoint accepts <span class="mono">low/medium/xhigh</span> and rejects <span class="mono">"high"</span>.</p></div>
       <div class="callout warn"><span class="glyph">!</span><p><strong>Expect some Sonnet/Haiku rows even on an all-Qwen setup.</strong> Claude Code runs some internal requests on the Sonnet / Haiku-class model regardless of the model selected in <span class="mono">/model</span> — conversation summaries for <span class="mono">--resume</span>, status commands like <span class="mono">/usage</span>, background classification, and (by default) subagents. They go through the same gateway base URL, carry the full session context, and show up under your usage as <span class="mono">claude-sonnet-*</span> / <span class="mono">claude-haiku-*</span>. To pin those calls to a gateway model too, set <span class="mono">ANTHROPIC_DEFAULT_SONNET_MODEL</span> / <span class="mono">ANTHROPIC_DEFAULT_HAIKU_MODEL</span> (and optionally <span class="mono">CLAUDE_CODE_SUBAGENT_MODEL</span>) to a gateway model id in your launcher.</p></div>
     </div></div>
   </div>
@@ -410,45 +410,37 @@ claude</pre></div>
 <!-- ============ CODEX ============ -->
 <section id="codex">
   <h2><span class="no">04</span>Set up Codex</h2>
-  <p class="lede">Codex speaks OpenAI Responses, so setup is one provider block per route: GPT on the OpenAI route, hosted Qwen on the unified route. GPT first — the lineup (gpt-5.x) including <span class="mono">gpt-5.3-codex</span>:</p>
-  <div class="codebox hasname"><div class="fname">~/.codex/config.toml</div><button class="copy">copy</button><pre><span class="c"># provider: PriceTag gateway</span>
+  <p class="lede">Codex speaks OpenAI Responses. GPT, hosted Qwen, and GLM use the same gateway host. Configure the providers once, then select a profile:</p>
+  <div class="codebox hasname"><div class="fname">~/.codex/config.toml</div><button class="copy">copy</button><pre><span class="c"># OpenAI-compatible models use the same gateway and Bearer auth.</span>
 [<span class="k">model_providers.pricetag</span>]
 name     = <span class="s">"PriceTag"</span>
-base_url = <span class="s">"{{OPENAI_URL}}"</span>
+base_url = <span class="s">"{{GATEWAY_URL}}/v1"</span>
 env_key  = <span class="s">"PRICETAG_KEY"</span>
 wire_api = <span class="s">"responses"</span>
 
-[<span class="k">profiles.pricetag</span>]
-model          = <span class="s">"gpt-5.3-codex"</span>
+[<span class="k">model_providers.hosted</span>]
+name     = <span class="s">"PriceTag hosted"</span>
+base_url = <span class="s">"{{GATEWAY_URL}}/v1"</span>
+env_key  = <span class="s">"PRICETAG_KEY"</span>
+wire_api = <span class="s">"responses"</span></pre></div>
+  <div class="codebox hasname"><div class="fname">~/.codex/pricetag.config.toml</div><button class="copy">copy</button><pre>model          = <span class="s">"gpt-5.3-codex"</span>
 model_provider = <span class="s">"pricetag"</span></pre></div>
-  <div class="codebox"><button class="copy">copy</button><pre><span class="k">export</span> PRICETAG_KEY=<span class="s">pk-your-key</span>
-codex --profile pricetag</pre></div>
-  <p class="cap" style="margin:18px 0 10px">And the hosted models — a second provider pointed at the unified route, which serves <span class="mono">/v1/responses</span> for Qwen <em>and</em> GLM too:</p>
-  <div class="codebox hasname"><div class="fname">~/.codex/config.toml — add</div><button class="copy">copy</button><pre>[<span class="k">model_providers.qwen</span>]
-name        = <span class="s">"PriceTag hosted"</span>
-base_url    = <span class="s">"{{UNIFIED_URL}}/v1"</span>
-wire_api    = <span class="s">"responses"</span>
-http_headers = { <span class="k">"x-api-key"</span> = <span class="s">"pk-your-key"</span> }  <span class="c"># the unified route wants the key here, not as a bearer token</span>
-
-[<span class="k">profiles.qwen</span>]
-model          = <span class="s">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>
-model_provider = <span class="s">"qwen"</span>
-<span class="c"># Codex has no built-in metadata for this model id; without this it warns</span>
-<span class="c"># "Model metadata not found" and falls back to a tiny window. 262144 = 256K.</span>
-model_context_window = 262144
-
-[<span class="k">profiles.glm</span>]   <span class="c"># same provider, different hosted model</span>
-model          = <span class="s">"rits/zai-org/glm-5-3"</span>
-model_provider = <span class="s">"qwen"</span>
+  <div class="codebox hasname"><div class="fname">~/.codex/qwen.config.toml</div><button class="copy">copy</button><pre>model          = <span class="s">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>
+model_provider = <span class="s">"hosted"</span>
+<span class="c"># Codex has no built-in metadata for this model id; 262144 = 256K.</span>
 model_context_window = 262144</pre></div>
-  <div class="codebox"><button class="copy">copy</button><pre>codex --profile qwen   <span class="c"># or: codex --profile glm</span></pre></div>
-  <div class="callout good"><span class="glyph">✓</span><p>One catch: Codex only shows its own built-in models in the <span class="mono">/model</span> picker, so pin the hosted model id in the profile as above — it works, it just won't appear in the list. The <span class="mono">model_context_window</span> line is what silences the "Model metadata not found" warning on start.</p></div>
+  <div class="codebox hasname"><div class="fname">~/.codex/glm.config.toml</div><button class="copy">copy</button><pre>model          = <span class="s">"rits/zai-org/glm-5-3"</span>
+model_provider = <span class="s">"hosted"</span>
+model_context_window = 262144</pre></div>
+  <div class="codebox"><button class="copy">copy</button><pre><span class="k">export</span> PRICETAG_KEY=<span class="s">pk-your-key</span>
+codex --profile pricetag  <span class="c"># or: qwen / glm</span></pre></div>
+  <div class="callout good"><span class="glyph">✓</span><p>Codex only shows built-in models in its <span class="mono">/model</span> picker, so pin hosted model ids in profiles. The <span class="mono">model_context_window</span> line avoids the "Model metadata not found" warning.</p></div>
 </section>
 
 <!-- ============ OPENCODE ============ -->
 <section id="opencode">
   <h2><span class="no">05</span>Set up OpenCode</h2>
-  <p class="lede">Re-aim OpenCode's <em>built-in</em> <span class="mono">anthropic</span> and <span class="mono">openai</span> providers at the gateway. Keep them built-in on purpose: OpenCode only pulls the model chooser and effort levels from models.dev for official provider ids, so overriding <span class="mono">options</span> — instead of adding a custom provider — keeps every model and setting available in the picker.</p>
+  <p class="lede">Re-aim OpenCode's <em>built-in</em> <span class="mono">anthropic</span> and <span class="mono">openai</span> providers at the same gateway URL. Keep them built-in on purpose: OpenCode only pulls the model chooser and effort levels from models.dev for official provider ids, so overriding <span class="mono">options</span> — instead of adding a custom provider — keeps every model and setting available in the picker.</p>
   <div class="steps">
     <div class="step"><div class="body">
       <h3>Save your key — one command, one time</h3>
@@ -462,15 +454,15 @@ model_context_window = 262144</pre></div>
   <span class="k">"$schema"</span>: <span class="s">"https://opencode.ai/config.json"</span>,
   <span class="k">"provider"</span>: {
     <span class="k">"anthropic"</span>: {
-      <span class="k">"options"</span>: { <span class="k">"baseURL"</span>: <span class="s">"{{UNIFIED_URL}}/v1"</span>, <span class="k">"apiKey"</span>: <span class="s">"{file:~/.config/opencode/pricetag.key}"</span> }
+      <span class="k">"options"</span>: { <span class="k">"baseURL"</span>: <span class="s">"{{GATEWAY_URL}}/v1"</span>, <span class="k">"apiKey"</span>: <span class="s">"{file:~/.config/opencode/pricetag.key}"</span> }
     },
     <span class="k">"openai"</span>: {
-      <span class="k">"options"</span>: { <span class="k">"baseURL"</span>: <span class="s">"{{OPENAI_URL}}"</span>, <span class="k">"apiKey"</span>: <span class="s">"{file:~/.config/opencode/pricetag.key}"</span> }
+      <span class="k">"options"</span>: { <span class="k">"baseURL"</span>: <span class="s">"{{GATEWAY_URL}}/v1"</span>, <span class="k">"apiKey"</span>: <span class="s">"{file:~/.config/opencode/pricetag.key}"</span> }
     },
     <span class="k">"pricetag-hosted"</span>: {
       <span class="k">"npm"</span>: <span class="s">"@ai-sdk/anthropic"</span>,
       <span class="k">"name"</span>: <span class="s">"PriceTag (hosted)"</span>,
-      <span class="k">"options"</span>: { <span class="k">"baseURL"</span>: <span class="s">"{{UNIFIED_URL}}/v1"</span>, <span class="k">"apiKey"</span>: <span class="s">"{file:~/.config/opencode/pricetag.key}"</span> },
+      <span class="k">"options"</span>: { <span class="k">"baseURL"</span>: <span class="s">"{{GATEWAY_URL}}/v1"</span>, <span class="k">"apiKey"</span>: <span class="s">"{file:~/.config/opencode/pricetag.key}"</span> },
       <span class="k">"models"</span>: {
         <span class="k">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>: {
           <span class="k">"name"</span>: <span class="s">"Qwen 3.8 Flash Next (hosted)"</span>,
@@ -496,36 +488,36 @@ model_context_window = 262144</pre></div>
     <p style="margin-bottom:0"><strong>OpenCode won't start after step 2</strong>, error says <span class="mono">bad file reference</span>? The key file from step 1 is missing or the path is off — re-run step 1 with the same path.</p>
   </div></div>
   <p>Switch models inside OpenCode with <span class="mono">/models</span> — <span class="mono">anthropic/…</span> and <span class="mono">openai/…</span> now ride the gateway (billed like everything else), and <span class="mono">pricetag-hosted/…</span> runs on our vLLM at hosted rates. Don't want to touch the config file? OpenCode also merges the <span class="mono">OPENCODE_CONFIG_CONTENT</span> env var, which takes the same JSON as a string.</p>
-  <div class="callout warn"><span class="glyph">!</span><p>Two traps, both silent: the Anthropic SDK appends <code>/messages</code> to <span class="mono">baseURL</span>, so it needs the <strong><code>/v1</code> suffix</strong> (host root hits <code>/messages</code> and fails) — the OpenAI SDK appends <code>/chat/completions</code>, which is why <span class="mono">{{OPENAI_URL}}</span> already ends in <code>/v1</code>. And don't point the built-in <span class="mono">anthropic</span> provider at the OpenAI route: its catalog has no <span class="mono">claude-*</span> ids, so requests die with "model does not exist or you do not have access to it".</p></div>
+  <div class="callout warn"><span class="glyph">!</span><p>Both OpenCode providers use the same host but form different paths and auth headers: Anthropic calls <span class="mono">/v1/messages</span> with <span class="mono">x-api-key</span>; OpenAI-compatible calls use <span class="mono">/v1/chat/completions</span> or <span class="mono">/v1/responses</span> with a Bearer token.</p></div>
 </section>
 
 <!-- ============ HERMES CLI ============ -->
 <section id="hermes">
   <h2><span class="no">06</span>Set up Hermes CLI</h2>
-  <p class="lede"><a href="https://github.com/NousResearch/hermes-agent" target="_blank">Hermes</a> takes the gateway as one provider per dialect, same rule as everywhere else: the GPT lineup on a <em>custom</em> OpenAI-compatible endpoint, the hosted models (Qwen or GLM) on the built-in <span class="mono">anthropic</span> provider re-aimed at the unified route. The choice is saved under <span class="mono">model:</span> in <span class="mono">~/.hermes/config.yaml</span> — the <span class="mono">hermes model</span> wizard writes it, or edit it directly:</p>
+  <p class="lede"><a href="https://github.com/NousResearch/hermes-agent" target="_blank">Hermes</a> uses the same gateway host for both native API dialects: GPT through its OpenAI-compatible provider, and Claude/Qwen/GLM through its Anthropic provider. The choice is saved under <span class="mono">model:</span> in <span class="mono">~/.hermes/config.yaml</span> — the <span class="mono">hermes model</span> wizard writes it, or edit it directly:</p>
   <div class="codebox hasname"><div class="fname">~/.hermes/config.yaml — GPT lineup (OpenAI dialect)</div><button class="copy">copy</button><pre>model:
   provider: <span class="s">"custom"</span>
   default:  <span class="s">"gpt-5.3-codex"</span>
-  base_url: <span class="s">"{{OPENAI_URL}}"</span>   <span class="c"># already ends in /v1</span></pre></div>
+  base_url: <span class="s">"{{GATEWAY_URL}}/v1"</span>   <span class="c"># already ends in /v1</span></pre></div>
   <div class="codebox hasname"><div class="fname">~/.hermes/config.yaml — hosted models (Anthropic dialect)</div><button class="copy">copy</button><pre>model:
   provider: <span class="s">"anthropic"</span>
   default:  <span class="s">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>   <span class="c"># or "rits/zai-org/glm-5-3" for GLM 5.3</span>
-  base_url: <span class="s">"{{UNIFIED_URL}}/v1"</span>   <span class="c"># the /v1 suffix is required</span></pre></div>
+  base_url: <span class="s">"{{GATEWAY_URL}}/v1"</span>   <span class="c"># the /v1 suffix is required</span></pre></div>
   <div class="codebox hasname"><div class="fname">~/.hermes/.env — one key, used twice</div><button class="copy">copy</button><pre>OPENAI_API_KEY=<span class="s">pk-your-key</span>
 ANTHROPIC_API_KEY=<span class="s">pk-your-key</span></pre></div>
-  <p>The same PriceTag key works on both lines — the <em>route</em> decides the dialect, not the key. The <span class="mono">anthropic</span> provider sends it as <span class="mono">x-api-key</span> natively, which is exactly what the unified route reads. Switch providers with <span class="mono">hermes model</span>; <span class="mono">/model</span> inside a session only switches between providers already set up.</p>
-  <div class="callout warn"><span class="glyph">!</span><p>Four traps, learned the hard way this week: the OpenAI route has <strong>no Qwen ids</strong> — asking for one gets "The model … does not exist or you do not have access to it" from upstream, so keep the model id and the base URL as a matched pair, never mix halves. The <span class="mono">anthropic</span> provider needs the <strong><code>/v1</code> suffix</strong> on <span class="mono">base_url</span>. The unified route reads <strong>only</strong> <span class="mono">x-api-key</span> — a <span class="mono">custom</span> (OpenAI-client) provider sends its key as a <span class="mono">Bearer</span> token and gets <span class="mono">401 missing API key</span>; stick with the <span class="mono">anthropic</span> provider above for the hosted model, or if you wire it as a custom entry anyway, inject the same key through <span class="mono">extra_headers</span>. And Hermes auxiliary tasks (session titles, compression) follow the main model by default — pointing the default at the hosted id means those calls ride on it too.</p></div>
+  <p>The same PriceTag key works for both dialects. Anthropic clients send <span class="mono">x-api-key</span>; OpenAI-compatible clients send a Bearer token. The path selects the protocol pipeline. Switch providers with <span class="mono">hermes model</span>; <span class="mono">/model</span> inside a session only switches between providers already set up.</p>
+  <div class="callout warn"><span class="glyph">!</span><p>Keep each model on a supported dialect: GPT uses the OpenAI-compatible provider; Claude/Qwen/GLM can use Anthropic, and hosted Qwen/GLM are also exposed on OpenAI-compatible paths. And Hermes auxiliary tasks (session titles, compression) follow the main model by default — pointing the default at the hosted id means those calls ride on it too.</p></div>
 </section>
 
 <!-- ============ PI (pi.dev CLI) ============ -->
 <section id="pi">
   <h2><span class="no">07</span>Set up Pi</h2>
-  <p class="lede"><a href="https://pi.dev" target="_blank">Pi</a> speaks the Anthropic dialect natively and sends the key as <span class="mono">x-api-key</span> — exactly what the unified route reads — so the hosted model rides the <strong>unified route alone</strong>, no OpenAI route needed. Declare PriceTag as a provider in <span class="mono">~/.pi/agent/models.json</span>:</p>
+  <p class="lede"><a href="https://pi.dev" target="_blank">Pi</a> speaks Anthropic natively and sends the key as <span class="mono">x-api-key</span>. It uses the same gateway URL as OpenAI-compatible clients. Declare PriceTag as a provider in <span class="mono">~/.pi/agent/models.json</span>:</p>
   <div class="codebox hasname"><div class="fname">~/.pi/agent/models.json</div><button class="copy">copy</button><pre>{
   <span class="k">"providers"</span>: {
     <span class="k">"pricetag"</span>: {
       <span class="k">"name"</span>: <span class="s">"PriceTag"</span>,
-      <span class="k">"baseUrl"</span>: <span class="s">"{{UNIFIED_URL}}"</span>,
+      <span class="k">"baseUrl"</span>: <span class="s">"{{GATEWAY_URL}}"</span>,
       <span class="k">"api"</span>: <span class="s">"anthropic-messages"</span>,
       <span class="k">"apiKey"</span>: <span class="s">"$PRICETAG_KEY"</span>,
       <span class="k">"models"</span>: [
@@ -564,15 +556,15 @@ ANTHROPIC_API_KEY=<span class="s">pk-your-key</span></pre></div>
 <span class="c"># 3. plain env, matching the $PRICETAG_KEY reference above:</span>
 export PRICETAG_KEY=pk-your-key</pre></div>
   <p>Pick the model with <span class="mono">/model</span> → <span class="mono">pricetag/Inferact/Qwen3.8-Flash-Next-NVFP4</span> (or <span class="mono">pricetag/rits/zai-org/glm-5-3</span>) — it stays hidden from the picker until one of the three auth paths is configured. Costs above are the live hosted rates; your dashboard meters the usage the same as every other tool.</p>
-  <div class="callout warn"><span class="glyph">!</span><p>Two traps. <strong>No <code>/v1</code> suffix</strong> on the unified <span class="mono">baseUrl</span> — Pi appends <code>/v1/messages</code> itself (opposite of the OpenAI route, whose base URL must end in <code>/v1</code>). And <strong>map <span class="mono">high</span> to <span class="mono">null</span></strong> in <span class="mono">thinkingLevelMap</span>: Pi offers a <span class="mono">high</span> thinking level, the hosted endpoint rejects it outright, and the request dies — nulling it simply hides the level from the picker. Want to pin a level? <span class="mono">"enabledModels": ["pricetag/Inferact/Qwen3.8-Flash-Next-NVFP4:medium"]</span>.</p></div>
+  <div class="callout warn"><span class="glyph">!</span><p>Two traps. <strong>No <code>/v1</code> suffix</strong> on Pi's <span class="mono">baseUrl</span> — Pi appends <code>/v1/messages</code> itself. OpenAI-compatible clients usually configure <code>{{GATEWAY_URL}}/v1</code>. And <strong>map <span class="mono">high</span> to <span class="mono">null</span></strong> in <span class="mono">thinkingLevelMap</span>: Pi offers a <span class="mono">high</span> thinking level, the hosted endpoint rejects it outright, and the request dies — nulling it simply hides the level from the picker. Want to pin a level? <span class="mono">"enabledModels": ["pricetag/Inferact/Qwen3.8-Flash-Next-NVFP4:medium"]</span>.</p></div>
   <p class="cap"><span class="mono">maxTokens</span> is the <em>output</em> cap, not the context size. Pi clamps each request to <span class="mono">contextWindow − prompt − 4096</span>, so declaring the full window (as above) is safe — the served model reports a 262144-token window and enforces no separate output limit. This recipe was verified end-to-end against the live gateway.</p>
 </section>
 
 <!-- ============ OPENCLAW ============ -->
 <section id="openclaw">
   <h2><span class="no">08</span>Set up OpenClaw</h2>
-  <p class="lede"><a href="https://openclaw.ai" target="_blank">OpenClaw</a> talks to the gateway the same way Claude Code and Pi do — the Anthropic <span class="mono">/v1/messages</span> dialect with the key in <span class="mono">x-api-key</span> — so the hosted model rides the <strong>unified route alone</strong>. Smoke-test the route first, then declare PriceTag as a provider in <span class="mono">~/.openclaw/openclaw.json</span>.</p>
-  <div class="codebox hasname"><div class="fname">smoke test — env + one call</div><button class="copy">copy</button><pre>export PRICETAG_BASE_URL="{{UNIFIED_URL}}"
+  <p class="lede"><a href="https://openclaw.ai" target="_blank">OpenClaw</a> uses Anthropic <span class="mono">/v1/messages</span> with the key in <span class="mono">x-api-key</span> and shares the gateway URL with OpenAI-compatible clients. Smoke-test the route first, then declare PriceTag as a provider in <span class="mono">~/.openclaw/openclaw.json</span>.</p>
+  <div class="codebox hasname"><div class="fname">smoke test — env + one call</div><button class="copy">copy</button><pre>export PRICETAG_BASE_URL="{{GATEWAY_URL}}"
 export PRICETAG_KEY="pk-your-key"          <span class="c"># keep it secret; never commit it</span>
 
 curl "$PRICETAG_BASE_URL/v1/messages" \
@@ -584,7 +576,7 @@ curl "$PRICETAG_BASE_URL/v1/messages" \
   <span class="k">"models"</span>: {
     <span class="k">"providers"</span>: {
       <span class="k">"pricetag"</span>: {
-        <span class="k">"baseUrl"</span>: <span class="s">"{{UNIFIED_URL}}"</span>,     <span class="c">// no /v1 — OpenClaw appends /v1/messages itself</span>
+        <span class="k">"baseUrl"</span>: <span class="s">"{{GATEWAY_URL}}"</span>,     <span class="c">// no /v1 — OpenClaw appends /v1/messages itself</span>
         <span class="k">"api"</span>: <span class="s">"anthropic-messages"</span>,      <span class="c">// required — not openai-completions</span>
         <span class="k">"apiKey"</span>: <span class="s">"$PRICETAG_KEY"</span>,
         <span class="k">"models"</span>: [
@@ -615,27 +607,20 @@ curl "$PRICETAG_BASE_URL/v1/messages" \
   }
 }</pre></div>
   <div class="callout good"><span class="glyph">✓</span><p><strong>Restart OpenClaw after changing provider config</strong> — edits to <span class="mono">openclaw.json</span> are not picked up live. The hosted model may not appear in the gateway’s <span class="mono">/v1/models</span> listing either; that doesn’t mean it’s unreachable — the smoke test above is the real validation.</p></div>
-  <div class="callout warn"><span class="glyph">!</span><p><strong>Use <code>anthropic-messages</code>, not the OpenAI route.</strong> This model answers on the Anthropic Messages endpoint (<span class="mono">POST &lt;base&gt;/v1/messages</span>) only — on the OpenAI Chat Completions route the gateway answers <span class="mono">400 invalid model ID</span>. That 400 usually means the wrong <em>endpoint</em>, not a typo in the model id.</p></div>
+  <div class="callout warn"><span class="glyph">!</span><p><strong>Use <code>anthropic-messages</code> for the Anthropic provider.</strong> The URL is shared, but model availability depends on the selected API dialect and upstream compatibility.</p></div>
 </section>
 
 <!-- ============ ROUTES (reference, after the setup steps) ============ -->
 <section id="routes">
-  <h2><span class="no">09</span>Know your routes</h2>
-  <p class="lede">Three endpoints, one key. Pick the one that speaks your client's dialect — the path suffixes differ on purpose.</p>
+  <h2><span class="no">09</span>One gateway URL</h2>
+  <p class="lede">Use the same hostname for Anthropic Messages, OpenAI Chat Completions, OpenAI Responses, and Conversations. The client selects its API by the standard path and sends the key using that protocol's standard header.</p>
   <div class="routes">
     <div class="route">
-      <div><div class="name">Unified route</div>
-        <div class="dialect">Anthropic dialect · POST /v1/messages · no /v1 suffix</div>
-        <div class="url">{{UNIFIED_URL}}</div></div>
-      <div class="note">Everything Claude Code and other Anthropic-dialect clients expect. Routes <em>claude-*</em> to the real Anthropic API and the hosted <em>Qwen</em> / <em>GLM</em> ids to our own serving — same URL, switch models freely. "Unified" means unified <em>backends</em>, not unified dialects: this route only speaks Anthropic format (<span class="mono">x-api-key</span>) — OpenAI-format clients with Bearer tokens belong on the OpenAI route below.</div>
-      <div class="auth">x-api-key: pk-…</div>
-    </div>
-    <div class="route">
-      <div><div class="name">OpenAI route</div>
-        <div class="dialect">OpenAI dialect · POST /v1/chat/completions · base URL ends in /v1</div>
-        <div class="url">{{OPENAI_URL}}</div></div>
-      <div class="note">For Codex, OpenCode and any OpenAI-compatible client. Covers the GPT lineup (gpt-5.x) only — there are <strong>no <em>claude-*</em> or Qwen ids here</strong>, and asking for one gets "The model … does not exist or you do not have access to it" from upstream. Those models live on the unified route.</div>
-      <div class="auth">Authorization: Bearer pk-…</div>
+      <div><div class="name">Inference API</div>
+        <div class="dialect">/v1/messages · /v1/chat/completions · /v1/responses · /v1/conversations</div>
+        <div class="url">{{GATEWAY_URL}}</div></div>
+      <div class="note">The hostname is shared; path-based routes select the protocol-specific Praxis pipeline. Anthropic clients use <span class="mono">x-api-key</span>; OpenAI-compatible clients use <span class="mono">Authorization: Bearer</span>. OpenAI SDKs typically set their base URL to the gateway plus <span class="mono">/v1</span>; Anthropic SDKs use the host root.</div>
+      <div class="auth">one PriceTag key</div>
     </div>
     <div class="route">
       <div><div class="name">Dashboard</div>
@@ -650,7 +635,7 @@ curl "$PRICETAG_BASE_URL/v1/messages" \
 <!-- ============ HOSTED ============ -->
 <section id="hosted">
   <h2><span class="no">10</span>Hosted models — Qwen 3.8 Flash Next &amp; GLM 5.3</h2>
-  <p class="lede">Models we serve ourselves, priced well under the vendors and tracked in your dashboard like everything else. Both ride the <strong>unified route</strong> — same key, switch freely.</p>
+  <p class="lede">Models we serve ourselves, priced well under the vendors and tracked in your dashboard like everything else. They share the gateway host across supported API dialects.</p>
 
   <h3 style="margin-top:18px">Qwen 3.8 Flash Next <span class="mono">(Inferact/Qwen3.8-Flash-Next-NVFP4)</span></h3>
   <p class="lede">Self-hosted vLLM on our own hardware. FP4 quantisation, <strong>262K context</strong>, and the price per token is a rounding error — the default workhorse.</p>
@@ -661,7 +646,7 @@ curl "$PRICETAG_BASE_URL/v1/messages" \
   </div>
 
   <h3 style="margin-top:24px">GLM 5.3 <span class="mono">(rits/zai-org/glm-5-3)</span></h3>
-  <p class="lede">Zhipu's GLM 5.3 served behind the gateway — the step up in capability when Flash Next isn't enough, and currently <strong>free: $0 for every token type</strong>, input, output and cache alike. Unusually friendly to clients: it speaks <strong>all three dialects</strong> on the unified route (<span class="mono">/v1/messages</span>, <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>) — and it shows up in the gateway's <span class="mono">/v1/models</span> listing, so discovery-aware clients can see it too.</p>
+  <p class="lede">Zhipu's GLM 5.3 served behind the gateway — the step up in capability when Flash Next isn't enough, and currently <strong>free: $0 for every token type</strong>, input, output and cache alike. Unusually friendly to clients: it speaks <strong>all three dialects</strong> on this gateway (<span class="mono">/v1/messages</span>, <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>) — and it shows up in the gateway's <span class="mono">/v1/models</span> listing, so discovery-aware clients can see it too.</p>
   <div class="callout warn"><span class="glyph">!</span><p><strong>GLM is text-only — no image input.</strong> A pasted screenshot (or any image block anywhere in the conversation history) makes upstream reject the request with <span class="mono">400 — GLM-5.3 is not a multimodal model</span>, and it keeps failing every follow-up in that session because the old image travels with the history — <strong>including automatic compaction</strong>, which re-sends the whole history and dies on the same image even if the current message is plain text. Stuck? Switch back to a vision-capable model, start a fresh session, or (OpenCode) pin compaction to one: <span class="mono">"agent": { "compaction": { "model": "anthropic/claude-sonnet-5" } }</span>.</p></div>
   <div class="rates">
     <div class="rate"><div class="top"><span class="v">$0.00</span><span class="per">/ MTok</span></div><div class="k">Input</div></div>
@@ -673,7 +658,7 @@ curl "$PRICETAG_BASE_URL/v1/messages" \
     <div class="card">
       <h3>It's on the menu</h3>
       <p class="cap">The gateway publishes hosted models on <span class="mono">/v1/models</span> — cheaper than guessing:</p>
-      <div class="codebox"><button class="copy">copy</button><pre>curl <span class="s">{{UNIFIED_URL}}</span>/v1/models \
+      <div class="codebox"><button class="copy">copy</button><pre>curl <span class="s">{{GATEWAY_URL}}</span>/v1/models \
   -H <span class="k">"x-api-key: $PRICETAG_KEY"</span></pre></div>
       <p class="cap" style="margin:10px 0 0">Claude Code's picker hides it (ids are filtered to <em>claude/anthropic</em>) — that's what the <span class="mono">modelPicker</span> entry in §3 fixes.</p>
     </div>
@@ -683,7 +668,7 @@ curl "$PRICETAG_BASE_URL/v1/messages" \
         <li>Context window: <strong>262,144 tokens</strong> (Qwen) / <strong>131,072</strong> (GLM)</li>
         <li>Streaming and tool calling supported (Anthropic dialect)</li>
         <li>Effort levels: low / medium / xhigh — not "high" (Qwen)</li>
-        <li>GLM also answers OpenAI-dialect calls on the unified route</li>
+        <li>GLM also answers OpenAI-dialect calls through this gateway</li>
         <li>GLM is <strong>text-only</strong> — images in the conversation return 400</li>
       </ul>
     </div>
@@ -711,7 +696,7 @@ curl "$PRICETAG_BASE_URL/v1/messages" \
 
 <footer>
   <span>PriceTag — the AI gateway where every token has a price tag.</span>
-  <span class="mono">unified · openai · dashboard — one key</span>
+  <span class="mono">one gateway URL · dashboard — one key</span>
 </footer>
 
 </div><!-- /wrap -->

@@ -120,10 +120,9 @@ type Config struct {
 // written into the template, so no cluster-specific host ever lands in the
 // repository.
 type Welcome struct {
-	// UnifiedURL is the Anthropic-dialect gateway base URL (no /v1 suffix).
-	UnifiedURL string
-	// OpenAIURL is the OpenAI-dialect gateway base URL (ends in /v1).
-	OpenAIURL string
+	// GatewayURL is the single public gateway host. API clients append their
+	// dialect-specific path (for example /v1/messages or /v1/responses).
+	GatewayURL string
 	// DashboardURL is this service's public base URL, as users reach it.
 	DashboardURL string
 }
@@ -237,8 +236,7 @@ func Load() Config {
 			InsecureSkipVerify: envBool("KEY_SERVICE_INSECURE_SKIP_VERIFY", false),
 		},
 		Welcome: Welcome{
-			UnifiedURL:   strings.TrimSuffix(os.Getenv("WELCOME_UNIFIED_URL"), "/"),
-			OpenAIURL:    strings.TrimSuffix(os.Getenv("WELCOME_OPENAI_URL"), "/"),
+			GatewayURL:   strings.TrimSuffix(os.Getenv("WELCOME_GATEWAY_URL"), "/"),
 			DashboardURL: strings.TrimSuffix(os.Getenv("WELCOME_DASHBOARD_URL"), "/"),
 		},
 		Kubernetes: Kubernetes{

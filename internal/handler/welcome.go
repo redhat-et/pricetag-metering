@@ -13,8 +13,7 @@ import (
 // deployment that forgot the env) while making it obvious the URLs are
 // stand-ins.
 const (
-	welcomeUnifiedFallback   = "https://gateway.example.com"
-	welcomeOpenAIFallback    = "https://gateway.example.com/v1"
+	welcomeGatewayFallback   = "https://gateway.example.com"
 	welcomeDashboardFallback = "https://dashboard.example.com"
 )
 
@@ -30,21 +29,16 @@ func (h *DashboardHandler) ServeWelcome(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "welcome page not found", http.StatusInternalServerError)
 		return
 	}
-	unified := h.cfg.Welcome.UnifiedURL
-	if unified == "" {
-		unified = welcomeUnifiedFallback
-	}
-	openai := h.cfg.Welcome.OpenAIURL
-	if openai == "" {
-		openai = welcomeOpenAIFallback
+	gateway := h.cfg.Welcome.GatewayURL
+	if gateway == "" {
+		gateway = welcomeGatewayFallback
 	}
 	dash := h.cfg.Welcome.DashboardURL
 	if dash == "" {
 		dash = welcomeDashboardFallback
 	}
 	page := strings.NewReplacer(
-		"{{UNIFIED_URL}}", unified,
-		"{{OPENAI_URL}}", openai,
+		"{{GATEWAY_URL}}", gateway,
 		"{{DASHBOARD_URL}}", dash,
 		"{{QUOTA_LABEL}}", quotaLabel(h.cfg.MonthlyTokenQuota),
 	).Replace(string(data))
