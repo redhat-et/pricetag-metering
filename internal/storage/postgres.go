@@ -180,6 +180,7 @@ var insertEventSQL = fmt.Sprintf(`
 		$12::int AS cache_creation_tokens, $13::int AS reasoning_tokens, $14::text AS source,
 		$15::text AS user_agent, $16::int AS status_code) e
 	LEFT JOIN model_pricing p ON p.model = e.model
+	ON CONFLICT DO NOTHING
 	RETURNING cost_usd`, costUSDExpr)
 
 // InsertEvent writes the ledger row and maintains the hourly rollup in

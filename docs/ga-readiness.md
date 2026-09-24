@@ -40,12 +40,13 @@ go vet ./...
 2. **Validate and make ingestion idempotent.** This PR adds bounded bodies,
    strict CloudEvents validation, non-negative/range-checked token and status
    checks, and timestamp policy. A unique event identity with safe duplicate
-   acknowledgement still requires an explicit, preflighted database migration;
-   it must not be built during application startup. Until
-   [#7](https://github.com/redhat-et/pricetag-metering/issues/7) is complete,
-   ingestion remains at-least-once: replaying an event can double-count the
-   ledger and hourly rollup. This is a hard GA prerequisite and
-   `M2M_AUTH_REQUIRED` must remain disabled.
+   acknowledgement is implemented by the explicit migration documented in
+   [`docs/event-idempotency.md`](event-idempotency.md); it must not be built
+   during application startup. Until
+   [#7](https://github.com/redhat-et/pricetag-metering/issues/7) is run and
+   verified in the target environment, ingestion remains at-least-once:
+   replaying an event can double-count the ledger and hourly rollup. This is a
+   hard GA prerequisite and `M2M_AUTH_REQUIRED` must remain disabled.
 3. **Define failure semantics explicitly.** Fail-open may be acceptable for
    dogfood availability, but GA quota enforcement and event delivery need a
    documented policy, alerting, and an operational kill switch.
