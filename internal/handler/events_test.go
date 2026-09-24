@@ -92,6 +92,43 @@ func TestHandleEvent_RejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestHandleEvent_RejectsNegativeTokenCounts(t *testing.T) {
+	h := &EventsHandler{}
+	body := []byte(`{"specversion":"1.0","id":"evt-negative","source":"gateway","type":"inference.tokens.used","data":{"user":"u","model":"m","prompt_tokens":-1}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/events", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.HandleEvent(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleEvent_RejectsInvalidCloudEventTime(t *testing.T) {
+	h := &EventsHandler{}
+	body := []byte(`{"specversion":"1.0","id":"evt-time","source":"gateway","type":"inference.tokens.used","time":"not-a-time","data":{"user":"u","model":"m"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/events", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.HandleEvent(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestValidateTokenCountsRejectsPostgresIntegerOverflow(t *testing.T) {
+	if err := validateTokenCounts(cloudEventData{PromptTokens: int(maxPostgresInt) + 1}); err == nil {
+		t.Fatal("expected PostgreSQL INTEGER overflow to be rejected")
+	}
+	if err := validateTokenCounts(cloudEventData{PromptTokens: int(maxPostgresInt)}); err != nil {
+		t.Fatalf("maximum PostgreSQL INTEGER should be accepted: %v", err)
+	}
+	if err := validateTokenCounts(cloudEventData{
+		PromptTokens:     int(maxPostgresInt),
+		CompletionTokens: 1,
+	}); err == nil {
+		t.Fatal("expected derived total overflow to be rejected")
+	}
+}
+
 func TestHandleEvent_AcceptsValidEvent_NoStore(t *testing.T) {
 	h := &EventsHandler{store: nil}
 	event := cloudEvent{

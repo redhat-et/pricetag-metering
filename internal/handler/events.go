@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -43,6 +45,30 @@ type EventsHandler struct {
 	store *storage.Store
 }
 
+const maxEventBodyBytes = 1 << 20
+
+const maxPostgresInt = int64(1<<31 - 1)
+
+func validateTokenCounts(data cloudEventData) error {
+	counts := []int{
+		data.PromptTokens,
+		data.CompletionTokens,
+		data.TotalTokens,
+		data.CachedInputTokens,
+		data.CacheCreationTokens,
+		data.ReasoningTokens,
+	}
+	for _, count := range counts {
+		if count < 0 || int64(count) > maxPostgresInt {
+			return fmt.Errorf("token count outside PostgreSQL INTEGER range")
+		}
+	}
+	if data.TotalTokens == 0 && int64(data.PromptTokens)+int64(data.CompletionTokens) > maxPostgresInt {
+		return fmt.Errorf("derived total token count outside PostgreSQL INTEGER range")
+	}
+	return nil
+}
+
 func NewEventsHandler(store *storage.Store) *EventsHandler {
 	return &EventsHandler{store: store}
 }
@@ -53,21 +79,45 @@ func (h *EventsHandler) HandleEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxEventBodyBytes)
+	dec := json.NewDecoder(r.Body)
 	var event cloudEvent
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+	if err := dec.Decode(&event); err != nil {
 		slog.Error("failed to decode event", "error", err)
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		http.Error(w, "request body must contain exactly one JSON event", http.StatusBadRequest)
+		return
+	}
 
-	if event.ID == "" || event.Data.User == "" || event.Data.Model == "" {
-		http.Error(w, "missing required fields: id, data.user, data.model", http.StatusBadRequest)
+	if event.SpecVersion != "1.0" || event.Source == "" || event.Type == "" || event.ID == "" ||
+		event.Data.User == "" || event.Data.Model == "" {
+		http.Error(w, "missing or invalid required CloudEvent fields", http.StatusBadRequest)
+		return
+	}
+	if len(event.ID) > 256 || len(event.Data.User) > 512 || len(event.Data.Model) > 512 {
+		http.Error(w, "CloudEvent field too long", http.StatusBadRequest)
+		return
+	}
+	if err := validateTokenCounts(event.Data); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if event.Data.StatusCode != nil && (*event.Data.StatusCode < 100 || *event.Data.StatusCode > 599) {
+		http.Error(w, "invalid status_code", http.StatusBadRequest)
 		return
 	}
 
 	ts, err := time.Parse(time.RFC3339, event.Time)
 	if err != nil {
-		ts = time.Now()
+		if event.Time != "" {
+			http.Error(w, "invalid CloudEvent time", http.StatusBadRequest)
+			return
+		}
+		ts = time.Now().UTC()
 	}
 
 	total := event.Data.TotalTokens

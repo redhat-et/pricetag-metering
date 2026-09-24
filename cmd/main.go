@@ -24,6 +24,10 @@ func main() {
 		slog.Error("DATABASE_URL is required")
 		os.Exit(1)
 	}
+	if cfg.M2MAuthRequired && cfg.M2MSharedSecret == "" {
+		slog.Error("M2M_AUTH_REQUIRED is enabled but M2M_SHARED_SECRET is empty")
+		os.Exit(1)
+	}
 
 	// MonthlyTokenQuota is the per-user monthly token budget the entitlement
 	// endpoint reports against. Enforcement of actual traffic belongs in the
@@ -178,8 +182,9 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Machine-to-machine APIs — no session required
-	mux.HandleFunc("/api/v1/events", eventsHandler.HandleEvent)
-	mux.HandleFunc("/api/v1/customers/", entitlementsHandler.HandleEntitlement)
+	m2mAuth := func(next http.HandlerFunc) http.HandlerFunc { return handler.RequireM2MAuth(cfg, next) }
+	mux.HandleFunc("/api/v1/events", m2mAuth(eventsHandler.HandleEvent))
+	mux.HandleFunc("/api/v1/customers/", m2mAuth(entitlementsHandler.HandleEntitlement))
 	// /api/v1/team-usage was REMOVED on purpose: it sat outside auth, took
 	// the group from the query string, and defaulted to a hard-coded team.
 	// Its replacement is /api/v1/org/usage below, which is authenticated
@@ -189,7 +194,15 @@ func main() {
 	mux.HandleFunc("/login", authHandler.HandleLogin)
 	mux.HandleFunc("/logout", authHandler.HandleLogout)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	mux.HandleFunc("/ready", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := store.Ping(ctx); err != nil {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 
 	// Public onboarding page — no session by design: it is the link you
 	// send someone before they have a key. Its gateway URLs are substituted
@@ -316,7 +329,15 @@ func main() {
 	// the key is minted at claim time in the claimant's browser).
 	mux.HandleFunc("/invite/", orgHandler.HandleClaim)
 
-	server := &http.Server{Addr: ":" + cfg.Port, Handler: mux}
+	server := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
 
 	go func() {
 		slog.Info("metering service starting", "port", cfg.Port)

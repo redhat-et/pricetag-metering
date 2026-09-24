@@ -209,6 +209,12 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 	return tx.Commit()
 }
 
+// Ping verifies that the primary database is reachable. Readiness uses this
+// rather than returning healthy forever after process startup.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
 type TeamUserUsage struct {
 	Username         string       `json:"username"`
 	Requests         int          `json:"requests"`
