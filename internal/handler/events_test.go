@@ -114,6 +114,21 @@ func TestHandleEvent_RejectsInvalidCloudEventTime(t *testing.T) {
 	}
 }
 
+func TestValidateTokenCountsRejectsPostgresIntegerOverflow(t *testing.T) {
+	if err := validateTokenCounts(cloudEventData{PromptTokens: int(maxPostgresInt) + 1}); err == nil {
+		t.Fatal("expected PostgreSQL INTEGER overflow to be rejected")
+	}
+	if err := validateTokenCounts(cloudEventData{PromptTokens: int(maxPostgresInt)}); err != nil {
+		t.Fatalf("maximum PostgreSQL INTEGER should be accepted: %v", err)
+	}
+	if err := validateTokenCounts(cloudEventData{
+		PromptTokens:     int(maxPostgresInt),
+		CompletionTokens: 1,
+	}); err == nil {
+		t.Fatal("expected derived total overflow to be rejected")
+	}
+}
+
 func TestHandleEvent_AcceptsValidEvent_NoStore(t *testing.T) {
 	h := &EventsHandler{store: nil}
 	event := cloudEvent{

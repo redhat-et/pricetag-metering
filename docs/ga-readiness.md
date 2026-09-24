@@ -37,10 +37,11 @@ go vet ./...
    This repository now contains an opt-in `M2M_AUTH_REQUIRED` /
    `M2M_SHARED_SECRET` bearer check; enable it only as part of a coordinated
    gateway rollout that injects the matching `Authorization` header.
-2. **Validate and make ingestion idempotent.** The event handler needs a
-   bounded body, strict CloudEvents validation, non-negative token/status
-   checks, timestamp policy, and a unique event identity with safe duplicate
-   acknowledgement. Billing data must not be forgeable or double-counted.
+2. **Validate and make ingestion idempotent.** This PR adds bounded bodies,
+   strict CloudEvents validation, non-negative/range-checked token and status
+   checks, and timestamp policy. A unique event identity with safe duplicate
+   acknowledgement still requires an explicit, preflighted database migration;
+   it must not be built during application startup.
 3. **Define failure semantics explicitly.** Fail-open may be acceptable for
    dogfood availability, but GA quota enforcement and event delivery need a
    documented policy, alerting, and an operational kill switch.

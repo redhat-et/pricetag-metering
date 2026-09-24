@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -46,6 +47,28 @@ type EventsHandler struct {
 
 const maxEventBodyBytes = 1 << 20
 
+const maxPostgresInt = int64(1<<31 - 1)
+
+func validateTokenCounts(data cloudEventData) error {
+	counts := []int{
+		data.PromptTokens,
+		data.CompletionTokens,
+		data.TotalTokens,
+		data.CachedInputTokens,
+		data.CacheCreationTokens,
+		data.ReasoningTokens,
+	}
+	for _, count := range counts {
+		if count < 0 || int64(count) > maxPostgresInt {
+			return fmt.Errorf("token count outside PostgreSQL INTEGER range")
+		}
+	}
+	if data.TotalTokens == 0 && int64(data.PromptTokens)+int64(data.CompletionTokens) > maxPostgresInt {
+		return fmt.Errorf("derived total token count outside PostgreSQL INTEGER range")
+	}
+	return nil
+}
+
 func NewEventsHandler(store *storage.Store) *EventsHandler {
 	return &EventsHandler{store: store}
 }
@@ -79,9 +102,8 @@ func (h *EventsHandler) HandleEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "CloudEvent field too long", http.StatusBadRequest)
 		return
 	}
-	if event.Data.PromptTokens < 0 || event.Data.CompletionTokens < 0 || event.Data.TotalTokens < 0 ||
-		event.Data.CachedInputTokens < 0 || event.Data.CacheCreationTokens < 0 || event.Data.ReasoningTokens < 0 {
-		http.Error(w, "token counts must be non-negative", http.StatusBadRequest)
+	if err := validateTokenCounts(event.Data); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if event.Data.StatusCode != nil && (*event.Data.StatusCode < 100 || *event.Data.StatusCode > 599) {
