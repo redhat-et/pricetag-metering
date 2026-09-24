@@ -10,7 +10,8 @@ A development metering backend for AI inference gateways — provides CloudEvent
 |----------|---------|
 | `POST /api/v1/events` | Ingest CloudEvents v1.0 token usage events |
 | `GET /api/v1/customers/{id}/entitlements/{key}/value` | Check user balance (quota - usage) |
-| `GET /api/v1/team-usage` | Team-level usage aggregation |
+| `GET /dashboard` | Authenticated usage dashboard |
+| `GET /api/v1/org/usage` | Authenticated, scope-limited team usage |
 | `GET /health`, `GET /ready` | Liveness and readiness probes |
 
 ## Architecture
@@ -49,7 +50,7 @@ kubectl apply -f deploy/
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | Yes | — | PostgreSQL connection string |
 | `PORT` | No | `8080` | HTTP listen port |
-| `TOKEN_QUOTA` | No | `0` (unlimited) | Per-user monthly token budget for the entitlement endpoint. `0` reports usage without gating access; enforcement belongs in the gateway. |
+| `MONTHLY_TOKEN_QUOTA` | No | `100000000` | Legacy per-user monthly token safety net for the entitlement endpoint. The gateway enforces the response; set a non-positive value only for explicitly unlimited deployments. |
 
 ## CloudEvents Format
 

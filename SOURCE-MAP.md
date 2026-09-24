@@ -1,12 +1,17 @@
 # Source Map
 
-This repository is a clean public import of the PriceTag metering service.
+This repository is the public home of the PriceTag metering service.
 
 ## Source
 
-- Source repository: the rewritten PriceTag metering service source
-- Source baseline: rewritten public `main` at `14a360b98f507000883aff91b70f4eb621f9b24b`
-- Cleanup baseline: the merged Headroom removal cleanup
+- Source repository: historical `noyitz/ai-gateway-metering-service`, migrated
+  into this repository without squashing its service history.
+- Current source baseline: the `redhat-et/pricetag-metering` snapshot commit
+  `8a6eadb`, followed by the history-preservation merge and dashboard freshness
+  restoration.
+- History migration: the legacy service commits remain reachable from `main`,
+  preserving original authors, dates, and merge commits.
+- Cleanup baseline: the merged Headroom removal cleanup.
 - New module path: `github.com/redhat-et/pricetag-metering`
 
 ## Deliberately Excluded
