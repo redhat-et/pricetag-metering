@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -180,6 +181,7 @@ var insertEventSQL = fmt.Sprintf(`
 		$12::int AS cache_creation_tokens, $13::int AS reasoning_tokens, $14::text AS source,
 		$15::text AS user_agent, $16::int AS status_code) e
 	LEFT JOIN model_pricing p ON p.model = e.model
+	ON CONFLICT (event_id) DO NOTHING
 	RETURNING cost_usd`, costUSDExpr)
 
 // InsertEvent writes the ledger row and maintains the hourly rollup in
@@ -199,6 +201,11 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 		e.EventID, e.Timestamp, e.Username, e.GroupName, e.Subscription, e.Provider, e.Model,
 		e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, e.ReasoningTokens, e.Source, e.UserAgent, e.StatusCode,
 	).Scan(&costUSD)
+	if errors.Is(err, sql.ErrNoRows) {
+		// A replay of an already accepted CloudEvent is idempotent. Do not
+		// increment the hourly rollup a second time.
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -207,6 +214,12 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// Ping verifies that the primary database is reachable. Readiness uses this
+// rather than returning healthy forever after process startup.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
 }
 
 type TeamUserUsage struct {
@@ -1067,6 +1080,10 @@ var migrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_group ON usage_events (group_name)`,
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_model ON usage_events (model)`,
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_ts_user_model ON usage_events (timestamp, username, model)`,
+	// CloudEvents are retried by gateways and proxies. The event id is the
+	// idempotency key; fail migration if historical duplicates need cleanup
+	// rather than silently changing billing data.
+	`CREATE UNIQUE INDEX IF NOT EXISTS uq_usage_events_event_id ON usage_events (event_id)`,
 	`ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS user_agent TEXT NOT NULL DEFAULT ''`,
 	// Nullable on purpose: rows ingested before this column existed have an
 	// unknown status (rendered neutral), while every new row carries a

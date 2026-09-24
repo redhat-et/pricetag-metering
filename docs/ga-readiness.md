@@ -34,6 +34,9 @@ go vet ./...
    Required controls: internal service/listener split, NetworkPolicy, gateway
    authentication (mTLS or a rotated service credential), rate limits, and
    authorization tests.
+   This repository now contains an opt-in `M2M_AUTH_REQUIRED` /
+   `M2M_SHARED_SECRET` bearer check; enable it only as part of a coordinated
+   gateway rollout that injects the matching `Authorization` header.
 2. **Validate and make ingestion idempotent.** The event handler needs a
    bounded body, strict CloudEvents validation, non-negative token/status
    checks, timestamp policy, and a unique event identity with safe duplicate

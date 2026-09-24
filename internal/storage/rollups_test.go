@@ -17,6 +17,7 @@ func TestMigrationsIncludeRollupSchema(t *testing.T) {
 		"ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS cost_usd",
 		"CREATE TABLE IF NOT EXISTS usage_hourly",
 		"CREATE UNIQUE INDEX IF NOT EXISTS usage_hourly_key ON usage_hourly (hour, username, group_name, model, provider)",
+		"CREATE UNIQUE INDEX IF NOT EXISTS uq_usage_events_event_id ON usage_events (event_id)",
 		"CREATE TABLE IF NOT EXISTS rollup_meta",
 	} {
 		if !strings.Contains(all, want) {
@@ -26,7 +27,7 @@ func TestMigrationsIncludeRollupSchema(t *testing.T) {
 }
 
 func TestInsertEventSQLUsesCostExprVerbatim(t *testing.T) {
-	for _, want := range []string{costUSDExpr, "LEFT JOIN model_pricing p ON p.model = e.model", "RETURNING cost_usd"} {
+	for _, want := range []string{costUSDExpr, "LEFT JOIN model_pricing p ON p.model = e.model", "ON CONFLICT (event_id) DO NOTHING", "RETURNING cost_usd"} {
 		if !strings.Contains(insertEventSQL, want) {
 			t.Error("insertEventSQL lost a required clause — cost must be computed from the SHARED costUSDExpr:", want)
 		}

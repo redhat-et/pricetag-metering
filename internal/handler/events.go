@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -43,6 +44,8 @@ type EventsHandler struct {
 	store *storage.Store
 }
 
+const maxEventBodyBytes = 1 << 20
+
 func NewEventsHandler(store *storage.Store) *EventsHandler {
 	return &EventsHandler{store: store}
 }
@@ -53,21 +56,46 @@ func (h *EventsHandler) HandleEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxEventBodyBytes)
+	dec := json.NewDecoder(r.Body)
 	var event cloudEvent
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+	if err := dec.Decode(&event); err != nil {
 		slog.Error("failed to decode event", "error", err)
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		http.Error(w, "request body must contain exactly one JSON event", http.StatusBadRequest)
+		return
+	}
 
-	if event.ID == "" || event.Data.User == "" || event.Data.Model == "" {
-		http.Error(w, "missing required fields: id, data.user, data.model", http.StatusBadRequest)
+	if event.SpecVersion != "1.0" || event.Source == "" || event.Type == "" || event.ID == "" ||
+		event.Data.User == "" || event.Data.Model == "" {
+		http.Error(w, "missing or invalid required CloudEvent fields", http.StatusBadRequest)
+		return
+	}
+	if len(event.ID) > 256 || len(event.Data.User) > 512 || len(event.Data.Model) > 512 {
+		http.Error(w, "CloudEvent field too long", http.StatusBadRequest)
+		return
+	}
+	if event.Data.PromptTokens < 0 || event.Data.CompletionTokens < 0 || event.Data.TotalTokens < 0 ||
+		event.Data.CachedInputTokens < 0 || event.Data.CacheCreationTokens < 0 || event.Data.ReasoningTokens < 0 {
+		http.Error(w, "token counts must be non-negative", http.StatusBadRequest)
+		return
+	}
+	if event.Data.StatusCode != nil && (*event.Data.StatusCode < 100 || *event.Data.StatusCode > 599) {
+		http.Error(w, "invalid status_code", http.StatusBadRequest)
 		return
 	}
 
 	ts, err := time.Parse(time.RFC3339, event.Time)
 	if err != nil {
-		ts = time.Now()
+		if event.Time != "" {
+			http.Error(w, "invalid CloudEvent time", http.StatusBadRequest)
+			return
+		}
+		ts = time.Now().UTC()
 	}
 
 	total := event.Data.TotalTokens

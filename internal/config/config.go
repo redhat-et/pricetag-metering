@@ -59,6 +59,12 @@ type Config struct {
 	// resolved from a header or from the Kubernetes adapter.
 	DefaultGroup string
 
+	// M2MAuthRequired gates the gateway-to-metering endpoints with the
+	// configured bearer secret. Keep this false for local compatibility; GA
+	// deployments must enable it and configure the gateway to send the token.
+	M2MAuthRequired bool
+	M2MSharedSecret string
+
 	// OrgInviteTTLHours bounds a key invite link: a single-use token that
 	// nobody opened is worthless once it expires.
 	OrgInviteTTLHours int
@@ -208,6 +214,8 @@ func Load() Config {
 		// development only.
 		AllowUnauthenticatedAdmin: envBool("ALLOW_UNAUTHENTICATED_ADMIN", false),
 		DefaultGroup:              envDefault("DEFAULT_GROUP", "default"),
+		M2MAuthRequired:           envBool("M2M_AUTH_REQUIRED", false),
+		M2MSharedSecret:           os.Getenv("M2M_SHARED_SECRET"),
 		OrgInviteTTLHours:         envInt("ORG_INVITE_TTL_HOURS", 72),
 		KeyRotationOverlapDays:    envInt("KEY_ROTATION_OVERLAP_DAYS", 7),
 		// Off by default (PR #19 review): shipping the build must not be
