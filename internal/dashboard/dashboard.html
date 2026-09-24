@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PriceTag</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0b0e11;--bg-card:#181b1f;--bg-hover:#22262c;--border:#2c3138;
+  --text:#e0e3e8;--text2:#8b949e;--blue:#58a6ff;--green:#3fb950;
+  --orange:#d29922;--red:#f85149;--purple:#bc8cff;--cyan:#39d2c0;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:20px;max-width:1400px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+header h1{font-size:22px;font-weight:600;color:var(--blue)}
+header h1 span{color:var(--text2);font-weight:400;font-size:14px;margin-left:8px}
+.range-btns{display:flex;gap:4px}
+.range-btns button{background:var(--bg-card);color:var(--text2);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;transition:all .15s}
+.range-btns button:hover{background:var(--bg-hover);color:var(--text)}
+.range-btns button.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+#last-refresh{color:var(--text2);font-size:12px}
+
+.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:24px}
+.kpi{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:20px;text-align:center}
+.kpi.saved{border-color:rgba(63,185,80,.4);background:linear-gradient(180deg,rgba(63,185,80,.08),var(--bg-card))}
+.kpi-label{display:block;font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.kpi-value{display:block;font-size:32px;font-weight:700}
+.kpi-value.blue{color:var(--blue)}.kpi-value.green{color:var(--green)}.kpi-value.orange{color:var(--orange)}.kpi-value.purple{color:var(--purple)}
+.kpi-sub{display:block;font-size:11px;color:var(--text2);margin-top:6px}
+
+.kpi-sub select{background:var(--bg);color:var(--green);border:1px solid rgba(63,185,80,.4);padding:2px 6px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px}
+/* Cache-ratio assumption line sits on its own row under the vs dropdown. */
+#kpi-savings-note{display:block;margin-top:4px;opacity:.85}
+.chart-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.chart-head h2{margin-bottom:0}
+
+h2{font-size:16px;font-weight:600;margin-bottom:12px;color:var(--text)}
+h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);padding:2px 8px;border-radius:4px;margin-left:8px;cursor:pointer}
+
+.three-col{grid-template-columns:1fr 1fr 1fr!important}
+.three-col .chart-box canvas{max-height:220px}
+
+.section{margin-bottom:24px}
+table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:10px;overflow:hidden;border:1px solid var(--border)}
+th{background:#14171a;color:var(--text2);font-size:12px;text-transform:uppercase;letter-spacing:.5px;padding:10px 14px;text-align:left;cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{color:var(--text)}
+th.sorted-asc::after{content:' ▲';font-size:10px}
+th.sorted-desc::after{content:' ▼';font-size:10px}
+td{padding:10px 14px;font-size:13px;border-top:1px solid var(--border)}
+tr:hover td{background:var(--bg-hover)}
+tr.top5 td:first-child{border-left:3px solid var(--green)}
+tr.bottom5 td:first-child{border-left:3px solid var(--red)}
+tr.clickable{cursor:pointer}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.chart-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px}
+.chart-box canvas{max-height:280px}
+
+.tl-toggle{display:flex;gap:4px;margin-bottom:12px}
+.tl-toggle button{background:var(--bg-card);color:var(--text2);border:1px solid var(--border);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px}
+.tl-toggle button.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+
+.timeline-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:24px}
+.timeline-box canvas{max-height:300px}
+
+.expand-detail{padding:4px 0}
+.expand-detail table{border:none!important}
+.expand-detail td,.expand-detail th{padding:8px 14px;font-size:12px}
+.expand-loading{padding:12px 20px;color:var(--text2);font-size:13px}
+.bar-bg{background:var(--border);border-radius:3px;height:8px;width:100%}
+.bar-fill{height:8px;border-radius:3px;transition:width .3s}
+
+.recent-scroll{max-height:230px;overflow-y:auto;border-radius:10px}
+.recent-scroll table{border-radius:0}
+.recent-scroll thead{position:sticky;top:0;z-index:1}
+.recent-scroll::-webkit-scrollbar{width:6px}
+.recent-scroll::-webkit-scrollbar-track{background:var(--bg-card)}
+.recent-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}}
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row{grid-template-columns:1fr}}
+.user-name{font-weight:600;line-height:1.2}
+.user-mail{font-size:10px;color:var(--text2);margin-top:1px}
+@media(max-width:600px){.kpi-row{grid-template-columns:1fr}}
+/* ── Model pricing modal ──────────────────────────────────────────── */
+.pricing-ov{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:150;align-items:flex-start;justify-content:center;padding:5vh 16px}
+.pricing-ov.show{display:flex}
+.pricing-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;width:100%;max-width:780px;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.pm-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.pm-title{font-size:14px;font-weight:700}
+.pm-sub{font-size:11px;color:var(--text2)}
+.pm-opts{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:11px;color:var(--text2)}
+.pm-close{background:var(--bg-hover);color:var(--text2);border:1px solid var(--border);width:26px;height:26px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1}
+.pm-close:hover{color:var(--text);background:var(--border)}
+.pm-body{overflow:auto;padding:4px 18px 16px}
+/* ── Budget request popup (shares the modal chrome, own form styling) ── */
+.qo-bar{margin-top:14px}
+.qo-barrow{display:flex;align-items:baseline;gap:6px;font-size:12px;color:var(--text2)}
+.qo-barrow b{color:var(--text);font-size:13px;font-variant-numeric:tabular-nums}
+.qo-pct{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:700}
+.qo-track{height:6px;border-radius:3px;background:var(--bg-hover);margin-top:7px;overflow:hidden}
+.qo-fill{height:100%;border-radius:3px}
+.qo-note{font-size:11.5px;line-height:1.5;margin-top:9px}
+.qo-rej{background:var(--bg-hover);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text2);font-size:12px;line-height:1.5;margin-top:10px}
+.qo-label{display:block;color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 6px}
+.qo-chips{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.qo-chip{background:var(--bg-hover);border:1px solid var(--border);border-radius:14px;padding:4px 12px;font-size:12px;color:var(--text2);cursor:pointer;font-family:inherit}
+.qo-chip:hover{color:var(--text);border-color:var(--text2)}
+.qo-chip.on{color:#58a6ff;border-color:#58a6ff;background:rgba(88,166,255,.1)}
+.qo-new{font-size:11.5px;color:var(--text2);margin-top:8px;font-variant-numeric:tabular-nums}
+.qo-new b{color:var(--text)}
+.qo-amt{display:flex;border:1px solid var(--border);border-radius:8px;background:var(--bg);overflow:hidden}
+.qo-amt:focus-within{border-color:#58a6ff}
+.qo-amt .pfx{display:flex;align-items:center;padding:0 11px;color:var(--text2);font-size:15px;border-right:1px solid var(--border);background:var(--bg-hover)}
+.qo-amt input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--text);padding:10px 12px;font-size:15px;font-family:inherit;font-variant-numeric:tabular-nums;-moz-appearance:textfield;appearance:textfield}
+.qo-amt input::-webkit-outer-spin-button,.qo-amt input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.qo-area{width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;line-height:1.5}
+.qo-area:focus{border-color:#58a6ff;outline:none}
+.qo-foot{display:flex;gap:12px;align-items:center;margin-top:18px}
+.qo-go{background:#1f6feb;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.qo-go:hover{background:#388bfd}
+.qo-go:disabled{opacity:.55;cursor:default}
+.qo-hint{color:var(--text2);font-size:11px}
+.pm-body table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;font-variant-numeric:tabular-nums}
+.pm-body th{position:sticky;top:0;z-index:2;background:var(--bg-card);text-align:right;padding:8px;color:var(--text2);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.pm-body td{padding:7px 8px;border-bottom:1px solid var(--bg-hover);text-align:right;vertical-align:top}
+.pm-body th:first-child,.pm-body td:first-child{text-align:left}
+.pm-body .pm-zero{color:var(--text2)}
+.pm-host{display:inline-block;background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.4);color:var(--green);border-radius:10px;font-size:9px;font-weight:700;padding:1px 7px;text-transform:uppercase;letter-spacing:.5px;margin-left:8px}
+.pm-free{display:inline-block;background:rgba(88,166,255,.12);border:1px solid rgba(88,166,255,.4);color:#58a6ff;border-radius:10px;font-size:9px;font-weight:700;padding:1px 7px;text-transform:uppercase;letter-spacing:.5px;margin-left:8px}
+.pm-list{color:var(--text2);font-size:10px;margin-top:1px}
+.pm-open{background:var(--bg-card);color:var(--text2);border:1px solid var(--border);padding:6px 14px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.pm-open:hover{color:var(--text);border-color:var(--text2)}
+/* ── Unified app header ────────────────────────────────────────────────
+   One header on every signed-in page: logo + role-gated tabs on the
+   left, page widgets + identity on the right. Var fallbacks let the
+   same block paste onto pages using either token spelling
+   (--blue/--bg-card on the usage page, --blu/--c1 elsewhere). */
+.appbar{display:flex;align-items:center;gap:16px;padding:12px 22px;background:var(--bg-card,var(--c1,#141820));border:1px solid var(--border,var(--bdr,#2e3848));border-radius:10px;margin-bottom:16px;flex-wrap:wrap}
+.appbar .logo{font-weight:700;font-size:15px;letter-spacing:.2px;color:var(--text,var(--t,#e2e6ec));text-decoration:none;white-space:nowrap}
+.appbar .logo em{color:var(--blue,var(--blu,#4da0f8));font-style:normal}
+.appbar nav{display:flex;gap:4px;flex-wrap:wrap}
+.appbar nav a{color:var(--text2,var(--t2,#8090a8));text-decoration:none;padding:6px 14px;border-radius:8px;font-weight:600;font-size:12px}
+.appbar nav a:hover{color:var(--text,var(--t,#e2e6ec));background:var(--bg-hover,var(--c3,#232d40))}
+.appbar nav a.on{color:var(--text,var(--t,#e2e6ec));background:var(--bg-hover,var(--c3,#232d40))}
+.ab-right{margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ab-btn{background:transparent;color:var(--text2,var(--t2,#8090a8));border:1px solid var(--border,var(--bdr,#2e3848));padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none}
+.ab-btn:hover{color:var(--text,var(--t,#e2e6ec));border-color:var(--text2,var(--t2,#8090a8))}
+.ab-clock{font-size:11px;color:var(--text2,var(--t2,#8090a8));white-space:nowrap}
+.ab-user{font-size:12px;font-weight:700;color:#3dcc6e}
+.ab-user .role{color:var(--text2,var(--t2,#8090a8));font-weight:600;font-size:11px}
+.ab-out{color:#e8554e;border:1px solid var(--border,var(--bdr,#2e3848));padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none}
+.ab-out:hover{border-color:#e8554e}
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <a class="logo" href="/dashboard">Price<em>Tag</em></a>
+  <nav>
+    <a href="/dashboard" class="on">Usage</a>
+    <a href="/manager" id="tab-team" style="display:none" title="Usage for everyone on your team">My team</a>
+    <a href="/routing" id="tab-routing" style="display:none">Routing</a>
+    <a href="/admin" id="tab-admin" style="display:none">Admin</a>
+  </nav>
+  <div class="ab-right">
+    <span class="ab-clock" id="last-refresh"></span>
+    <button id="refresh-btn" class="ab-btn" onclick="refresh()">Refresh</button>
+    <a href="#" id="my-view-btn" class="ab-btn" style="display:none" title="See the dashboard as a regular user would">My view as user</a>
+    <button class="ab-btn" onclick="openPricing()">Pricing</button>
+    <span class="ab-user" id="abUser" style="display:none"></span>
+    <a href="/logout" class="ab-out" id="abOut" style="display:none">Sign out</a>
+  </div>
+</header>
+
+<div id="impersonation-banner" style="display:none;align-items:center;gap:10px;background:rgba(210,153,34,.12);border:1px solid #d29922;border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px">
+  <span style="font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:10px;color:#d29922">Viewing as</span>
+  <b id="impersonated-user"></b>
+  <span style="color:var(--text2)">(you are <span id="real-user"></span>)</span>
+  <a href="/admin/impersonate" style="margin-left:auto;background:#d29922;color:#1a1a1a;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:700;text-decoration:none">Back to admin view</a>
+</div>
+
+<!-- Monthly budget state: over-limit warning, pending/approved/rejected
+     request status. Rendered entirely from /api/v1/me/quota (whoami carries
+     the same object on first paint). Hidden while quotas are off or you
+     are exempt. -->
+<div id="quota-banner" style="display:none;align-items:center;gap:10px;border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;border:1px solid"></div>
+
+<!-- Approver-side counterpart to the user's pending banner: shown to a
+     manager (or super-admin backstop) who has budget requests awaiting
+     their decision. Links to the team view where the inbox lives. -->
+<div id="approve-banner" style="display:none;align-items:center;gap:10px;border:1px solid #58a6ff66;background:#58a6ff1f;color:#cfe3ff;border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px">
+  <span id="approve-banner-text" style="flex:1"></span>
+  <a href="/manager" style="border:1px solid #58a6ff;border-radius:6px;padding:3px 10px;color:#58a6ff;text-decoration:none;white-space:nowrap">Review requests &rarr;</a>
+</div>
+
+<!-- Over-limit budget request popup (reuses the pricing modal's chrome) -->
+<div class="pricing-ov" id="quota-ov" onclick="if(event.target===this)closeQuotaModal()">
+  <div class="pricing-card" role="dialog" aria-modal="true" aria-label="Budget request" style="max-width:520px">
+    <div class="pm-head">
+      <span class="pm-title">Request more budget</span>
+      <span class="pm-sub" id="qo-sub"></span>
+      <button class="pm-close" style="margin-left:auto" onclick="closeQuotaModal()" aria-label="Close">✕</button>
+    </div>
+    <div id="qo-body" class="pm-body" style="padding-top:0;padding-bottom:18px"></div>
+  </div>
+</div>
+
+<!-- Model pricing modal: the same rate card on every page, openable anytime -->
+<div class="pricing-ov" id="pricing-ov" onclick="if(event.target===this)closePricing()">
+  <div class="pricing-card" role="dialog" aria-modal="true" aria-label="Model pricing">
+    <div class="pm-head">
+      <span class="pm-title">Model pricing</span>
+      <span class="pm-sub">$ per million tokens</span>
+      <span class="pm-opts">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pm-all" onchange="loadPricing()" title="Off: only models you have used, plus hosted models. On: every model in the price list, even ones with no usage yet."> Show price list for unused models too</label>
+        <button class="pm-close" onclick="closePricing()" aria-label="Close">✕</button>
+      </span>
+    </div>
+    <div class="pm-body" id="pm-body"><div class="pm-sub" style="padding:14px 0">Loading…</div></div>
+  </div>
+</div>
+
+
+<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+  <span style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;font-weight:600;flex-shrink:0">Filters</span>
+
+  <div style="display:flex;align-items:center;gap:6px">
+    <span style="font-size:11px;color:var(--text2);flex-shrink:0">Time:</span>
+    <div class="range-btns" id="range-btns">
+      <button data-range="24h">24h</button>
+      <button data-range="7d">7d</button>
+      <button data-range="30d">30d</button>
+      <button data-range="mtd" class="active" title="Month to date">MTD</button>
+    </div>
+    <input type="date" id="date-from" max="" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 6px;border-radius:5px;font-size:11px;width:130px;color-scheme:dark" onchange="setCustomRange()">
+    <span style="font-size:11px;color:var(--text2)">to</span>
+    <input type="date" id="date-to" max="" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 6px;border-radius:5px;font-size:11px;width:130px;color-scheme:dark" onchange="setCustomRange()">
+  </div>
+
+  <div style="height:20px;border-left:1px solid var(--border)"></div>
+
+  <div style="display:flex;align-items:center;gap:6px">
+    <span style="font-size:11px;color:var(--text2)">Group:</span>
+    <select id="group-filter-select" onchange="groupFilter=this.value;refresh()" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:5px;font-size:12px;cursor:pointer">
+      <option value="">All</option>
+    </select>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:6px">
+    <span style="font-size:11px;color:var(--text2)">Model:</span>
+    <select id="model-filter-select" onchange="setModelFilter(this.value)" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:5px;font-size:12px;cursor:pointer">
+      <option value="">All</option>
+    </select>
+  </div>
+
+  <div class="admin-only" data-show="flex" style="display:none;align-items:center;gap:6px;position:relative">
+    <span style="font-size:11px;color:var(--text2)">User:</span>
+    <button type="button" id="user-filter-btn" onclick="toggleUserPanel(event)"
+      style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:5px;font-size:12px;cursor:pointer;min-width:130px;max-width:200px;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:6px">
+      <span id="user-filter-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">All</span>
+      <span style="color:var(--text2);font-size:9px">&#9660;</span>
+    </button>
+    <div id="user-filter-panel" style="display:none;position:absolute;top:100%;left:36px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;width:230px;z-index:50;margin-top:2px;box-shadow:0 6px 20px rgba(0,0,0,.5)">
+      <div style="padding:6px;border-bottom:1px solid var(--border)">
+        <input type="text" id="user-filter-search" placeholder="Filter users..." autocomplete="off" oninput="renderUserChecklist()"
+          style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 6px;border-radius:4px;font-size:11px">
+      </div>
+      <div style="padding:5px 10px;display:flex;justify-content:space-between;font-size:10px;border-bottom:1px solid var(--border)">
+        <a href="#" onclick="selectAllUsers(true);return false" style="color:var(--blue);text-decoration:none">Select all</a>
+        <a href="#" onclick="selectAllUsers(false);return false" style="color:var(--text2);text-decoration:none">Clear</a>
+      </div>
+      <div id="user-filter-list" style="max-height:220px;overflow-y:auto;padding:2px 0"></div>
+    </div>
+  </div>
+
+  <div style="height:20px;border-left:1px solid var(--border)"></div>
+  <button onclick="clearAllFilters()" style="background:none;border:1px solid var(--border);color:var(--text2);padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--text)';this.style.borderColor='var(--red)'" onmouseout="this.style.color='var(--text2)';this.style.borderColor='var(--border)'">Clear All</button>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi"><span class="kpi-label">Total Requests</span><span id="kpi-requests" class="kpi-value blue">--</span></div>
+  <div class="kpi"><span class="kpi-label">Total Tokens</span><span id="kpi-tokens" class="kpi-value green">--</span></div>
+  <div class="kpi"><span class="kpi-label">Estimated Cost</span><span id="kpi-cost" class="kpi-value orange">--</span></div>
+  <div class="kpi saved"><span class="kpi-label">Saved · Hosted Models</span><span id="kpi-savings" class="kpi-value green">--</span><span id="kpi-savings-sub" class="kpi-sub">vs <select id="savings-ref-select" onchange="savingsRef=this.value;refresh();"></select><span id="kpi-savings-note"></span></span></div>
+  <div class="kpi"><span class="kpi-label">Active Users</span><span id="kpi-users" class="kpi-value purple">--</span></div>
+</div>
+
+<div class="charts-row three-col">
+  <div class="chart-box">
+    <h2>Token Usage · Hosted vs Vendor</h2>
+    <canvas id="savings-chart"></canvas>
+  </div>
+  <div class="chart-box">
+    <div class="chart-head">
+      <h2>By Model</h2>
+      <div class="tl-toggle" id="model-metric-toggle">
+        <button data-mm="cost">Cost</button>
+        <button data-mm="tokens" class="active">Tokens</button>
+        <button data-mm="requests">Requests</button>
+      </div>
+    </div>
+    <canvas id="token-chart"></canvas>
+  </div>
+  <div class="chart-box">
+    <h2>By User (Top 10)</h2>
+    <div class="tl-toggle" id="user-metric-toggle">
+      <button data-um="cost" class="active">Cost</button>
+      <button data-um="tokens">Tokens</button>
+      <button data-um="requests">Requests</button>
+    </div>
+    <canvas id="user-cost-chart"></canvas>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Recent Activity <span style="font-size:12px;color:var(--text2);font-weight:400">(live)</span></h2>
+  <div class="recent-scroll">
+    <table>
+      <thead><tr>
+        <th style="cursor:default">Time</th>
+        <th style="cursor:default">User</th>
+        <th style="cursor:default">Group</th>
+        <th style="cursor:default">Client</th>
+        <th style="cursor:default">Model</th>
+        <th style="cursor:default">Provider</th>
+        <th style="cursor:default">Status</th>
+        <th style="cursor:default" class="num">Input</th>
+        <th style="cursor:default" class="num">Output</th>
+        <th style="cursor:default" class="num">Cached</th>
+        <th style="cursor:default" class="num">Cache Write</th>
+        <th style="cursor:default" class="num">Total</th>
+        <th style="cursor:default" class="num">Cost</th>
+      </tr></thead>
+      <tbody id="recent-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Users</h2>
+  <table>
+    <thead><tr id="users-thead"></tr></thead>
+    <tbody id="users-tbody"></tbody>
+  </table>
+</div>
+
+<div class="timeline-box">
+  <h2>Tokens Over Time</h2>
+  <div class="tl-toggle" id="tl-toggle">
+    <button data-gb="model" class="active">By Model</button>
+    <button data-gb="user">By User</button>
+  </div>
+  <canvas id="timeline-chart"></canvas>
+</div>
+
+<script>
+let range='mtd', groupFilter='', userFilter=[], modelFilter='', tlGroupBy='model';
+let isAdmin=false;        // org-wide Usage view (all users)
+let isSuperAdmin=false;   // operator tools: Routing/Compression/Admin nav + "view as"
+let modelMetric='tokens', userPieMetric='cost';
+let savingsRef='claude-opus-4-8';
+let tokenChart=null, userCostChart=null, tlChart=null, savingsChart=null;
+let currentSort='total_tokens', currentOrder='desc';
+let cachedGroups=[], cachedModels=[], cachedUsers=[];
+// Overview payload of the current refresh; it carries the server-computed
+// "Saved · Hosted Models" KPI (the sum of the user table's saved_usd
+// column), which is what the card shows — no client-side re-derivation.
+let cachedOverview=null;
+// Range-only (unfiltered) model stats, kept for the observed cache-ratio
+// basis in renderSavings so per-user/group filters don't zero it out.
+let catalogModels=[];
+
+const COLORS=['#58a6ff','#3fb950','#d29922','#f85149','#bc8cff','#39d2c0','#f778ba','#79c0ff','#7ee787','#e3b341','#ff9a8c','#d2a8ff','#56d4dd','#ffa657','#a5d6ff'];
+
+function fmtN(n){if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toString()}
+function fmtC(n){if(n==null)return'$0.00';if(n!==0&&Math.abs(n)<0.01)return'$'+n.toFixed(4);return'$'+n.toFixed(2)}
+function fmtGroup(g){if(!g)return'';try{var a=JSON.parse(g);return Array.isArray(a)?a.join(', '):g;}catch(e){return g.replace(/^\["|"\]$/g,'').replace(/","/g,', ');}}
+// Render a user cell: "First Last" with the email muted beneath it when a
+// display name is known, otherwise just the username.
+function userCell(username,displayName){
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  if(displayName)return `<div class="user-name">${esc(displayName)}</div><div class="user-mail">${esc(username)}</div>`;
+  return esc(username);
+}
+
+async function api(path){const r=await fetch(path);if(!r.ok)throw new Error(r.statusText);return r.json()}
+
+async function refresh(){
+  var r=range;
+  if(r==='custom'&&customFrom&&customTo)r='custom&from='+customFrom+'&to='+customTo;
+  var uf=userFilter.length?'&user='+encodeURIComponent(userFilter.join(',')):'';
+  var gf=groupFilter?'&group='+encodeURIComponent(groupFilter):'';
+  var mf=modelFilter?'&model='+encodeURIComponent(modelFilter):'';
+  var filters='range='+r+gf+uf+mf;
+  var rangeOnly='range='+r;
+  // Charts use the filtered set; the filter dropdowns/roster use
+  // unfiltered "catalog" fetches so selecting a filter never shrinks
+  // the list of things you can still pick.
+  const [ov,gr,us,mo,tl,rc,rosterCat,modelCat]=await Promise.all([
+    api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef)),
+    api('/api/v1/dashboard/groups?'+filters),
+    api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&ref='+encodeURIComponent(savingsRef)),
+    api('/api/v1/dashboard/models?'+filters),
+    api('/api/v1/dashboard/timeline?'+filters+'&group_by='+tlGroupBy),
+    api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf),
+    api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200'),
+    api('/api/v1/dashboard/models?'+rangeOnly)
+  ]);
+  cachedOverview=ov;
+  cachedGroups=gr;
+  cachedModels=modelFilter?mo.filter(function(m){return m.model===modelFilter}):mo;
+  // Unfiltered (range-only) model stats: used as the basis for the observed
+  // cache ratio in renderSavings, so a user/group filter that contains no
+  // paid traffic doesn't silently drop the cache assumption.
+  catalogModels=modelCat;
+  cachedUsers=us;
+  renderKPI(ov);
+  renderGroupFilterBtns(gr);
+  populateFilterDropdowns(modelCat, rosterCat);
+  renderUsers(us);
+  renderRecent(rc);
+  renderModelChart();
+  renderUserCostChart();
+  renderSavings();
+  renderTimeline(tl);
+  document.getElementById('last-refresh').textContent=' • '+new Date().toLocaleTimeString();
+}
+
+function timeAgo(ts){
+  const s=Math.floor((Date.now()-new Date(ts))/1000);
+  if(s<60)return s+'s ago';
+  if(s<3600)return Math.floor(s/60)+'m ago';
+  if(s<86400)return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';
+}
+
+function friendlyClient(ua){
+  if(!ua) return '';
+  if(ua.startsWith('claude-cli')||ua.startsWith('claude-code')) return 'Claude Code';
+  if(ua.startsWith('codex-tui')||ua.startsWith('codex/')) return 'OpenAI Codex';
+  if(ua==='undici') return 'OpenCLAW';
+  if(ua.startsWith('curl/')) return 'curl';
+  if(ua.startsWith('python-requests')) return 'Python SDK';
+  if(ua.startsWith('anthropic-python')) return 'Python SDK';
+  if(ua.startsWith('node-fetch')||ua.startsWith('axios')) return 'Node.js';
+  if(ua.startsWith('Go-http-client')) return 'Go';
+  return ua.split('/')[0];
+}
+
+// statusCell maps an HTTP status to a colored cell: green for 2xx, red for
+// anything else, neutral for unknown (null — rows ingested before the status
+// column existed). Code 0 means the upstream never responded.
+function statusCell(code){
+  if(code===null||code===undefined)return{text:'—',color:'var(--text2)',title:'unknown (recorded before status tracking)'};
+  if(code===0)return{text:'ERR',color:'var(--red)',title:'no upstream response'};
+  const ok=code>=200&&code<300;
+  return{text:String(code),color:ok?'var(--green)':'var(--red)',title:ok?'success':'error response'};
+}
+function renderRecent(data){
+  const tbody=document.getElementById('recent-tbody');
+  tbody.innerHTML=data.map(r=>{
+    const provColor=r.provider==='anthropic'?'var(--orange)':r.provider==='openai'?'var(--green)':'var(--cyan)';
+    const client=friendlyClient(r.user_agent);
+    const clientColor=client==='Claude Code'?'var(--orange)':client==='OpenCLAW'?'var(--cyan)':client==='curl'?'var(--text2)':'var(--green)';
+    const st=statusCell(r.status_code);
+    // Quota blocks are real usage_events rows (status 429, zero usage) that
+    // we refused ourselves (provider 'gateway'), so they render here exactly
+    // like any other error row — one per request, with a clearer tooltip.
+    if(r.status_code===429&&r.provider==='gateway')st.title='Blocked at the gateway: monthly budget exceeded';
+    return `<tr>
+      <td style="white-space:nowrap;color:var(--text2)">${timeAgo(r.timestamp)}</td>
+      <td>${userCell(r.username,r.display_name)}</td>
+      <td>${fmtGroup(r.group_name)}</td>
+      <td style="color:${clientColor}" title="${r.user_agent||''}">${client||'—'}</td>
+      <td>${r.model||'—'}</td>
+      <td style="color:${provColor}">${r.provider||'—'}</td>
+      <td style="color:${st.color};font-weight:600" title="${st.title}">${st.text}</td>
+      <td class="num">${fmtN(r.prompt_tokens)}</td>
+      <td class="num">${fmtN(r.completion_tokens)}</td>
+      <td class="num" style="color:var(--cyan)">${fmtN(r.cached_input_tokens||0)}</td>
+      <td class="num" style="color:var(--purple)">${fmtN(r.cache_creation_tokens||0)}</td>
+      <td class="num">${fmtN(r.total_tokens)}</td>
+      <td class="num">${fmtC(r.cost_usd)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderKPI(d){
+  document.getElementById('kpi-requests').textContent=fmtN(d.total_requests);
+  document.getElementById('kpi-tokens').textContent=fmtN(d.total_tokens);
+  document.getElementById('kpi-cost').textContent=fmtC(d.total_cost_usd);
+  document.getElementById('kpi-users').textContent=d.active_users;
+}
+
+function renderGroupFilterBtns(data){}
+
+const COLS=[
+  {key:'username',label:'User',cls:''},
+  {key:'group_name',label:'Group',cls:''},
+  {key:'requests',label:'Requests',cls:'num'},
+  {key:'prompt_tokens',label:'Prompt Tokens',cls:'num'},
+  {key:'completion_tokens',label:'Completion Tokens',cls:'num'},
+  {key:'total_tokens',label:'Total Tokens',cls:'num'},
+  {key:'cost_usd',label:'Cost ($)',cls:'num'},
+  {key:'saved_usd',label:'Hosted-Model Saved ($)',cls:'num'}
+];
+
+let expandedUser='';
+
+function renderUsers(data){
+  const thead=document.getElementById('users-thead');
+  thead.innerHTML='<th style="width:30px;cursor:default"></th>'+COLS.map(c=>{
+    let cls='';
+    if(currentSort===c.key)cls=currentOrder==='asc'?'sorted-asc':'sorted-desc';
+    return `<th class="${cls}" onclick="sortBy('${c.key}')">${c.label}</th>`;
+  }).join('')+(isSuperAdmin?'<th style="width:80px;cursor:default"></th>':'');
+
+  const tbody=document.getElementById('users-tbody');
+  const len=data.length;
+  tbody.innerHTML=data.map((u,i)=>{
+    let cls='clickable';
+    if(i<5&&len>10)cls+=' top5';
+    if(i>=len-5&&len>10)cls+=' bottom5';
+    const isExpanded=expandedUser===u.username;
+    const arrow=isExpanded?'&#9660;':'&#9654;';
+    let row=`<tr class="${cls}" onclick="toggleExpand('${u.username}')">
+      <td style="color:var(--text2);font-size:10px">${arrow}</td>
+      <td>${userCell(u.username,u.display_name)}</td>
+      <td>${fmtGroup(u.group_name)}</td>
+      <td class="num">${fmtN(u.requests)}</td>
+      <td class="num">${fmtN(u.prompt_tokens)}</td>
+      <td class="num">${fmtN(u.completion_tokens)}</td>
+      <td class="num">${fmtN(u.total_tokens)}</td>
+      <td class="num">${fmtC(u.cost_usd)}</td>
+      <td class="num">${fmtC(u.saved_usd||0)}</td>
+      ${isSuperAdmin?`<td><a href="/admin/impersonate?as=${encodeURIComponent(u.username)}" onclick="event.stopPropagation()" title="Open this user's personal view" style="color:var(--blue);font-size:11px;text-decoration:none;white-space:nowrap">view as &#8594;</a></td>`:''}
+    </tr>`;
+    if(isExpanded)row+=`<tr id="expand-${u.username}"><td colspan="${isSuperAdmin?10:9}" style="padding:0"><div class="expand-loading" id="expand-content-${u.username}">Loading...</div></td></tr>`;
+    return row;
+  }).join('');
+
+  if(expandedUser)loadUserModels(expandedUser);
+}
+
+async function toggleExpand(username){
+  if(expandedUser===username){expandedUser='';refresh();return;}
+  expandedUser=username;
+  refresh();
+}
+
+async function loadUserModels(username){
+  const el=document.getElementById('expand-content-'+username);
+  if(!el)return;
+  try{
+    // Same query string the rest of the page uses: a bare range=custom is
+    // meaningless without from/to (the server silently falls back to the
+    // last 7 days), which made the expanded rows show a different window
+    // than the KPIs above them whenever a custom date range was active —
+    // a user filtered to one day saw ~4x their own tokens in the breakdown.
+    // Group/model filters ride along so the rows also sum to the user's row.
+    var r=range;
+    if(r==='custom'&&customFrom&&customTo)r='custom&from='+customFrom+'&to='+customTo;
+    var gf=groupFilter?'&group='+encodeURIComponent(groupFilter):'';
+    var mf=modelFilter?'&model='+encodeURIComponent(modelFilter):'';
+    const models=await api(`/api/v1/dashboard/models?range=${r}${gf}${mf}&user=${encodeURIComponent(username)}`);
+    if(!models.length){el.innerHTML='<div style="padding:12px;color:var(--text2)">No model data</div>';return;}
+    const total=models.reduce((s,m)=>s+m.total_tokens,0);
+    el.innerHTML=`<div class="expand-detail">
+      <table style="margin:0;border:none;background:var(--bg)">
+        <thead><tr>
+          <th style="cursor:default">Model</th>
+          <th style="cursor:default">Provider</th>
+          <th style="cursor:default" class="num">Requests</th>
+          <th style="cursor:default" class="num">Input</th>
+          <th style="cursor:default" class="num">Output</th>
+          <th style="cursor:default" class="num">Cached</th>
+          <th style="cursor:default" class="num">Cache Write</th>
+          <th style="cursor:default" class="num">Total</th>
+          <th style="cursor:default" class="num">Cost</th>
+          <th style="cursor:default;width:80px" class="num">%</th>
+        </tr></thead>
+        <tbody>${models.map(m=>{
+          const pct=total>0?((m.total_tokens/total)*100):0;
+          const provColor=m.provider==='anthropic'?'var(--orange)':m.provider==='openai'?'var(--green)':'var(--cyan)';
+          const newInput=Math.max((m.prompt_tokens||0)-(m.cached_input_tokens||0),0);
+          return `<tr>
+            <td><strong>${m.model}</strong></td>
+            <td style="color:${provColor}">${m.provider}</td>
+            <td class="num">${fmtN(m.requests)}</td>
+            <td class="num">${fmtN(newInput)}</td>
+            <td class="num">${fmtN(m.completion_tokens||0)}</td>
+            <td class="num" style="color:var(--cyan)">${fmtN(m.cached_input_tokens||0)}</td>
+            <td class="num" style="color:var(--purple)">${fmtN(m.cache_creation_tokens||0)}</td>
+            <td class="num">${fmtN(m.total_tokens)}</td>
+            <td class="num">${fmtC(m.cost_usd)}</td>
+            <td class="num">${pct.toFixed(1)}%</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  }catch(e){el.innerHTML='<div style="padding:12px;color:var(--red)">Error loading</div>';}
+}
+
+function pieVal(d,metric){
+  if(metric==='cost')return d.cost_usd;
+  if(metric==='tokens')return d.total_tokens;
+  if(metric==='requests')return d.requests;
+  return d[metric]||0;
+}
+function pieFmt(v,metric){
+  if(metric==='cost'||metric==='cost_usd')return fmtC(v);
+  return fmtN(v);
+}
+function pieUnit(metric){
+  if(metric==='cost'||metric==='cost_usd')return '';
+  if(metric==='tokens'||metric==='total_tokens')return ' tokens';
+  if(metric==='requests')return ' reqs';
+  if(metric==='user_count')return ' users';
+  return '';
+}
+
+var MODEL_PRICING_JS={
+  'claude-opus-5':{i:5,o:25,cr:0.5,cw:6.25},'claude-fable-5':{i:10,o:50,cr:1,cw:12.5},
+  'claude-opus-4-8':{i:5,o:25,cr:0.5,cw:6.25},'claude-opus-4-6':{i:5,o:25,cr:0.5,cw:6.25},
+  'claude-sonnet-4-6':{i:3,o:15,cr:0.3,cw:3.75},'claude-sonnet-4-20250514':{i:3,o:15,cr:0.3,cw:3.75},
+  'claude-haiku-4-5':{i:1,o:5,cr:0.1,cw:1.25},'claude-haiku-4-5-20251001':{i:1,o:5,cr:0.1,cw:1.25},
+  'gpt-5.5':{i:5,o:30,cr:0.5,cw:0},'gpt-5.4':{i:2.5,o:15,cr:0,cw:0},'gpt-5.4-mini':{i:0.3,o:1.2,cr:0.075,cw:0},
+  'gpt-5.3-codex':{i:1.5,o:6,cr:0,cw:0},'gpt-4o':{i:2.5,o:10,cr:0,cw:0}
+};
+function renderModelChart(){
+  const data=cachedModels;
+  const m=modelMetric;
+  const vals=data.map(d=>pieVal(d,m));
+  const labels=data.map((d,i)=>`${d.model} — ${pieFmt(vals[i],m)}`);
+  const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
+  if(tokenChart)tokenChart.destroy();
+  tokenChart=new Chart(document.getElementById('token-chart'),{
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
+    options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#8b949e',font:{size:12},padding:12}},
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].model+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';}}}
+    }}
+  });
+}
+
+
+
+// Reference models offered for the "priced vs" savings comparison.
+// Kept to the flagship paid models so the choice stays legible.
+var SAVINGS_REF_MODELS=['claude-opus-5','claude-fable-5','claude-opus-4-8','claude-sonnet-4-6','claude-haiku-4-5','gpt-5.5','gpt-5.4','gpt-4o'];
+
+function populateSavingsRef(){
+  var sel=document.getElementById('savings-ref-select');
+  if(!sel||sel.options.length)return;
+  // Order most-expensive first (input+output rate), tie-break alphabetically,
+  // so the "priced vs" list reads top-down from the costliest reference.
+  var ordered=SAVINGS_REF_MODELS.slice().sort(function(a,b){
+    var pa=MODEL_PRICING_JS[a]||{i:0,o:0}, pb=MODEL_PRICING_JS[b]||{i:0,o:0};
+    var d=(pb.i+pb.o)-(pa.i+pa.o);
+    return d!==0?d:a.localeCompare(b);
+  });
+  sel.innerHTML=ordered.map(function(m){
+    return '<option value="'+m+'"'+(m===savingsRef?' selected':'')+'>'+m+'</option>';
+  }).join('');
+}
+
+// "Hosted" = models we serve ourselves (provider vllm, plus the legacy qwen
+// alias). Hosted traffic is detected by provider, not price — Qwen bills at
+// OpenRouter parity and GLM is deliberately free, so a price probe can't
+// tell them apart from unpriced strays. The cost==0 catch-all stays for any
+// future deliberately-unpriced model.
+var HOSTED_PROVIDERS=['vllm','qwen'];
+// Server's hostedProviderCond verdict first: the metered provider label
+// (qwen-flash) drifts from the seeded pricing provider (vllm), so the
+// HOSTED_PROVIDERS list alone silently zeroed the Hosted pie. The rest is
+// fallback for responses from an older server.
+function isHostedModel(m){return m.hosted===true||HOSTED_PROVIDERS.indexOf(m.provider||'')>=0||(m.cost_usd||0)===0;}
+// Savings are the DIFFERENCE: what the hosted traffic would have cost on the
+// selected paid reference model, minus what it was actually billed, floored
+// at $0 per model. The reference is user-selectable and always shown, so the
+// number is never a hidden assumption. The card shows the SERVER's number
+// (overview.saved_usd — the user table's saved_usd column summed by the very
+// same query), never a client-side re-derivation: a per-model loop cannot
+// reproduce per-user floors and cache-ratio decisions, and pretending it can
+// is how the card once showed $770 while the table showed $2,400. The pie
+// splits the same window into hosted vs vendor-API tokens (raw counts).
+function renderSavings(){
+  populateSavingsRef();
+  // The KPI number and its cache assumption come from the server
+  // (overview.saved_usd): the exact sum of the user table's saved_usd
+  // column, same reference model, same per-user×model floors. The card
+  // can't drift from the table because they are the same query.
+  var ov=cachedOverview||{};
+  var totalSaved=(typeof ov.saved_usd==='number')?ov.saved_usd:null;
+  var kpi=document.getElementById('kpi-savings');
+  if(kpi&&totalSaved!==null)kpi.textContent=fmtC(totalSaved);
+  var note=document.getElementById('kpi-savings-note');
+  if(note)note.textContent=ov.savings_ratio_applied?Math.round((ov.savings_ratio||0)*100)+'% input est. cached':'';
+  // The pie still splits the filtered window's TOKENS (hosted vs vendor)
+  // client-side — a token count needs no pricing arithmetic to agree.
+  var hostedTokens=0, totalTokens=0;
+  (cachedModels||[]).forEach(function(m){
+    var tot=m.total_tokens||0;
+    totalTokens+=tot;
+    if(!isHostedModel(m)||tot<=0)return;
+    hostedTokens+=tot;
+  });
+  var vendorTokens=Math.max(totalTokens-hostedTokens,0);
+
+  if(savingsChart)savingsChart.destroy();
+  var canvas=document.getElementById('savings-chart');
+  if(!canvas)return;
+  savingsChart=new Chart(canvas,{
+    type:'doughnut',
+    data:{
+      labels:['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],
+      datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0}]
+    },
+    options:{responsive:true,plugins:{
+      legend:{position:'right',labels:{color:'#8b949e',font:{size:12},padding:12}},
+      tooltip:{callbacks:{label:function(ctx){var tot=hostedTokens+vendorTokens;var lbl=ctx.dataIndex===0?'Hosted':'Vendor';return lbl+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
+    }}
+  });
+}
+
+function populateFilterDropdowns(models, users){
+  var ms=document.getElementById('model-filter-select');
+  if(ms){
+    var cur=ms.value;
+    ms.innerHTML='<option value="">All</option>'+models.map(function(m){return '<option value="'+m.model+'"'+(m.model===cur?' selected':'')+'>'+m.model+'</option>';}).join('');
+  }
+  var gs=document.getElementById('group-filter-select');
+  if(gs){
+    var curG=gs.value;
+    var groups=[...new Set(users.map(function(u){return u.group_name}).filter(Boolean))];
+    gs.innerHTML='<option value="">All</option>'+groups.map(function(g){return '<option value="'+g+'"'+(g===curG?' selected':'')+'>'+fmtGroup(g)+'</option>';}).join('');
+  }
+  allUsers=users;
+  renderUserChecklist();
+  updateUserFilterLabel();
+}
+
+// User filter is a multi-select checkbox panel over the full user roster.
+// userFilter holds the selected usernames; the API sends them comma-joined and
+// the backend matches any of them (string_to_array). Empty selection = all.
+var allUsers=[];
+
+function toggleUserPanel(e){
+  if(e)e.stopPropagation();
+  var p=document.getElementById('user-filter-panel');
+  if(!p)return;
+  var show=p.style.display==='none'||!p.style.display;
+  p.style.display=show?'block':'none';
+  if(show){
+    var s=document.getElementById('user-filter-search');
+    if(s){s.value='';s.focus();}
+    renderUserChecklist();
+  }
+}
+
+function userRosterNames(){
+  var names=allUsers.map(function(u){return u.username}).filter(Boolean);
+  // keep any selected user that isn't in the current roster page visible/checked
+  userFilter.forEach(function(u){if(names.indexOf(u)<0)names.push(u);});
+  return [...new Set(names)].sort(function(a,b){return a.localeCompare(b)});
+}
+
+function renderUserChecklist(){
+  var list=document.getElementById('user-filter-list');
+  if(!list)return;
+  var s=document.getElementById('user-filter-search');
+  var q=(s?s.value:'').toLowerCase();
+  var shown=userRosterNames().filter(function(n){return n.toLowerCase().indexOf(q)>=0;});
+  if(!shown.length){list.innerHTML='<div style="padding:8px 10px;font-size:11px;color:var(--text2)">No users</div>';return;}
+  var nameByUser={};
+  allUsers.forEach(function(u){if(u.display_name)nameByUser[u.username]=u.display_name;});
+  list.innerHTML=shown.map(function(n){
+    var checked=userFilter.indexOf(n)>=0?' checked':'';
+    var safe=n.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    var label=nameByUser[n]?nameByUser[n]+' <span style="color:var(--text2);font-size:10px">'+safe+'</span>':safe;
+    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--text)" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'transparent\'">'+
+      '<input type="checkbox" value="'+safe+'"'+checked+' onchange="onUserCheck(this)" style="cursor:pointer">'+
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+label+'</span></label>';
+  }).join('');
+}
+
+function onUserCheck(cb){
+  var u=cb.value, i=userFilter.indexOf(u);
+  if(cb.checked){if(i<0)userFilter.push(u);}
+  else if(i>=0)userFilter.splice(i,1);
+  updateUserFilterLabel();
+  refresh();
+}
+
+function selectAllUsers(all){
+  if(all){
+    var s=document.getElementById('user-filter-search');
+    var q=(s?s.value:'').toLowerCase();
+    userFilter=userRosterNames().filter(function(n){return n.toLowerCase().indexOf(q)>=0;});
+  }else{
+    userFilter=[];
+  }
+  updateUserFilterLabel();
+  renderUserChecklist();
+  refresh();
+}
+
+function updateUserFilterLabel(){
+  var lbl=document.getElementById('user-filter-label');
+  if(!lbl)return;
+  if(!userFilter.length)lbl.textContent='All';
+  else if(userFilter.length===1)lbl.textContent=userFilter[0];
+  else lbl.textContent=userFilter.length+' selected';
+}
+
+document.addEventListener('click',function(e){
+  if(!e.target.closest('#user-filter-panel')&&!e.target.closest('#user-filter-btn')){
+    var p=document.getElementById('user-filter-panel');
+    if(p)p.style.display='none';
+  }
+});
+
+function setModelFilter(v){modelFilter=v;refresh();}
+function clearUserFilter(){userFilter=[];updateUserFilterLabel();renderUserChecklist();refresh();}
+
+var customFrom='',customTo='';
+
+function dstr(d){
+  // Local YYYY-MM-DD — unlike toISOString, never rolls across a
+  // midnight/month boundary for non-UTC viewers.
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+function syncDateInputs(){
+  var now=new Date();
+  var today=dstr(now);
+  var df=document.getElementById('date-from');
+  var dt=document.getElementById('date-to');
+  df.max=today;dt.max=today;
+  if(range!=='custom'){
+    var from=new Date(now);
+    if(range==='24h')from.setDate(from.getDate()-1);
+    else if(range==='7d')from.setDate(from.getDate()-7);
+    else if(range==='30d')from.setDate(from.getDate()-30);
+    else if(range==='mtd')from.setDate(1);
+    df.value=dstr(from);
+    dt.value=today;
+  }
+}
+
+function setCustomRange(){
+  var from=document.getElementById('date-from').value;
+  var to=document.getElementById('date-to').value;
+  if(from&&to){
+    range='custom';customFrom=from;customTo=to;
+    document.querySelectorAll('#range-btns .active').forEach(function(b){b.classList.remove('active');});
+    refresh();
+  }
+}
+
+function clearAllFilters(){
+  range='mtd';groupFilter='';modelFilter='';userFilter=[];customFrom='';customTo='';
+  document.querySelectorAll('#range-btns .active').forEach(function(b){b.classList.remove('active');});
+  var bm=document.querySelector('#range-btns button[data-range="mtd"]');if(bm)bm.classList.add('active');
+  var gs=document.getElementById('group-filter-select');if(gs)gs.value='';
+  var ms=document.getElementById('model-filter-select');if(ms)ms.value='';
+  updateUserFilterLabel();renderUserChecklist();
+  syncDateInputs();
+  refresh();
+}
+
+function renderUserCostChart(){
+  const data=cachedUsers.slice(0,10);
+  const m=userPieMetric;
+  const vals=data.map(d=>pieVal(d,m));
+  const labels=data.map((d,i)=>`${d.display_name||d.username} — ${pieFmt(vals[i],m)}`);
+  const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
+  if(userCostChart)userCostChart.destroy();
+  userCostChart=new Chart(document.getElementById('user-cost-chart'),{
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
+    options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#8b949e',font:{size:11},padding:8}},
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';}}}
+    }}
+  });
+}
+
+function renderTimeline(data){
+  const seriesSet=[...new Set(data.map(d=>d.series))];
+  const bucketsSet=[...new Set(data.map(d=>d.bucket))].sort();
+  const map={};
+  data.forEach(d=>{map[d.bucket+'|'+d.series]=d.total_tokens});
+
+  const datasets=seriesSet.map((s,i)=>({
+    label:s,
+    data:bucketsSet.map(b=>map[b+'|'+s]||0),
+    backgroundColor:COLORS[i%COLORS.length]+'40',
+    borderColor:COLORS[i%COLORS.length],
+    borderWidth:1.5,
+    fill:true,
+    tension:0.3,
+    pointRadius:0
+  }));
+
+  if(tlChart)tlChart.destroy();
+  tlChart=new Chart(document.getElementById('timeline-chart'),{
+    type:'line',
+    data:{labels:bucketsSet.map(b=>new Date(b).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})),datasets},
+    options:{
+      responsive:true,
+      scales:{
+        x:{ticks:{color:'#8b949e',maxRotation:45,font:{size:11}},grid:{color:'#2c3138'}},
+        y:{stacked:true,ticks:{color:'#8b949e',callback:v=>fmtN(v)},grid:{color:'#2c3138'}}
+      },
+      plugins:{legend:{labels:{color:'#8b949e',font:{size:11}}}}
+    }
+  });
+}
+
+function setGroupFilter(g){groupFilter=g;userFilter=[];expandedUser='';updateUserFilterLabel();renderUserChecklist();refresh()}
+function clearGroupFilter(){groupFilter='';userFilter=[];expandedUser='';updateUserFilterLabel();renderUserChecklist();refresh()}
+function setUserFilter(u){var i=userFilter.indexOf(u);if(i>=0)userFilter.splice(i,1);else userFilter.push(u);updateUserFilterLabel();renderUserChecklist();refresh()}
+function sortBy(col){if(currentSort===col)currentOrder=currentOrder==='desc'?'asc':'desc';else{currentSort=col;currentOrder='desc'}refresh()}
+
+document.getElementById('range-btns').addEventListener('click',e=>{
+  if(e.target.tagName!=='BUTTON')return;
+  document.querySelectorAll('#range-btns .active').forEach(function(b){b.classList.remove('active');});
+  e.target.classList.add('active');
+  range=e.target.dataset.range;
+  syncDateInputs();
+  refresh();
+});
+
+
+document.getElementById('model-metric-toggle').addEventListener('click',e=>{
+  if(e.target.tagName!=='BUTTON')return;
+  document.querySelector('#model-metric-toggle .active').classList.remove('active');
+  e.target.classList.add('active');
+  modelMetric=e.target.dataset.mm;
+  renderModelChart();
+});
+
+document.getElementById('user-metric-toggle').addEventListener('click',e=>{
+  if(e.target.tagName!=='BUTTON')return;
+  document.querySelector('#user-metric-toggle .active').classList.remove('active');
+  e.target.classList.add('active');
+  userPieMetric=e.target.dataset.um;
+  renderUserCostChart();
+});
+
+document.getElementById('tl-toggle').addEventListener('click',e=>{
+  if(e.target.tagName!=='BUTTON')return;
+  document.querySelector('#tl-toggle .active').classList.remove('active');
+  e.target.classList.add('active');
+  tlGroupBy=e.target.dataset.gb;
+  refresh();
+});
+
+syncDateInputs();
+refresh();
+setInterval(refresh,30000);
+
+fetch('/api/v1/whoami').then(function(r){return r.json()}).then(function(d){
+  if(d.user){
+    isAdmin=!!d.isAdmin;
+    isSuperAdmin=!!d.isSuperAdmin;
+    // Identity + role-gated tabs. The name renders green, the role in grey
+    // beside it — the same convention every page's header now uses.
+    var ab=document.getElementById('abUser');
+    ab.innerHTML=pmEsc(d.display_name||d.user)+(d.isSuperAdmin?' <span class="role">(super admin)</span>':d.isAdmin?' <span class="role">(admin)</span>':'');
+    ab.style.display='';
+    document.getElementById('abOut').style.display='';
+    // "My team" shows for people who actually have a team to look at:
+    // managers (anyone with reports — admins included, they see their own
+    // branch there) and super-admins, who alone see the whole organisation
+    // under it. A plain admin gets NO team tab: their all-visibility view
+    // is this Usage page, not a team view.
+    if(d.isSuperAdmin||d.isManager)document.getElementById('tab-team').style.display='';
+    if(isSuperAdmin){
+      ['tab-routing','tab-admin'].forEach(function(id){document.getElementById(id).style.display='';});
+      var mvb=document.getElementById('my-view-btn');
+      mvb.href='/admin/impersonate?as='+encodeURIComponent(d.user);
+      mvb.style.display='';
+    }
+    // "Viewing as" state: show the banner with the way back to admin.
+    var banner=document.getElementById('impersonation-banner');
+    if(d.impersonating){
+      banner.style.display='flex';
+      document.getElementById('impersonated-user').textContent=d.display_name?d.display_name+' ('+d.user+')':d.user;
+      document.getElementById('real-user').textContent=d.real_user_display?d.real_user_display+' ('+d.real_user+')':d.real_user;
+    } else banner.style.display='none';
+    // In-page widgets keep their old class gates.
+    if(isAdmin){
+      document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=el.dataset.show||'';});
+    }
+    if(isSuperAdmin){
+      document.querySelectorAll('.superadmin-only').forEach(function(el){el.style.display=el.dataset.show||'';});
+    }
+    // Re-render once the role is known so per-row "view as" links appear.
+    if(isSuperAdmin)refresh();
+    // Pin every non-admin to their own rows so the first frame isn't a
+    // fleet-wide flash. Managers are pinned too now — the Usage page shows
+    // a person their own spend only, managers included (the server scopes
+    // them identically); team spend lives on the My-team page.
+    if(!d.isAdmin&&!userFilter.length){
+      userFilter=[d.user];updateUserFilterLabel();renderUserChecklist();refresh();
+    }
+  }
+  if(d.quota)renderQuota(d.quota);
+}).catch(function(){});
+// ── Model pricing modal (shared rate card across all pages) ─────────
+function pmEsc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function pmPrice(v){v=+v||0;return v>0?'$'+v.toLocaleString(undefined,{maximumFractionDigits:3}):'<span class="pm-zero">–</span>';}
+function openPricing(){document.getElementById('pricing-ov').classList.add('show');loadPricing();}
+function closePricing(){document.getElementById('pricing-ov').classList.remove('show');}
+function loadPricing(){
+  var all=document.getElementById('pm-all').checked;
+  var body=document.getElementById('pm-body');
+  body.innerHTML='<div class="pm-sub" style="padding:14px 0">Loading…</div>';
+  fetch('/api/v1/pricing'+(all?'?used=0':'')).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(j){
+    var ms=j.models||[];
+    if(!ms.length){body.innerHTML='<div class="pm-sub" style="padding:14px 0">No rates seeded yet.</div>';return;}
+    body.innerHTML='<table><thead><tr><th>Model</th><th>Input</th><th>Output</th><th>Cache read</th><th>Cache write</th></tr></thead><tbody>'+
+      ms.sort(function(a,b){var r=function(m){return ((+m.input_cost_per_mtok||0)+(+m.output_cost_per_mtok||0)<=0)?0:(m.hosted?1:2);};return r(a)-r(b);}).map(function(m){
+        var free=(+m.input_cost_per_mtok||0)+(+m.output_cost_per_mtok||0)<=0;
+        var cell=function(v){return (+v||0)>0?pmPrice(v):(free?'$0':'<span class="pm-zero">–</span>');};
+        var list=(m.list_input_cost_per_mtok||m.list_output_cost_per_mtok)?'<div class="pm-list">vendor list '+pmPrice(m.list_input_cost_per_mtok)+' / '+pmPrice(m.list_output_cost_per_mtok)+'</div>':'';
+        return '<tr><td>'+pmEsc(m.model)+(m.hosted?'<span class="pm-host">hosted</span>':'')+(free?'<span class="pm-free">free</span>':'')+'<div class="pm-list">'+pmEsc(m.provider)+list+'</div></td>'
+          +'<td>'+cell(m.input_cost_per_mtok)+'</td><td>'+cell(m.output_cost_per_mtok)+'</td>'
+          +'<td>'+cell(m.cache_read_cost_per_mtok)+'</td><td>'+cell(m.cache_write_cost_per_mtok)+'</td></tr>';
+      }).join('')+'</tbody></table>';
+  }).catch(function(e){body.innerHTML='<div class="pm-sub" style="padding:14px 0;color:var(--red)">Could not load pricing ('+pmEsc(e.message)+').</div>';});
+}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closePricing();});
+
+/* ── Monthly budget: banner + request popup ─────────────────────────
+   renderQuota() is fed the whoami `quota` object (GET /api/v1/me/quota
+   for refreshes). Banner states, in priority order:
+     pending request > over limit > rejected > near (>=80%) > extension note.
+   Hidden entirely when enforcement is off, the user is exempt (super-admin)
+   or has no directory row. When over with nothing in flight, the popup
+   opens once per browser session; always reopenable from the banner.   */
+var quotaState=null;
+function qfmt(v){return '$'+Number(v||0).toLocaleString(undefined,{maximumFractionDigits:2});}
+function qday(iso){var d=new Date(iso);return isNaN(d)?'':d.toLocaleDateString(undefined,{month:'short',day:'numeric'});}
+function renderQuota(q){
+  quotaState=q||null;
+  var b=document.getElementById('quota-banner');
+  // Approver badge first, before the personal-state gates: a manager who is
+  // under budget (or exempt) still needs to see that requests await them.
+  var ab=document.getElementById('approve-banner');
+  var n=q&&q.approvals_pending?parseInt(q.approvals_pending,10)||0:0;
+  if(n>0){
+    document.getElementById('approve-banner-text').innerHTML='<b>'+n+' budget request'+(n>1?'s':'')+' await'+(n>1?'':'s')+' your approval</b>';
+    ab.style.display='flex';
+  }else ab.style.display='none';
+  var r=q&&q.request;
+  var pending=!!(r&&r.status==='pending');
+  var over=!!(q&&q.spent_usd>=q.limit_usd);
+  var near=!over&&q&&q.spent_usd>=0.8*q.limit_usd;
+  var rejected=r&&r.status==='rejected'&&r.is_current_month;
+  var red='rgba(248,81,73,.10)',redB='#f85149',amb='rgba(210,153,34,.12)',ambB='#d29922',grn='rgba(63,185,80,.10)',grnB='#3fb950';
+  var msg='',act='',bg=amb,bc=ambB;
+  var btn='<button class="pm-open" style="padding:4px 12px;font-size:12px" onclick="openQuotaModal()">Request more</button>';
+  var canc='<button class="pm-open" style="padding:4px 12px;font-size:12px" onclick="cancelQuotaRequest()">Cancel request</button>';
+  if(!q||!q.has_person||!q.enforced||q.exempt){b.style.display='none';return;}
+  // How many requests the gateway has actually bounced this month (counted
+  // by metering at the moment it answers hasAccess:false).
+  var dn=parseInt(q.denials_this_month,10)||0;
+  var dl=dn>0?' <span style="opacity:.75">('+dn+' request'+(dn>1?'s':'')+' blocked so far.)</span>':'';
+  if(pending){
+    bg=amb;bc=ambB;
+    if(r.is_current_month)msg='<b>Budget request pending</b> &mdash; '+qfmt(r.asked_usd)+' requested'+(r.approver_name?' with '+pmEsc(r.approver_name):' with an admin')+'. You will be able to send requests once it is approved.'+dl;
+    else msg='<b>A budget request from '+pmEsc(r.month)+' is still pending</b> &mdash; cancel it to file a new one for this month.';
+    act=canc;
+  }else if(over){
+    bg=red;bc=redB;
+    var still='';
+    if(q.over_limit_models&&q.over_limit_models.length){
+      still=' <span style="opacity:.85">These stay available: '+q.over_limit_models.map(pmEsc).join(', ')+'.</span>';
+    }
+    msg='<b>Monthly budget reached</b> &mdash; '+qfmt(q.spent_usd)+' of '+qfmt(q.limit_usd)+' used. New requests are blocked until '+qday(q.month_ends)+'.'+still+(rejected?' Your '+qfmt(r.asked_usd)+' request was rejected'+(r.comment?': '+pmEsc(r.comment):'')+'.':'')+dl;
+    act=btn;
+  }else if(rejected){
+    bg=amb;bc=ambB;
+    msg='<b>Budget request rejected</b> &mdash; '+qfmt(r.asked_usd)+' '+qday(r.decided_at||r.created_at)+(r.comment?': '+pmEsc(r.comment):'')+'.';
+    act=btn;
+  }else if(near){
+    bg=amb;bc=ambB;
+    msg='<b>Near your monthly budget</b> &mdash; '+qfmt(q.spent_usd)+' of '+qfmt(q.limit_usd)+' used. Requests will be blocked at '+qday(q.month_ends)+' unless extended.';
+    act=btn;
+  }else if(q.grant_usd>0){
+    bg=grn;bc=grnB;
+    msg='<b>Budget extended</b> &mdash; +'+qfmt(q.grant_usd)+' this month, now '+qfmt(q.limit_usd)+' until '+qday(q.month_ends)+'.';
+  }else{b.style.display='none';return;}
+  b.style.background=bg;b.style.borderColor=bc;
+  b.innerHTML='<div style="flex:1">'+msg+'</div>'+act;
+  b.style.display='flex';
+  if(over&&!pending){
+    var seen=false;try{seen=sessionStorage.getItem('quota-popup-shown')==='1';}catch(e){}
+    if(!seen){try{sessionStorage.setItem('quota-popup-shown','1');}catch(e){}openQuotaModal();}
+  }
+}
+function openQuotaModal(){
+  var q=quotaState;if(!q)return;
+  document.getElementById('quota-ov').classList.add('show');
+  document.getElementById('qo-sub').textContent=qfmt(q.spent_usd)+' of '+qfmt(q.limit_usd)+' used this month · resets '+qday(q.month_ends);
+  // Spend bar: fill capped at 100%, the percentage tells the over story.
+  var pct=q.limit_usd>0?Math.round(q.spent_usd/q.limit_usd*100):0;
+  var col=pct>=100?'#f85149':pct>=80?'#d29922':'#3fb950';
+  var head='<div class="qo-bar">'
+    +'<div class="qo-barrow"><b>'+qfmt(q.spent_usd)+'</b> of '+qfmt(q.limit_usd)+' used<span class="qo-pct" style="color:'+col+'">'+pct+'%</span></div>'
+    +'<div class="qo-track"><div class="qo-fill" style="width:'+Math.min(pct,100)+'%;background:'+col+'"></div></div></div>';
+  head+=q.spent_usd>=q.limit_usd
+    ?'<div class="qo-note" style="color:#f85149">Blocked right now &mdash; an approved amount lifts you for the rest of the month.</div>'
+    :'<div class="qo-note" style="color:var(--text2)">Under budget &mdash; this raises your limit through '+qday(q.month_ends)+'.</div>';
+  var r=q.request;
+  if(r&&r.status==='rejected'&&r.is_current_month&&r.comment)head+='<div class="qo-rej">Your last request was declined: &ldquo;'+pmEsc(r.comment)+'&rdquo;</div>';
+  var over=Math.max(q.spent_usd-q.limit_usd,0);
+  var dflt=over>0?Math.max(50,Math.ceil((over+25)/50)*50):100;
+  var chips=[50,100,150,250].map(function(v){
+    return '<button type="button" class="qo-chip'+(v===dflt?' on':'')+'" data-v="'+v+'" onclick="qoChip('+v+')">+$'+v+'</button>';}).join('');
+  // Questionnaire mirroring the org's Token Budget Escalation form. The
+  // email and "select your manager" fields are deliberately not asked: the
+  // directory knows both, and routing is automatic — the manager shows as a
+  // fixed line above Submit instead.
+  qoFeas='';
+  document.getElementById('qo-body').innerHTML=head
+    +'<label class="qo-label" for="qo-amount">Additional budget needed (above your current '+qfmt(q.limit_usd)+', through '+qday(q.month_ends)+')</label>'
+    +'<div class="qo-chips">'+chips+'</div>'
+    +'<div class="qo-amt"><span class="pfx">$</span><input id="qo-amount" type="number" min="1" max="100000" step="1" value="'+dflt+'" oninput="quotaAmtChanged()"></div>'
+    +'<div class="qo-new">New limit if approved: <b id="qo-new">'+qfmt(q.limit_usd+dflt)+'</b> until '+qday(q.month_ends)+'</div>'
+    +'<label class="qo-label" for="qo-reason">Tasks needing the increase <span style="color:#f85149">*</span> <span style="text-transform:none;letter-spacing:0">(per project)</span></label>'
+    +'<textarea id="qo-reason" class="qo-area" rows="2" maxlength="2000" placeholder="What you are working on that requires the spend"></textarea>'
+    +'<label class="qo-label" for="qo-steps">Steps taken to reduce token usage <span style="color:#f85149">*</span></label>'
+    +'<textarea id="qo-steps" class="qo-area" rows="2" maxlength="2000" placeholder="e.g. smaller context, cheaper models where possible, caching"></textarea>'
+    +'<label class="qo-label" for="qo-basis">What is the estimate based on? <span style="color:#f85149">*</span></label>'
+    +'<textarea id="qo-basis" class="qo-area" rows="2" maxlength="2000" placeholder="e.g. current daily run-rate x remaining days"></textarea>'
+    +'<label class="qo-label" for="qo-time">Timeline for the increase <span style="color:#f85149">*</span></label>'
+    +'<textarea id="qo-time" class="qo-area" rows="2" maxlength="2000" placeholder="This month only, or also expected next month, etc."></textarea>'
+    +'<label class="qo-label">Can this work fit within your standard budget? <span style="color:#f85149">*</span></label>'
+    +'<div class="qo-chips" id="qo-feas" style="margin-bottom:0">'
+    +'<button type="button" class="qo-chip" data-v="no" onclick="qoFeasSet(\'no\')">No</button>'
+    +'<button type="button" class="qo-chip" data-v="yes" onclick="qoFeasSet(\'yes\')">Yes</button>'
+    +'</div>'
+    +'<div id="qo-whynowrap" style="display:none">'
+    +'<label class="qo-label" for="qo-whynot">Why is the current budget not enough? <span style="color:#f85149">*</span></label>'
+    +'<textarea id="qo-whynot" class="qo-area" rows="2" maxlength="2000"></textarea>'
+    +'</div>'
+    +'<div id="qo-err" style="display:none;color:#f85149;font-size:12px;margin-top:10px"></div>'
+    +'<div class="qo-foot">'
+    +'<button class="qo-go" id="qo-submit" onclick="submitQuotaRequest()">Submit request</button>'
+    +'<span class="qo-hint">Routes to '+(q.manager_name?pmEsc(q.manager_name):'an admin')+' &mdash; one tap to approve.</span>'
+    +'</div>';
+  var a=document.getElementById('qo-amount');if(a)a.focus();
+}
+// Feasible-within-standard-budget answer ('' until picked); "No" reveals
+// the follow-up explanation, same shape as the org's paper form.
+var qoFeas='';
+function qoFeasSet(v){
+  qoFeas=v;
+  var bs=document.querySelectorAll('#qo-feas .qo-chip');
+  for(var i=0;i<bs.length;i++)bs[i].classList.toggle('on',bs[i].getAttribute('data-v')===v);
+  var w=document.getElementById('qo-whynowrap');if(w)w.style.display=v==='no'?'':'none';
+}
+// Amount ↔ chips ↔ new-limit preview stay in sync as the form is edited.
+function qoChip(v){var a=document.getElementById('qo-amount');if(a){a.value=v;quotaAmtChanged();}}
+function quotaAmtChanged(){
+  var q=quotaState;if(!q)return;
+  var a=document.getElementById('qo-amount');if(!a)return;
+  var amt=parseFloat(a.value)||0;
+  var n=document.getElementById('qo-new');
+  if(n)n.textContent=qfmt(q.limit_usd+amt);
+  var chips=document.querySelectorAll('#qo-body .qo-chip');
+  for(var i=0;i<chips.length;i++)chips[i].classList.toggle('on',parseFloat(chips[i].getAttribute('data-v'))===amt);
+}
+function closeQuotaModal(){document.getElementById('quota-ov').classList.remove('show');}
+function quotaFormErr(m){var e=document.getElementById('qo-err');if(e){e.textContent=m;e.style.display='block';}}
+function submitQuotaRequest(){
+  var q=quotaState;if(!q)return;
+  var amt=parseFloat(document.getElementById('qo-amount').value);
+  var reason=(document.getElementById('qo-reason').value||'').trim();
+  var steps=(document.getElementById('qo-steps').value||'').trim();
+  var basis=(document.getElementById('qo-basis').value||'').trim();
+  var time=(document.getElementById('qo-time').value||'').trim();
+  var whynot=(document.getElementById('qo-whynot').value||'').trim();
+  if(!(amt>0)){quotaFormErr('Enter the additional amount you are asking for.');return;}
+  if(!reason){quotaFormErr('Describe the tasks that need the extra budget.');return;}
+  if(!steps){quotaFormErr('Say what you have done to reduce token usage.');return;}
+  if(!basis){quotaFormErr('Explain what your estimate is based on.');return;}
+  if(!time){quotaFormErr('Give a timeline for the increase.');return;}
+  if(!qoFeas){quotaFormErr('Answer whether the work can fit within your standard budget.');return;}
+  if(qoFeas==='no'&&!whynot){quotaFormErr('Explain why the current budget is not enough.');return;}
+  var btn=document.getElementById('qo-submit');btn.disabled=true;btn.textContent='Submitting…';
+  fetch('/api/v1/me/quota/request',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({asked_usd:amt,reason:reason,reduction_steps:steps,estimate_basis:basis,timeline:time,feasible_within_base:qoFeas,why_not_enough:whynot})})
+  .then(function(r){return r.ok?r.json():r.text().then(function(t){throw new Error((t||'').trim()||('HTTP '+r.status));});})
+  .then(function(){closeQuotaModal();return refreshQuota();})
+  .catch(function(e){btn.disabled=false;btn.textContent='Submit request';quotaFormErr(e.message||'Request failed.');});
+}
+function cancelQuotaRequest(){
+  if(!confirm('Cancel this budget request? You can file a new one afterwards.'))return;
+  fetch('/api/v1/me/quota/request',{method:'DELETE',credentials:'same-origin'})
+  .then(function(r){return r.ok?true:r.text().then(function(t){throw new Error((t||'').trim()||('HTTP '+r.status));});})
+  .then(function(){return refreshQuota();})
+  .catch(function(e){alert('Could not cancel the request: '+(e.message||'HTTP error'));});
+}
+function refreshQuota(){
+  return fetch('/api/v1/me/quota',{credentials:'same-origin'})
+  .then(function(r){return r.ok?r.json():null;})
+  .then(function(q){if(q)renderQuota(q);})
+  .catch(function(){});
+}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeQuotaModal();});
+</script>
+</body>
+</html>

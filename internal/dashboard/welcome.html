@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome to PriceTag</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F4F6F3; --surface:#FFFFFF; --surface-2:#EDF1EC;
+  --ink:#14251D; --muted:#5B6B62; --faint:#8A988F;
+  --line:#DDE3DC; --line-strong:#C4CEC3;
+  --accent:#0E7A4B; --accent-ink:#0A5A37; --accent-wash:#E3F1E8;
+  --amber:#B07818; --amber-wash:#F7ECD8;
+  --blue:#2F6FB0;
+  --code-bg:#14251D; --code-ink:#DCE8DF; --code-dim:#7FA18C;
+  --shadow:0 1px 2px rgba(20,37,29,.05),0 8px 24px -12px rgba(20,37,29,.14);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1613; --surface:#15201B; --surface-2:#1A271F;
+    --ink:#E7EDE8; --muted:#9DB0A4; --faint:#6F8377;
+    --line:#26332C; --line-strong:#35473D;
+    --accent:#35B377; --accent-ink:#6FD9A3; --accent-wash:#16301F;
+    --amber:#E0A93C; --amber-wash:#33260F;
+    --blue:#6FA8E8;
+    --code-bg:#0A120E; --code-ink:#D3E2D7; --code-dim:#7FA18C;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px -14px rgba(0,0,0,.5);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1613; --surface:#15201B; --surface-2:#1A271F;
+  --ink:#E7EDE8; --muted:#9DB0A4; --faint:#6F8377;
+  --line:#26332C; --line-strong:#35473D;
+  --accent:#35B377; --accent-ink:#6FD9A3; --accent-wash:#16301F;
+  --amber:#E0A93C; --amber-wash:#33260F;
+  --blue:#6FA8E8;
+  --code-bg:#0A120E; --code-ink:#D3E2D7; --code-dim:#7FA18C;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px -14px rgba(0,0,0,.5);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font:16px/1.65 "IBM Plex Sans",-apple-system,"Segoe UI",Helvetica,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif; text-wrap:balance; margin:0}
+p{margin:0 0 1em}
+a{color:var(--accent-ink)}
+code,kbd,pre,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:3px}
+
+.wrap{max-width:980px; margin:0 auto; padding:0 24px}
+
+/* ---------- nav ---------- */
+nav{
+  position:sticky; top:0; z-index:20;
+  background:color-mix(in srgb,var(--ground) 88%,transparent);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+nav .wrap{display:flex; align-items:center; gap:18px; height:52px}
+.brand{display:flex; align-items:center; gap:8px; font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:17px; letter-spacing:-.01em; color:var(--ink); text-decoration:none}
+.brand .tag{
+  display:inline-block; width:22px; height:22px; background:var(--accent);
+  clip-path:polygon(0 0,100% 0,100% 100%,0 100%,0 45%, -4px 50%, 0 55%);
+  border-radius:4px; position:relative;
+}
+.brand .tag::after{content:"$"; position:absolute; inset:0; display:grid; place-items:center; color:#fff; font:600 13px "IBM Plex Mono",monospace}
+nav .links{margin-left:auto; display:flex; gap:16px; overflow-x:auto; scrollbar-width:none}
+nav .links::-webkit-scrollbar{display:none}
+nav .links a{color:var(--muted); text-decoration:none; font-size:13.5px; white-space:nowrap}
+nav .links a:hover{color:var(--ink)}
+nav .links a.cta{color:var(--accent-ink); font-weight:600}
+
+/* ---------- hero ---------- */
+header{position:relative; overflow:hidden; border-bottom:1px solid var(--line)}
+#flow{position:absolute; inset:0; width:100%; height:100%}
+.hero{position:relative; padding:72px 0 30px}
+.eyebrow{
+  display:inline-flex; align-items:center; gap:8px;
+  font:600 12px/1 "IBM Plex Mono",monospace; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent-ink); background:var(--accent-wash);
+  border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);
+  padding:7px 12px; border-radius:99px; margin-bottom:22px;
+}
+h1{font-size:clamp(40px,6.4vw,64px); line-height:1.04; letter-spacing:-.025em; font-weight:800}
+h1 .pricetag{color:var(--accent)}
+.hero .sub{max-width:56ch; color:var(--muted); font-size:18px; margin-top:18px}
+.hero .sub strong{color:var(--ink); font-weight:600}
+.hero-cta{margin-top:26px}
+/* Group title heading the numbered getting-started sequence (§01–09) */
+.gstart{margin-top:38px; padding-top:30px; border-top:2px solid var(--line-strong); scroll-margin-top:70px}
+.gstart h2{font-size:34px; font-weight:800; letter-spacing:-.02em; margin-bottom:0}
+.gstart + section{padding-top:26px}
+
+/* ---------- sections ---------- */
+section{padding:56px 0 8px}
+#why{padding-top:20px}
+h2{font-size:28px; letter-spacing:-.015em; font-weight:700; margin-bottom:6px}
+.lede{color:var(--muted); margin-bottom:26px}
+h2 .no{font:600 13px "IBM Plex Mono",monospace; color:var(--faint); margin-right:10px; vertical-align:3px}
+
+/* routes table */
+.routes{display:grid; gap:12px}
+.route{
+  display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto; gap:6px 20px; align-items:center;
+  background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px 18px;
+}
+.route .name{font-weight:600}
+.route .dialect{font:500 12px "IBM Plex Mono",monospace; color:var(--muted)}
+.route .url{font-size:12.5px; color:var(--accent-ink); word-break:break-all}
+.route .auth{
+  font:500 11.5px "IBM Plex Mono",monospace; color:var(--ink);
+  background:var(--surface-2); border:1px solid var(--line); border-radius:6px; padding:4px 8px; white-space:nowrap;
+}
+.route .note{grid-column:1/-1; font-size:13px; color:var(--muted); margin:2px 0 0}
+@media (max-width:760px){.route{grid-template-columns:1fr}.route .auth{justify-self:start}}
+
+/* cards & code */
+.duo{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+/* grid children default to min-width:auto, which lets a long unbroken URL
+   grow the track past the viewport; min-width:0 hands overflow back to pre */
+.duo>*{min-width:0}
+
+/* ---------- claude code window mock (deliberately always-dark — it's a terminal) ---------- */
+.ccwin{margin-top:14px;border-radius:12px;overflow:hidden;background:#0B0F14;border:1px solid #202A36;box-shadow:var(--shadow);font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:13px;line-height:1.65}
+.ccwin .bar{display:flex;align-items:center;gap:7px;padding:9px 14px;background:#141B24;border-bottom:1px solid #202A36}
+.ccwin .bar i{width:11px;height:11px;border-radius:50%}
+.ccwin .bar i:nth-child(1){background:#E06C5F}
+.ccwin .bar i:nth-child(2){background:#D8A646}
+.ccwin .bar i:nth-child(3){background:#4CAF6D}
+.ccwin .bar span{margin-left:6px;color:#5C6A7A;font-size:11.5px}
+.ccwin .scr{padding:16px 18px;color:#C9D2DC}
+.ccwin .prompt{margin:0;white-space:nowrap}
+.ccwin .prompt .who{color:#8B7DF5;font-weight:600;padding-right:8px}
+.ccwin .caret{display:inline-block;width:7px;height:15px;background:#8B7DF5;vertical-align:-2px;margin-left:2px;animation:ccblink 1.1s steps(1) infinite}
+@keyframes ccblink{50%{opacity:0}}
+.ccwin .head{color:#93A7FF;font-weight:600;margin:12px 0 2px}
+.ccwin .sub{color:#67727F;margin:0 0 12px}
+.ccwin .rows{overflow-x:auto;padding-bottom:2px}
+.ccwin .r{display:flex;gap:20px;white-space:nowrap}
+.ccwin .r .n{flex:0 0 auto;min-width:290px}
+.ccwin .r .d{color:#67727F;overflow:hidden;text-overflow:ellipsis}
+.ccwin .r.sel .n{color:#41D98C;font-weight:600}
+.ccwin .r.more .n{color:#67727F}
+.ccwin .eff{color:#C9D2DC;margin:12px 0 0}
+.ccwin .eff i{color:#D8A646;font-style:normal}
+.ccwin .out{visibility:hidden}
+@media (max-width:760px){.duo{grid-template-columns:1fr}}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:22px; box-shadow:var(--shadow)}
+.card h3{font-size:17px; margin-bottom:4px}
+.card .cap{font-size:13.5px; color:var(--muted); margin-bottom:14px}
+
+.codebox{position:relative; margin:0 0 14px}
+.codebox:last-child{margin-bottom:0}
+.codebox .fname{
+  font:500 11px "IBM Plex Mono",monospace; letter-spacing:.02em;
+  color:var(--faint); margin-bottom:6px;
+}
+pre{
+  margin:0; background:var(--code-bg); color:var(--code-ink);
+  border-radius:10px; padding:14px 16px; overflow-x:auto;
+  font-size:13px; line-height:1.6;
+}
+pre .c{color:var(--code-dim)}
+pre .k{color:#8FD9B2}
+pre .s{color:#E8C37B}
+.codebox pre{padding-right:74px} /* keep code clear of the copy chip's column */
+.copy{
+  position:absolute; top:26px; right:8px; z-index:2;
+  font:600 11px "IBM Plex Mono",monospace; color:#DCE1D4;
+  background:rgba(20,28,22,.92); border:1px solid rgba(255,255,255,.3);
+  border-radius:6px; padding:4px 10px; cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,.4);
+}
+.copy:hover{color:#fff; border-color:rgba(255,255,255,.55); background:rgba(40,52,44,.95)}
+.copy.done{color:#8FD9B2}
+.hasname .copy{top:32px}
+
+/* steps */
+.steps{counter-reset:st; display:grid; gap:14px; margin:0 0 8px}
+.step{display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:start}
+.step::before{
+  counter-increment:st; content:counter(st);
+  font:600 13px "IBM Plex Mono",monospace; color:var(--accent-ink);
+  background:var(--accent-wash); border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);
+  width:26px; height:26px; border-radius:50%; display:grid; place-items:center; margin-top:3px;
+}
+.step .body{min-width:0}
+.step .body h3{font-size:15.5px; margin-bottom:4px}
+.step .body p{font-size:14px; color:var(--muted); margin-bottom:10px}
+
+/* callouts */
+.callout{
+  display:flex; gap:12px; align-items:flex-start;
+  border-radius:10px; padding:13px 16px; font-size:14px; line-height:1.55;
+  border:1px solid var(--line); background:var(--surface-2); margin:14px 0 0;
+}
+.callout.warn{border-color:color-mix(in srgb,var(--amber) 45%,transparent); background:var(--amber-wash)}
+.callout.good{border-color:color-mix(in srgb,var(--accent) 35%,transparent); background:var(--accent-wash)}
+.callout .glyph{flex:none; font:600 13px "IBM Plex Mono",monospace; margin-top:1px}
+.callout.warn .glyph{color:var(--amber)}
+.callout.good .glyph{color:var(--accent)}
+.callout p{margin:0}
+.callout .cbody{flex:1; min-width:0}
+.callout .cbody p{margin-bottom:10px}
+.callout code{font-size:12.5px}
+
+/* hosted section */
+.rates{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:18px 0}
+@media (max-width:640px){.rates{grid-template-columns:1fr}}
+.rate{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px 18px}
+.rate .top{display:flex; align-items:baseline; gap:6px}
+.rate .v{font:600 26px/1.15 "IBM Plex Mono",monospace; color:var(--accent); font-variant-numeric:tabular-nums}
+.rate .per{font-size:12px; color:var(--faint)}
+.rate .k{font:500 11.5px "IBM Plex Mono",monospace; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-top:2px}
+.compare{margin-top:22px}
+.compare .row{display:grid; grid-template-columns:170px 1fr auto; gap:12px; align-items:center; margin-bottom:10px; font-size:13.5px}
+.compare .track{height:22px; border-radius:5px; background:var(--surface-2); border:1px solid var(--line); overflow:hidden}
+.compare .fill{height:100%; width:0; border-radius:4px; transition:width 1.4s cubic-bezier(.2,.7,.2,1)}
+.compare .fill.hosted{background:var(--accent)}
+.compare .fill.paid{background:color-mix(in srgb,var(--amber) 55%,var(--surface-2))}
+.compare .amt{font:500 13px "IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+.compare .save{margin-top:6px; font:600 14px "IBM Plex Mono",monospace; color:var(--amber)}
+
+/* pulse / dashboard band */
+.band{
+  margin-top:56px; border:1px solid var(--line); border-radius:16px; overflow:hidden;
+  background:var(--surface); box-shadow:var(--shadow);
+}
+.band .inner{display:grid; grid-template-columns:1fr 220px; gap:20px; align-items:center; padding:26px}
+@media (max-width:700px){.band .inner{grid-template-columns:1fr}}
+#pulse{width:100%; height:64px; display:block}
+#pulse .wire{fill:none; stroke:var(--blue); stroke-width:2}
+#pulse .glow{fill:var(--blue)}
+#pulse .trail{fill:none; stroke:var(--blue); stroke-width:5; stroke-linecap:round; opacity:.18}
+.band h2{font-size:22px}
+.band p{font-size:14.5px; color:var(--muted); margin:6px 0 14px}
+.btn{
+  display:inline-block; text-decoration:none; font-weight:600; font-size:14.5px;
+  background:var(--accent); color:#fff; border-radius:9px; padding:10px 18px;
+}
+.btn:hover{background:var(--accent-ink)}
+.btn.ghost{background:transparent; color:var(--accent-ink); border:1px solid var(--line-strong); margin-left:8px}
+
+footer{margin:64px 0 40px; padding-top:24px; border-top:1px solid var(--line); color:var(--faint); font-size:13px; display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap}
+footer .mono{font-size:12px}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .compare .fill{transition:none}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#"><span class="tag"></span>PriceTag</a>
+    <div class="links">
+      <a href="#key">Key</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#claude">Claude Code</a>
+      <a href="#codex">Codex</a>
+      <a href="#opencode">OpenCode</a>
+      <a href="#hermes">Hermes CLI</a>
+      <a href="#pi">Pi</a>
+      <a href="#openclaw">OpenClaw</a>
+      <a href="#hosted">Hosted models</a>
+      <a class="cta" href="{{DASHBOARD_URL}}/dashboard">Dashboard ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <canvas id="flow" aria-hidden="true"></canvas>
+  <div class="wrap hero">
+    <span class="eyebrow">◈ Every token, priced</span>
+    <h1>Welcome to <span class="pricetag">PriceTag</span></h1>
+    <p class="sub">One gateway for <strong>Claude</strong>, <strong>OpenAI</strong> and our own <strong>hosted models</strong> — with every request metered to you, in real time. Point your tools at it once; usage, spend and savings land in your dashboard automatically.</p>
+    <p class="hero-cta"><a class="btn" href="#start">Get started ↓</a></p>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ============ WHY (value proposition, above the fold of getting started) ============ -->
+<section id="why">
+  <h2>One key. Every frontier model. A fraction of the price.</h2>
+  <p class="lede">A single PriceTag key reaches the full Claude lineup and the GPTs — and our own hosted models sit right beside them, at a fraction of the vendor price. Same gateway, same metering; the only difference is the number.</p>
+  <h3 style="margin-top:26px">This is how PriceTag saves you money</h3>
+  <p class="cap">Do your day-to-day work on the hosted models — from <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>OpenCode</strong> or <strong>Pi</strong>, all of them point at the same gateway and the same key — and the same tokens cost a fraction of the frontier price:</p>
+  <div class="compare" id="compare">
+    <div class="row"><span>Hosted Flash — output</span><div class="track"><div class="fill hosted" data-w="3"></div></div><span class="amt">$0.47 / MTok</span></div>
+    <div class="row"><span>Hosted GLM 5.3 — output</span><div class="track"><div class="fill hosted" data-w="1"></div></div><span class="amt">$0.00 / MTok</span></div>
+    <div class="row"><span>Frontier Claude — output</span><div class="track"><div class="fill paid" data-w="100"></div></div><span class="amt">$15.00 / MTok</span></div>
+    <div class="save">≈ 97–100% cheaper per output token, depending on the hosted model — GLM is free outright — and every dollar saved is counted on your dashboard</div>
+  </div>
+
+  <h3 style="margin-top:30px">Switching between frontier and hosted models is trivial</h3>
+  <p class="cap">With PriceTag there is nothing to reconfigure when you change your mind — frontier models and local hosted ones live in the same list, under the same key. This is what it looks like in Claude Code: type <span class="mono">/model</span> and the hosted model sits right in the picker, next to the Claudes:</p>
+  <div class="ccwin" id="ccwin" role="img" aria-label="Claude Code model picker showing Qwen 3.8 Flash Next selected">
+    <div class="bar"><i></i><i></i><i></i><span>claude — PriceTag gateway</span></div>
+    <div class="scr" id="cpanel">
+      <p class="prompt"><span class="who">&gt;</span><span id="ctyped">/model</span><span class="caret" aria-hidden="true"></span></p>
+      <p class="head">Select model</p>
+      <p class="sub">Switch between Claude models. Your pick becomes the default for new sessions. For other/previous model names, specify with --model.</p>
+      <div class="rows">
+        <div class="r"><span class="n">1. Fable</span><span class="d">Claude Fable 5 · Frontier reasoning · $10/$50 per Mtok</span></div>
+        <div class="r"><span class="n">2. Opus 5</span><span class="d">Claude Opus 5 · Deep thinking · $5/$25 per Mtok</span></div>
+        <div class="r"><span class="n">3. Sonnet 5</span><span class="d">Claude Sonnet 5 · $2/$10 per Mtok</span></div>
+        <div class="r"><span class="n">4. Haiku</span><span class="d">Haiku 4.5 · Fastest for quick answers · $1/$5 per Mtok</span></div>
+        <div class="r sel"><span class="n">▸ 5. Qwen 3.8 Flash Next (NVFP4) ✓</span><span class="d">Hosted-Model vLLM via PriceTag gateway · $0.15/$0.47 per Mtok</span></div>
+        <div class="r"><span class="n">6. GLM 5.3</span><span class="d">Hosted-Model via PriceTag gateway · Free — $0.00/$0.00 per Mtok</span></div>
+      </div>
+      <p class="eff"><i>◐</i> Medium effort <i>←/→</i> to adjust</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GET STARTED (heads the numbered 01–07 sequence) ============ -->
+<div class="gstart" id="start">
+  <h2>Get Started</h2>
+</div>
+
+<!-- ============ KEY ============ -->
+<section id="key">
+  <h2><span class="no">01</span>Get a key</h2>
+  <p class="lede">One key works on both routes. Keys are issued by a gateway admin — <strong>Noy Itzikowitz</strong> or <strong>Yossi Ovadia</strong>: ask for one and you will get a claim link; open it, sign in with SSO, and your <span class="mono">pk-…</span> key is revealed exactly once.</p>
+</section>
+
+<!-- ============ QUICKSTART ============ -->
+<section id="quickstart">
+  <h2><span class="no">02</span>Quick start</h2>
+  <p class="lede">Two commands to prove everything works, before you touch any config file.</p>
+  <div class="duo">
+    <div class="card">
+      <h3>Smoke test with curl</h3>
+      <p class="cap">A chat completion on the OpenAI route.</p>
+      <div class="codebox hasname"><div class="fname">bash</div><button class="copy">copy</button><pre>curl <span class="s">{{OPENAI_URL}}</span>/chat/completions \
+  -H <span class="k">"Authorization: Bearer $PRICETAG_KEY"</span> \
+  -H <span class="k">"content-type: application/json"</span> \
+  -d <span class="k">'{"model":"gpt-5.6-luna","messages":[
+        {"role":"user","content":"hello from PriceTag"}]}'</span></pre></div>
+    </div>
+    <div class="card">
+      <h3>Claude Code in two lines</h3>
+      <p class="cap">Point it at the unified route and go.</p>
+      <div class="callout warn"><span class="glyph">!</span><div class="cbody">
+        <p>If you've used Vertex or BedLab before, leftover variables silently bypass the gateway — run this <strong>before</strong> the block below, and clear it out of your <code>.zshrc</code> too.</p>
+        <div class="codebox"><button class="copy">copy</button><pre><span class="k">unset</span> CLAUDE_CODE_USE_VERTEX
+<span class="k">unset</span> ANTHROPIC_VERTEX_PROJECT_ID</pre></div>
+      </div></div>
+      <div class="codebox hasname"><div class="fname">bash</div><button class="copy">copy</button><pre><span class="k">export</span> ANTHROPIC_BASE_URL=<span class="s">{{UNIFIED_URL}}</span>
+<span class="k">export</span> ANTHROPIC_API_KEY=<span class="s">$PRICETAG_KEY</span>
+
+claude</pre></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CLAUDE CODE ============ -->
+<section id="claude">
+  <h2><span class="no">03</span>Set up Claude Code, properly</h2>
+  <p class="lede">Make it permanent in <span class="mono">~/.claude/settings.json</span> and teach the <span class="mono">/model</span> picker about the hosted model.</p>
+
+  <div class="steps">
+    <div class="step"><div class="body">
+      <h3>Route the CLI through the gateway</h3>
+      <p>Everything Claude Code needs lives under <span class="mono">env</span> — no shell exports required.</p>
+      <div class="codebox hasname"><div class="fname">~/.claude/settings.json</div><button class="copy">copy</button><pre>{
+  <span class="k">"env"</span>: {
+    <span class="k">"ANTHROPIC_BASE_URL"</span>: <span class="s">"{{UNIFIED_URL}}"</span>,
+    <span class="k">"ANTHROPIC_API_KEY"</span>: <span class="s">"pk-your-key"</span>,
+    <span class="k">"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"</span>: <span class="s">"1"</span>
+  }
+}</pre></div>
+      <p>With discovery on, <span class="mono">/model</span> reads the gateway's <span class="mono">/v1/models</span> — so new Claude models appear with no config change.</p>
+    </div></div>
+
+    <div class="step"><div class="body">
+      <h3>Add the hosted models to the picker</h3>
+      <p>Claude Code's model filter only keeps <em>claude/anthropic</em> ids, so discovery alone never shows the hosted models. Pin them explicitly (needs Claude Code ≥ 2.1.242):</p>
+      <div class="codebox hasname"><div class="fname">~/.claude/settings.json — add</div><button class="copy">copy</button><pre>{
+  <span class="k">"modelPicker"</span>: {
+    <span class="k">"options"</span>: [
+      { <span class="k">"model"</span>: <span class="s">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>,
+        <span class="k">"label"</span>: <span class="s">"Qwen 3.8 Flash Next"</span>,
+        <span class="k">"description"</span>: <span class="s">"Hosted vLLM via PriceTag — $0.15/$0.47 per MTok"</span> },
+      { <span class="k">"model"</span>: <span class="s">"rits/zai-org/glm-5-3"</span>,
+        <span class="k">"label"</span>: <span class="s">"GLM 5.3"</span>,
+        <span class="k">"description"</span>: <span class="s">"Hosted via PriceTag — free"</span> }
+    ]
+  },
+  <span class="k">"modelSettings"</span>: {
+    <span class="s">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>: { <span class="k">"effortLevel"</span>: <span class="s">"medium"</span> }
+  }
+}</pre></div>
+      <div class="callout warn"><span class="glyph">!</span><p>Use the model id <strong>exactly</strong> as shown — on the unified route an unknown id falls through to Anthropic and 404s. And keep <span class="mono">effortLevel</span> at <span class="mono">"medium"</span>: the hosted endpoint accepts <span class="mono">low/medium/xhigh</span> and rejects <span class="mono">"high"</span>.</p></div>
+      <div class="callout warn"><span class="glyph">!</span><p><strong>Expect some Sonnet/Haiku rows even on an all-Qwen setup.</strong> Claude Code runs some internal requests on the Sonnet / Haiku-class model regardless of the model selected in <span class="mono">/model</span> — conversation summaries for <span class="mono">--resume</span>, status commands like <span class="mono">/usage</span>, background classification, and (by default) subagents. They go through the same gateway base URL, carry the full session context, and show up under your usage as <span class="mono">claude-sonnet-*</span> / <span class="mono">claude-haiku-*</span>. To pin those calls to a gateway model too, set <span class="mono">ANTHROPIC_DEFAULT_SONNET_MODEL</span> / <span class="mono">ANTHROPIC_DEFAULT_HAIKU_MODEL</span> (and optionally <span class="mono">CLAUDE_CODE_SUBAGENT_MODEL</span>) to a gateway model id in your launcher.</p></div>
+    </div></div>
+  </div>
+</section>
+
+<!-- ============ CODEX ============ -->
+<section id="codex">
+  <h2><span class="no">04</span>Set up Codex</h2>
+  <p class="lede">Codex speaks OpenAI Responses, so setup is one provider block per route: GPT on the OpenAI route, hosted Qwen on the unified route. GPT first — the lineup (gpt-5.x) including <span class="mono">gpt-5.3-codex</span>:</p>
+  <div class="codebox hasname"><div class="fname">~/.codex/config.toml</div><button class="copy">copy</button><pre><span class="c"># provider: PriceTag gateway</span>
+[<span class="k">model_providers.pricetag</span>]
+name     = <span class="s">"PriceTag"</span>
+base_url = <span class="s">"{{OPENAI_URL}}"</span>
+env_key  = <span class="s">"PRICETAG_KEY"</span>
+wire_api = <span class="s">"responses"</span>
+
+[<span class="k">profiles.pricetag</span>]
+model          = <span class="s">"gpt-5.3-codex"</span>
+model_provider = <span class="s">"pricetag"</span></pre></div>
+  <div class="codebox"><button class="copy">copy</button><pre><span class="k">export</span> PRICETAG_KEY=<span class="s">pk-your-key</span>
+codex --profile pricetag</pre></div>
+  <p class="cap" style="margin:18px 0 10px">And the hosted models — a second provider pointed at the unified route, which serves <span class="mono">/v1/responses</span> for Qwen <em>and</em> GLM too:</p>
+  <div class="codebox hasname"><div class="fname">~/.codex/config.toml — add</div><button class="copy">copy</button><pre>[<span class="k">model_providers.qwen</span>]
+name        = <span class="s">"PriceTag hosted"</span>
+base_url    = <span class="s">"{{UNIFIED_URL}}/v1"</span>
+wire_api    = <span class="s">"responses"</span>
+http_headers = { <span class="k">"x-api-key"</span> = <span class="s">"pk-your-key"</span> }  <span class="c"># the unified route wants the key here, not as a bearer token</span>
+
+[<span class="k">profiles.qwen</span>]
+model          = <span class="s">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>
+model_provider = <span class="s">"qwen"</span>
+<span class="c"># Codex has no built-in metadata for this model id; without this it warns</span>
+<span class="c"># "Model metadata not found" and falls back to a tiny window. 262144 = 256K.</span>
+model_context_window = 262144
+
+[<span class="k">profiles.glm</span>]   <span class="c"># same provider, different hosted model</span>
+model          = <span class="s">"rits/zai-org/glm-5-3"</span>
+model_provider = <span class="s">"qwen"</span>
+model_context_window = 262144</pre></div>
+  <div class="codebox"><button class="copy">copy</button><pre>codex --profile qwen   <span class="c"># or: codex --profile glm</span></pre></div>
+  <div class="callout good"><span class="glyph">✓</span><p>One catch: Codex only shows its own built-in models in the <span class="mono">/model</span> picker, so pin the hosted model id in the profile as above — it works, it just won't appear in the list. The <span class="mono">model_context_window</span> line is what silences the "Model metadata not found" warning on start.</p></div>
+</section>
+
+<!-- ============ OPENCODE ============ -->
+<section id="opencode">
+  <h2><span class="no">05</span>Set up OpenCode</h2>
+  <p class="lede">Re-aim OpenCode's <em>built-in</em> <span class="mono">anthropic</span> and <span class="mono">openai</span> providers at the gateway. Keep them built-in on purpose: OpenCode only pulls the model chooser and effort levels from models.dev for official provider ids, so overriding <span class="mono">options</span> — instead of adding a custom provider — keeps every model and setting available in the picker.</p>
+  <div class="steps">
+    <div class="step"><div class="body">
+      <h3>Save your key — one command, one time</h3>
+      <p>Replace <span class="mono">pk-your-key</span> below with the key from your claim link (keep the quotes), paste into a terminal, press Enter:</p>
+      <div class="codebox hasname"><div class="fname">terminal</div><button class="copy">copy</button><pre>echo <span class="s">"pk-your-key"</span> &gt; ~/.config/opencode/pricetag.key && chmod 600 ~/.config/opencode/pricetag.key</pre></div>
+    </div></div>
+    <div class="step"><div class="body">
+      <h3>Paste this config</h3>
+      <p>Save it as <span class="mono">~/.config/opencode/opencode.jsonc</span> — creates the file, applies to every project on this machine. Already have an <span class="mono">opencode.json</span> there? Merge this into it instead of keeping both. The key itself never appears in this file — OpenCode reads it from the key file you saved in step 1:</p>
+      <div class="codebox hasname"><div class="fname">~/.config/opencode/opencode.jsonc</div><button class="copy">copy</button><pre>{
+  <span class="k">"$schema"</span>: <span class="s">"https://opencode.ai/config.json"</span>,
+  <span class="k">"provider"</span>: {
+    <span class="k">"anthropic"</span>: {
+      <span class="k">"options"</span>: { <span class="k">"baseURL"</span>: <span class="s">"{{UNIFIED_URL}}/v1"</span>, <span class="k">"apiKey"</span>: <span class="s">"{file:~/.config/opencode/pricetag.key}"</span> }
+    },
+    <span class="k">"openai"</span>: {
+      <span class="k">"options"</span>: { <span class="k">"baseURL"</span>: <span class="s">"{{OPENAI_URL}}"</span>, <span class="k">"apiKey"</span>: <span class="s">"{file:~/.config/opencode/pricetag.key}"</span> }
+    },
+    <span class="k">"pricetag-hosted"</span>: {
+      <span class="k">"npm"</span>: <span class="s">"@ai-sdk/anthropic"</span>,
+      <span class="k">"name"</span>: <span class="s">"PriceTag (hosted)"</span>,
+      <span class="k">"options"</span>: { <span class="k">"baseURL"</span>: <span class="s">"{{UNIFIED_URL}}/v1"</span>, <span class="k">"apiKey"</span>: <span class="s">"{file:~/.config/opencode/pricetag.key}"</span> },
+      <span class="k">"models"</span>: {
+        <span class="k">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>: {
+          <span class="k">"name"</span>: <span class="s">"Qwen 3.8 Flash Next (hosted)"</span>,
+          <span class="k">"limit"</span>: { <span class="k">"context"</span>: 262144, <span class="k">"output"</span>: 8192 }
+        },
+        <span class="k">"rits/zai-org/glm-5-3"</span>: {
+          <span class="k">"name"</span>: <span class="s">"GLM 5.3 (hosted)"</span>,
+          <span class="k">"limit"</span>: { <span class="k">"context"</span>: 262144, <span class="k">"output"</span>: 8192 }
+        }
+      }
+    }
+  },
+  <span class="k">"model"</span>: <span class="s">"anthropic/claude-sonnet-5"</span>
+}</pre></div>
+    </div></div>
+    <div class="step"><div class="body">
+      <h3>Restart OpenCode</h3>
+      <p>OpenCode reads its config once, at startup — quit it and run <span class="mono">opencode</span> again. If a model works and the key is good, you're done.</p>
+    </div></div>
+  </div>
+  <div class="callout good"><span class="glyph">✓</span><div class="cbody">
+    <p><strong>Rather keep it simple?</strong> Replace every <span class="mono">{file:~/.config/opencode/pricetag.key}</span> in the config with your key pasted in literally (<span class="mono">"apiKey": "pk-…"</span>). Works the same — the key just sits in the config file in plain text, so never share or commit that file.</p>
+    <p style="margin-bottom:0"><strong>OpenCode won't start after step 2</strong>, error says <span class="mono">bad file reference</span>? The key file from step 1 is missing or the path is off — re-run step 1 with the same path.</p>
+  </div></div>
+  <p>Switch models inside OpenCode with <span class="mono">/models</span> — <span class="mono">anthropic/…</span> and <span class="mono">openai/…</span> now ride the gateway (billed like everything else), and <span class="mono">pricetag-hosted/…</span> runs on our vLLM at hosted rates. Don't want to touch the config file? OpenCode also merges the <span class="mono">OPENCODE_CONFIG_CONTENT</span> env var, which takes the same JSON as a string.</p>
+  <div class="callout warn"><span class="glyph">!</span><p>Two traps, both silent: the Anthropic SDK appends <code>/messages</code> to <span class="mono">baseURL</span>, so it needs the <strong><code>/v1</code> suffix</strong> (host root hits <code>/messages</code> and fails) — the OpenAI SDK appends <code>/chat/completions</code>, which is why <span class="mono">{{OPENAI_URL}}</span> already ends in <code>/v1</code>. And don't point the built-in <span class="mono">anthropic</span> provider at the OpenAI route: its catalog has no <span class="mono">claude-*</span> ids, so requests die with "model does not exist or you do not have access to it".</p></div>
+</section>
+
+<!-- ============ HERMES CLI ============ -->
+<section id="hermes">
+  <h2><span class="no">06</span>Set up Hermes CLI</h2>
+  <p class="lede"><a href="https://github.com/NousResearch/hermes-agent" target="_blank">Hermes</a> takes the gateway as one provider per dialect, same rule as everywhere else: the GPT lineup on a <em>custom</em> OpenAI-compatible endpoint, the hosted models (Qwen or GLM) on the built-in <span class="mono">anthropic</span> provider re-aimed at the unified route. The choice is saved under <span class="mono">model:</span> in <span class="mono">~/.hermes/config.yaml</span> — the <span class="mono">hermes model</span> wizard writes it, or edit it directly:</p>
+  <div class="codebox hasname"><div class="fname">~/.hermes/config.yaml — GPT lineup (OpenAI dialect)</div><button class="copy">copy</button><pre>model:
+  provider: <span class="s">"custom"</span>
+  default:  <span class="s">"gpt-5.3-codex"</span>
+  base_url: <span class="s">"{{OPENAI_URL}}"</span>   <span class="c"># already ends in /v1</span></pre></div>
+  <div class="codebox hasname"><div class="fname">~/.hermes/config.yaml — hosted models (Anthropic dialect)</div><button class="copy">copy</button><pre>model:
+  provider: <span class="s">"anthropic"</span>
+  default:  <span class="s">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>   <span class="c"># or "rits/zai-org/glm-5-3" for GLM 5.3</span>
+  base_url: <span class="s">"{{UNIFIED_URL}}/v1"</span>   <span class="c"># the /v1 suffix is required</span></pre></div>
+  <div class="codebox hasname"><div class="fname">~/.hermes/.env — one key, used twice</div><button class="copy">copy</button><pre>OPENAI_API_KEY=<span class="s">pk-your-key</span>
+ANTHROPIC_API_KEY=<span class="s">pk-your-key</span></pre></div>
+  <p>The same PriceTag key works on both lines — the <em>route</em> decides the dialect, not the key. The <span class="mono">anthropic</span> provider sends it as <span class="mono">x-api-key</span> natively, which is exactly what the unified route reads. Switch providers with <span class="mono">hermes model</span>; <span class="mono">/model</span> inside a session only switches between providers already set up.</p>
+  <div class="callout warn"><span class="glyph">!</span><p>Four traps, learned the hard way this week: the OpenAI route has <strong>no Qwen ids</strong> — asking for one gets "The model … does not exist or you do not have access to it" from upstream, so keep the model id and the base URL as a matched pair, never mix halves. The <span class="mono">anthropic</span> provider needs the <strong><code>/v1</code> suffix</strong> on <span class="mono">base_url</span>. The unified route reads <strong>only</strong> <span class="mono">x-api-key</span> — a <span class="mono">custom</span> (OpenAI-client) provider sends its key as a <span class="mono">Bearer</span> token and gets <span class="mono">401 missing API key</span>; stick with the <span class="mono">anthropic</span> provider above for the hosted model, or if you wire it as a custom entry anyway, inject the same key through <span class="mono">extra_headers</span>. And Hermes auxiliary tasks (session titles, compression) follow the main model by default — pointing the default at the hosted id means those calls ride on it too.</p></div>
+</section>
+
+<!-- ============ PI (pi.dev CLI) ============ -->
+<section id="pi">
+  <h2><span class="no">07</span>Set up Pi</h2>
+  <p class="lede"><a href="https://pi.dev" target="_blank">Pi</a> speaks the Anthropic dialect natively and sends the key as <span class="mono">x-api-key</span> — exactly what the unified route reads — so the hosted model rides the <strong>unified route alone</strong>, no OpenAI route needed. Declare PriceTag as a provider in <span class="mono">~/.pi/agent/models.json</span>:</p>
+  <div class="codebox hasname"><div class="fname">~/.pi/agent/models.json</div><button class="copy">copy</button><pre>{
+  <span class="k">"providers"</span>: {
+    <span class="k">"pricetag"</span>: {
+      <span class="k">"name"</span>: <span class="s">"PriceTag"</span>,
+      <span class="k">"baseUrl"</span>: <span class="s">"{{UNIFIED_URL}}"</span>,
+      <span class="k">"api"</span>: <span class="s">"anthropic-messages"</span>,
+      <span class="k">"apiKey"</span>: <span class="s">"$PRICETAG_KEY"</span>,
+      <span class="k">"models"</span>: [
+        {
+          <span class="k">"id"</span>: <span class="s">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>,
+          <span class="k">"name"</span>: <span class="s">"Qwen 3.8 Flash Next (PriceTag hosted)"</span>,
+          <span class="k">"reasoning"</span>: true,
+          <span class="k">"thinkingLevelMap"</span>: {
+            "off": null, "minimal": null, "low": <span class="s">"low"</span>,
+            "medium": <span class="s">"medium"</span>, "high": null, "xhigh": <span class="s">"xhigh"</span>, "max": null
+          },
+          <span class="k">"input"</span>: [<span class="s">"text"</span>],
+          <span class="k">"cost"</span>: { <span class="k">"input"</span>: 0.15, <span class="k">"output"</span>: 0.47, <span class="k">"cacheRead"</span>: 0.016, <span class="k">"cacheWrite"</span>: 0 },
+          <span class="k">"contextWindow"</span>: 262144,
+          <span class="k">"maxTokens"</span>: 262144
+        },
+        {
+          <span class="k">"id"</span>: <span class="s">"rits/zai-org/glm-5-3"</span>,
+          <span class="k">"name"</span>: <span class="s">"GLM 5.3 (PriceTag hosted)"</span>,
+          <span class="k">"reasoning"</span>: true,
+          <span class="k">"input"</span>: [<span class="s">"text"</span>],
+          <span class="k">"cost"</span>: { <span class="k">"input"</span>: 0, <span class="k">"output"</span>: 0, <span class="k">"cacheRead"</span>: 0, <span class="k">"cacheWrite"</span>: 0 },
+          <span class="k">"contextWindow"</span>: 262144,
+          <span class="k">"maxTokens"</span>: 262144
+        }
+      ]
+    }
+  }
+}</pre></div>
+  <div class="codebox hasname"><div class="fname">the key — any one of these works</div><button class="copy">copy</button><pre><span class="c"># 1. in a Pi session:</span>
+/login pricetag
+
+<span class="c"># 2. ~/.pi/agent/auth.json (chmod 0600) — wins over the env var:</span>
+{ <span class="k">"pricetag"</span>: { <span class="k">"type"</span>: <span class="s">"api_key"</span>, <span class="k">"key"</span>: <span class="s">"pk-…"</span> } }
+
+<span class="c"># 3. plain env, matching the $PRICETAG_KEY reference above:</span>
+export PRICETAG_KEY=pk-your-key</pre></div>
+  <p>Pick the model with <span class="mono">/model</span> → <span class="mono">pricetag/Inferact/Qwen3.8-Flash-Next-NVFP4</span> (or <span class="mono">pricetag/rits/zai-org/glm-5-3</span>) — it stays hidden from the picker until one of the three auth paths is configured. Costs above are the live hosted rates; your dashboard meters the usage the same as every other tool.</p>
+  <div class="callout warn"><span class="glyph">!</span><p>Two traps. <strong>No <code>/v1</code> suffix</strong> on the unified <span class="mono">baseUrl</span> — Pi appends <code>/v1/messages</code> itself (opposite of the OpenAI route, whose base URL must end in <code>/v1</code>). And <strong>map <span class="mono">high</span> to <span class="mono">null</span></strong> in <span class="mono">thinkingLevelMap</span>: Pi offers a <span class="mono">high</span> thinking level, the hosted endpoint rejects it outright, and the request dies — nulling it simply hides the level from the picker. Want to pin a level? <span class="mono">"enabledModels": ["pricetag/Inferact/Qwen3.8-Flash-Next-NVFP4:medium"]</span>.</p></div>
+  <p class="cap"><span class="mono">maxTokens</span> is the <em>output</em> cap, not the context size. Pi clamps each request to <span class="mono">contextWindow − prompt − 4096</span>, so declaring the full window (as above) is safe — the served model reports a 262144-token window and enforces no separate output limit. This recipe was verified end-to-end against the live gateway.</p>
+</section>
+
+<!-- ============ OPENCLAW ============ -->
+<section id="openclaw">
+  <h2><span class="no">08</span>Set up OpenClaw</h2>
+  <p class="lede"><a href="https://openclaw.ai" target="_blank">OpenClaw</a> talks to the gateway the same way Claude Code and Pi do — the Anthropic <span class="mono">/v1/messages</span> dialect with the key in <span class="mono">x-api-key</span> — so the hosted model rides the <strong>unified route alone</strong>. Smoke-test the route first, then declare PriceTag as a provider in <span class="mono">~/.openclaw/openclaw.json</span>.</p>
+  <div class="codebox hasname"><div class="fname">smoke test — env + one call</div><button class="copy">copy</button><pre>export PRICETAG_BASE_URL="{{UNIFIED_URL}}"
+export PRICETAG_KEY="pk-your-key"          <span class="c"># keep it secret; never commit it</span>
+
+curl "$PRICETAG_BASE_URL/v1/messages" \
+  -H "x-api-key: $PRICETAG_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{"model":"Inferact/Qwen3.8-Flash-Next-NVFP4","max_tokens":256,"messages":[{"role":"user","content":"Reply with exactly OK."}]}'</pre></div>
+  <div class="codebox hasname"><div class="fname">~/.openclaw/openclaw.json</div><button class="copy">copy</button><pre>{
+  <span class="k">"models"</span>: {
+    <span class="k">"providers"</span>: {
+      <span class="k">"pricetag"</span>: {
+        <span class="k">"baseUrl"</span>: <span class="s">"{{UNIFIED_URL}}"</span>,     <span class="c">// no /v1 — OpenClaw appends /v1/messages itself</span>
+        <span class="k">"api"</span>: <span class="s">"anthropic-messages"</span>,      <span class="c">// required — not openai-completions</span>
+        <span class="k">"apiKey"</span>: <span class="s">"$PRICETAG_KEY"</span>,
+        <span class="k">"models"</span>: [
+          {
+            <span class="k">"id"</span>: <span class="s">"Inferact/Qwen3.8-Flash-Next-NVFP4"</span>,
+            <span class="k">"name"</span>: <span class="s">"Qwen 3.8 Flash Next"</span>,
+            <span class="k">"reasoning"</span>: true,
+            <span class="k">"input"</span>: [<span class="s">"text"</span>],
+            <span class="k">"contextWindow"</span>: 262144,
+            <span class="k">"maxTokens"</span>: 262144
+          },
+          {
+            <span class="k">"id"</span>: <span class="s">"rits/zai-org/glm-5-3"</span>,
+            <span class="k">"name"</span>: <span class="s">"GLM 5.3"</span>,
+            <span class="k">"reasoning"</span>: true,
+            <span class="k">"input"</span>: [<span class="s">"text"</span>],
+            <span class="k">"contextWindow"</span>: 262144,
+            <span class="k">"maxTokens"</span>: 262144
+          }
+        ]
+      }
+    }
+  },
+  <span class="k">"agents"</span>: {
+    <span class="k">"defaults"</span>: {
+      <span class="k">"model"</span>: { <span class="k">"primary"</span>: <span class="s">"pricetag/Inferact/Qwen3.8-Flash-Next-NVFP4"</span> }
+    }
+  }
+}</pre></div>
+  <div class="callout good"><span class="glyph">✓</span><p><strong>Restart OpenClaw after changing provider config</strong> — edits to <span class="mono">openclaw.json</span> are not picked up live. The hosted model may not appear in the gateway’s <span class="mono">/v1/models</span> listing either; that doesn’t mean it’s unreachable — the smoke test above is the real validation.</p></div>
+  <div class="callout warn"><span class="glyph">!</span><p><strong>Use <code>anthropic-messages</code>, not the OpenAI route.</strong> This model answers on the Anthropic Messages endpoint (<span class="mono">POST &lt;base&gt;/v1/messages</span>) only — on the OpenAI Chat Completions route the gateway answers <span class="mono">400 invalid model ID</span>. That 400 usually means the wrong <em>endpoint</em>, not a typo in the model id.</p></div>
+</section>
+
+<!-- ============ ROUTES (reference, after the setup steps) ============ -->
+<section id="routes">
+  <h2><span class="no">09</span>Know your routes</h2>
+  <p class="lede">Three endpoints, one key. Pick the one that speaks your client's dialect — the path suffixes differ on purpose.</p>
+  <div class="routes">
+    <div class="route">
+      <div><div class="name">Unified route</div>
+        <div class="dialect">Anthropic dialect · POST /v1/messages · no /v1 suffix</div>
+        <div class="url">{{UNIFIED_URL}}</div></div>
+      <div class="note">Everything Claude Code and other Anthropic-dialect clients expect. Routes <em>claude-*</em> to the real Anthropic API and the hosted <em>Qwen</em> / <em>GLM</em> ids to our own serving — same URL, switch models freely. "Unified" means unified <em>backends</em>, not unified dialects: this route only speaks Anthropic format (<span class="mono">x-api-key</span>) — OpenAI-format clients with Bearer tokens belong on the OpenAI route below.</div>
+      <div class="auth">x-api-key: pk-…</div>
+    </div>
+    <div class="route">
+      <div><div class="name">OpenAI route</div>
+        <div class="dialect">OpenAI dialect · POST /v1/chat/completions · base URL ends in /v1</div>
+        <div class="url">{{OPENAI_URL}}</div></div>
+      <div class="note">For Codex, OpenCode and any OpenAI-compatible client. Covers the GPT lineup (gpt-5.x) only — there are <strong>no <em>claude-*</em> or Qwen ids here</strong>, and asking for one gets "The model … does not exist or you do not have access to it" from upstream. Those models live on the unified route.</div>
+      <div class="auth">Authorization: Bearer pk-…</div>
+    </div>
+    <div class="route">
+      <div><div class="name">Dashboard</div>
+        <div class="dialect">usage · spend · savings · your keys</div>
+        <div class="url">{{DASHBOARD_URL}}</div></div>
+      <div class="note">Every token you send shows up here within seconds, attributed by model and day, with cost computed against the live price list.</div>
+      <div class="auth">SSO login</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOSTED ============ -->
+<section id="hosted">
+  <h2><span class="no">10</span>Hosted models — Qwen 3.8 Flash Next &amp; GLM 5.3</h2>
+  <p class="lede">Models we serve ourselves, priced well under the vendors and tracked in your dashboard like everything else. Both ride the <strong>unified route</strong> — same key, switch freely.</p>
+
+  <h3 style="margin-top:18px">Qwen 3.8 Flash Next <span class="mono">(Inferact/Qwen3.8-Flash-Next-NVFP4)</span></h3>
+  <p class="lede">Self-hosted vLLM on our own hardware. FP4 quantisation, <strong>262K context</strong>, and the price per token is a rounding error — the default workhorse.</p>
+  <div class="rates">
+    <div class="rate"><div class="top"><span class="v">$0.15</span><span class="per">/ MTok</span></div><div class="k">Input</div></div>
+    <div class="rate"><div class="top"><span class="v">$0.47</span><span class="per">/ MTok</span></div><div class="k">Output</div></div>
+    <div class="rate"><div class="top"><span class="v">$0.016</span><span class="per">/ MTok</span></div><div class="k">Cache read</div></div>
+  </div>
+
+  <h3 style="margin-top:24px">GLM 5.3 <span class="mono">(rits/zai-org/glm-5-3)</span></h3>
+  <p class="lede">Zhipu's GLM 5.3 served behind the gateway — the step up in capability when Flash Next isn't enough, and currently <strong>free: $0 for every token type</strong>, input, output and cache alike. Unusually friendly to clients: it speaks <strong>all three dialects</strong> on the unified route (<span class="mono">/v1/messages</span>, <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>) — and it shows up in the gateway's <span class="mono">/v1/models</span> listing, so discovery-aware clients can see it too.</p>
+  <div class="callout warn"><span class="glyph">!</span><p><strong>GLM is text-only — no image input.</strong> A pasted screenshot (or any image block anywhere in the conversation history) makes upstream reject the request with <span class="mono">400 — GLM-5.3 is not a multimodal model</span>, and it keeps failing every follow-up in that session because the old image travels with the history — <strong>including automatic compaction</strong>, which re-sends the whole history and dies on the same image even if the current message is plain text. Stuck? Switch back to a vision-capable model, start a fresh session, or (OpenCode) pin compaction to one: <span class="mono">"agent": { "compaction": { "model": "anthropic/claude-sonnet-5" } }</span>.</p></div>
+  <div class="rates">
+    <div class="rate"><div class="top"><span class="v">$0.00</span><span class="per">/ MTok</span></div><div class="k">Input</div></div>
+    <div class="rate"><div class="top"><span class="v">$0.00</span><span class="per">/ MTok</span></div><div class="k">Output</div></div>
+    <div class="rate"><div class="top"><span class="v">$0.00</span><span class="per">/ MTok</span></div><div class="k">Cache read</div></div>
+  </div>
+
+  <div class="duo" style="margin-top:24px">
+    <div class="card">
+      <h3>It's on the menu</h3>
+      <p class="cap">The gateway publishes hosted models on <span class="mono">/v1/models</span> — cheaper than guessing:</p>
+      <div class="codebox"><button class="copy">copy</button><pre>curl <span class="s">{{UNIFIED_URL}}</span>/v1/models \
+  -H <span class="k">"x-api-key: $PRICETAG_KEY"</span></pre></div>
+      <p class="cap" style="margin:10px 0 0">Claude Code's picker hides it (ids are filtered to <em>claude/anthropic</em>) — that's what the <span class="mono">modelPicker</span> entry in §3 fixes.</p>
+    </div>
+    <div class="card">
+      <h3>Good to know</h3>
+      <ul style="margin:0;padding-left:18px;font-size:14px;color:var(--muted);line-height:1.7">
+        <li>Context window: <strong>262,144 tokens</strong> (Qwen) / <strong>131,072</strong> (GLM)</li>
+        <li>Streaming and tool calling supported (Anthropic dialect)</li>
+        <li>Effort levels: low / medium / xhigh — not "high" (Qwen)</li>
+        <li>GLM also answers OpenAI-dialect calls on the unified route</li>
+        <li>GLM is <strong>text-only</strong> — images in the conversation return 400</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DASHBOARD BAND ============ -->
+<section id="monitor" style="padding-bottom:0">
+  <div class="band">
+    <div class="inner">
+      <div>
+        <h2>Watch every token pay its way</h2>
+        <p>The dashboard meters each request the moment it lands: per-model usage, live spend against your {{QUOTA_LABEL}} monthly allowance, and the money saved by routing to hosted models — with a full price list a click away.</p>
+        <a class="btn" href="{{DASHBOARD_URL}}/dashboard">Open the dashboard</a>
+        <a class="btn ghost" href="#quickstart">Back to quick start</a>
+      </div>
+      <svg id="pulse" viewBox="0 0 220 64" preserveAspectRatio="none" aria-hidden="true">
+        <path class="wire" d="M0 40 H40 L48 24 L56 50 L66 12 L76 46 L84 38 H110 L118 28 L126 44 L134 20 L142 42 L150 36 H220"/>
+        <path class="trail" id="trail" d="M0 40 H40 L48 24 L56 50 L66 12 L76 46 L84 38 H110 L118 28 L126 44 L134 20 L142 42 L150 36 H220"/>
+        <circle class="glow" r="3.5"><animateMotion dur="2.8s" repeatCount="indefinite" path="M0 40 H40 L48 24 L56 50 L66 12 L76 46 L84 38 H110 L118 28 L126 44 L134 20 L142 42 L150 36 H220"/></circle>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>PriceTag — the AI gateway where every token has a price tag.</span>
+  <span class="mono">unified · openai · dashboard — one key</span>
+</footer>
+
+</div><!-- /wrap -->
+
+<script>
+(function(){
+  "use strict";
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- copy buttons ---- */
+  document.querySelectorAll(".copy").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var pre = btn.parentElement.querySelector("pre");
+      var txt = pre.innerText;
+      function done(){ btn.textContent="copied"; btn.classList.add("done");
+        setTimeout(function(){ btn.textContent="copy"; btn.classList.remove("done"); },1400); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(done, function(){});
+      } else {
+        var ta=document.createElement("textarea"); ta.value=txt; document.body.appendChild(ta);
+        ta.select(); try{document.execCommand("copy");}catch(e){} document.body.removeChild(ta); done();
+      }
+    });
+  });
+
+  /* ---- savings bars ---- */
+  var cmp = document.getElementById("compare");
+  if (cmp) {
+    var fills = cmp.querySelectorAll(".fill");
+    if (reduced) { fills.forEach(function(f){ f.style.width=f.getAttribute("data-w")+"%"; }); }
+    else {
+      requestAnimationFrame(function(){ setTimeout(function(){
+        fills.forEach(function(f){ f.style.width=f.getAttribute("data-w")+"%"; });
+      }, 250); });
+    }
+  }
+
+  /* ---- hero: tokens fly in, get priced ---- */
+  var cv = document.getElementById("flow");
+  if (!cv || !cv.getContext) return;
+  var running = true;
+  var ctx = cv.getContext("2d");
+  var dpr = Math.min(window.devicePixelRatio||1, 2);
+  var W=0, H=0, cx=0, tokens=[];
+  var GLYPHS = ["0x7f3a","tok","ƒ(x)","⧉","{ }","42","1010",">>","$?","…"];
+  var PRICES = ["$0.15","$0.47","$0.016","$3","$15","$0.60","$0.02","$1.20"];
+  function accent(){ return getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()||"#0E7A4B"; }
+  function ink(){ return getComputedStyle(document.documentElement).getPropertyValue("--faint").trim()||"#8A988F"; }
+  function resize(){
+    var r = cv.parentElement.getBoundingClientRect();
+    W = r.width; H = r.height;
+    cv.width = W*dpr; cv.height = H*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    /* the gateway line sits directly under the "OpenCode" nav link — the
+       top bar is the reference the eye already scans, and the line reads as
+       the gate dropped straight below it (nav is a sibling of the header,
+       so compare against the canvas rect for the same x-space) */
+    var cr = cv.getBoundingClientRect();
+    var el = document.querySelector('nav a[href="#opencode"]');
+    if (el) {
+      var lr = el.getBoundingClientRect();
+      cx = lr.left - cr.left + lr.width/2;
+    } else {
+      cx = W * 0.72; // fallback if the nav is ever restructured
+    }
+    cx = Math.min(W-24, Math.max(24, cx));
+  }
+  function spawn(){
+    return {
+      x: -30,
+      y: 14 + Math.random()*(H-28),
+      vx: 0.35 + Math.random()*0.85,
+      g: GLYPHS[(Math.random()*GLYPHS.length)|0],
+      priced: false, stamp: PRICES[(Math.random()*PRICES.length)|0],
+      born: 0, alpha: 0
+    };
+  }
+  resize(); window.addEventListener("resize", resize);
+  window.addEventListener("load", resize); // webfonts change headline width
+  for (var i=0;i<26;i++){ var t=spawn(); t.x = Math.random()*cx; tokens.push(t); }
+
+  function frame(ts){
+    ctx.clearRect(0,0,W,H);
+    var a = accent(), ic = ink();
+
+    /* gateway column */
+    var grad = ctx.createLinearGradient(cx-40,0,cx+40,0);
+    grad.addColorStop(0,"rgba(14,122,75,0)");
+    grad.addColorStop(.5, a + "22");
+    grad.addColorStop(1,"rgba(14,122,75,0)");
+    ctx.fillStyle = grad; ctx.fillRect(cx-40,0,80,H);
+    ctx.strokeStyle = a + "55"; ctx.setLineDash([3,5]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(cx,0); ctx.lineTo(cx,H); ctx.stroke(); ctx.setLineDash([]);
+
+    ctx.textBaseline = "middle";
+    for (var i=0;i<tokens.length;i++){
+      var t=tokens[i];
+      if (!t.priced && t.x>=cx) { t.priced=true; t.born=ts; }
+      t.x += t.vx * (t.priced?0.35:1);
+      t.alpha = Math.min(t.alpha+0.03, 1);
+
+      if (!t.priced) {
+        ctx.font = '500 12px "IBM Plex Mono", monospace';
+        ctx.fillStyle = ic; ctx.globalAlpha = t.alpha*0.75;
+        ctx.fillText(t.g, t.x, t.y);
+      } else {
+        /* the token becomes its price: glyph is gone, a dollar number takes
+           its place with a small pop, holds, then fades */
+        var age = ts - t.born;
+        var fade = age>2400 ? Math.max(0,1-(age-2400)/1600) : 1;
+        var pop = age<180 ? 1 + 0.35*(1-age/180) : 1;
+        ctx.globalAlpha = t.alpha*fade;
+        ctx.fillStyle = a;
+        ctx.font = '600 ' + (12*pop).toFixed(1) + 'px "IBM Plex Mono", monospace';
+        ctx.fillText(t.stamp, t.x, t.y);
+      }
+      ctx.globalAlpha = 1;
+      var dead = t.priced && (ts-t.born) > 4200;
+      if (dead || t.x > W+60) tokens[i] = spawn();
+    }
+    if (!reduced && running) requestAnimationFrame(frame);
+  }
+  if (reduced) { frame(0); } else { requestAnimationFrame(frame); }
+
+  /* pause hero canvas when scrolled away */
+  if (!reduced && "IntersectionObserver" in window) {
+    new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if (e.isIntersecting && !running){ running=true; requestAnimationFrame(frame); }
+        else if (!e.isIntersecting) running=false;
+      });
+    },{threshold:0.01}).observe(cv);
+  }
+})();
+
+/* ---- /model picker replay (HTML ships the final frame; JS animates a replay
+       each time the window scrolls into view; reduced-motion keeps the frame) */
+(function(){
+  "use strict";
+  var win = document.getElementById("ccwin");
+  if (!win || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  var typed = win.querySelector("#ctyped");
+  var rows = [].slice.call(win.querySelectorAll(".head, .sub, .r, .eff"));
+  var CMD = "/model";
+  var timers = [], playing = false, inView = false;
+  function after(ms, fn){ timers.push(setTimeout(fn, ms)); }
+  function clearAll(){ timers.forEach(clearTimeout); timers = []; }
+  function play(){
+    if (playing) return;
+    playing = true; clearAll();
+    typed.textContent = "";
+    rows.forEach(function(r){ r.classList.add("out"); });
+    var i = 0;
+    (function type(){
+      after(95, function(){
+        typed.textContent = CMD.slice(0, ++i);
+        if (i < CMD.length) type();
+        else after(420, reveal);
+      });
+    })();
+  }
+  function reveal(){
+    rows.forEach(function(r, n){ after(n*110, function(){ r.classList.remove("out"); }); });
+    after(rows.length*110 + 7000, function(){ playing = false; if (inView && !document.hidden) play(); });
+  }
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        inView = e.isIntersecting;
+        if (inView && !playing && !document.hidden) play();
+      });
+    },{threshold:0.25}).observe(win);
+  } else {
+    inView = true; play();
+  }
+})();
+</script>
+</body>
+</html>

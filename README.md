@@ -1,0 +1,155 @@
+# PriceTag Metering Service
+
+A development metering backend for AI inference gateways — provides CloudEvents-compatible token usage ingestion, per-user balance checks, and usage aggregation for testing an `external-metering` gateway filter.
+
+**Use this to test metering without deploying OpenMeter or a production billing system.**
+
+## What it does
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/v1/events` | Ingest CloudEvents v1.0 token usage events |
+| `GET /api/v1/customers/{id}/entitlements/{key}/value` | Check user balance (quota - usage) |
+| `GET /api/v1/team-usage` | Team-level usage aggregation |
+| `GET /health`, `GET /ready` | Liveness and readiness probes |
+
+## Architecture
+
+- **[docs/dashboard-architecture.md](docs/dashboard-architecture.md)** —
+  the full data path with diagrams and measured numbers: how a request
+  becomes a frozen-cost ledger row, the transactionally-maintained
+  hourly rollups, the replica + cache + read-switch layers, the standing
+  consistency check that auto-falls back on drift, and the ops knobs.
+  Panel reads: 19.8 ms → 1.2 ms, flat in ledger size.
+- [docs/dashboard-scaling-plan.md](docs/dashboard-scaling-plan.md) — the
+  plan of record and review history behind those layers.
+- Production Postgres: [deploy/cnpg/README.md](deploy/cnpg/README.md)
+  (HA, backups, restore) and
+  [deploy/readonly-replica/README.md](deploy/readonly-replica/README.md)
+  (read-path grants). Full-cluster bring-up lives in the
+  [PriceTag deployment repository](https://github.com/redhat-et/pricetag).
+
+## Quick Start
+
+### Docker Compose (local)
+
+```bash
+docker compose up
+```
+
+### Kubernetes
+
+```bash
+kubectl apply -f deploy/
+```
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
+| `PORT` | No | `8080` | HTTP listen port |
+| `TOKEN_QUOTA` | No | `0` (unlimited) | Per-user monthly token budget for the entitlement endpoint. `0` reports usage without gating access; enforcement belongs in the gateway. |
+
+## CloudEvents Format
+
+The service accepts [CloudEvents v1.0](https://cloudevents.io) with this data schema:
+
+```json
+{
+  "specversion": "1.0",
+  "id": "evt-<uuid>",
+  "source": "ai-gateway",
+  "type": "inference.tokens.used",
+  "subject": "alice",
+  "time": "2026-06-10T12:00:00Z",
+  "datacontenttype": "application/json",
+  "data": {
+    "user": "alice",
+    "group": "engineering",
+    "subscription": "premium",
+    "provider": "anthropic",
+    "model": "claude-opus-4-8",
+    "prompt_tokens": 150,
+    "completion_tokens": 80,
+    "total_tokens": 230,
+    "cached_input_tokens": 12000,
+    "cache_creation_tokens": 100,
+    "reasoning_tokens": 0,
+    "duration_ms": 1200
+  }
+}
+```
+
+This format is compatible with [OpenMeter](https://openmeter.io) and can be adapted for other billing backends.
+
+## Supported Token Types
+
+| Token Type | Description | OpenAI field | Anthropic field |
+|-----------|-------------|-------------|-----------------|
+| Input (new) | Non-cached input tokens | `prompt_tokens` | `input_tokens` |
+| Output | Generated tokens | `completion_tokens` | `output_tokens` |
+| Cached read | Tokens read from cache | `prompt_tokens_details.cached_tokens` | `cache_read_input_tokens` |
+| Cache write | Tokens written to cache | — | `cache_creation_input_tokens` |
+| Reasoning | Chain-of-thought tokens | `completion_tokens_details.reasoning_tokens` | — |
+
+## Using This Service as a Metering Provider
+
+This service is a **drop-in metering backend**, in real use behind an AI inference gateway. The gateway's `external-metering` filter sends CloudEvents to whatever URL is configured — this service, OpenMeter, or a commercial billing system — and the API surface is identical across them, so integrations built against one carry over to the others.
+
+```
+Development:  meteringURL → pricetag-metering (this repo)
+Staging:      meteringURL → OpenMeter
+Production:   meteringURL → commercial or custom billing system
+```
+
+The CloudEvents v1.0 format is the integration contract — any backend that accepts this schema works.
+
+## Model Pricing
+
+Cost calculation uses per-model pricing from the `model_pricing` table. Prices
+are sourced from [LiteLLM's community-maintained database](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) (MIT licensed).
+
+**On startup**, the service:
+1. Fetches the latest pricing from LiteLLM's GitHub (10s timeout)
+2. Filters to relevant models (Claude, GPT, Gemini)
+3. UPSERTs into `model_pricing` (corrects stale prices, adds new models)
+4. Falls back to a bundled snapshot if the fetch fails (air-gapped / offline)
+
+**To refresh pricing without restarting:**
+```bash
+curl -X POST https://<metering-dashboard-route>/api/v1/admin/pricing/refresh
+# Returns: { "updated": 3, "total": 239, "source": "fetched", "changed": [...] }
+```
+
+**To refresh on restart:**
+```bash
+oc rollout restart deployment/metering-service -n openshift-ingress
+```
+
+Pricing fields per model: `input_cost_per_mtok`, `output_cost_per_mtok`,
+`cache_read_cost_per_mtok`, `cache_write_cost_per_mtok` (all USD per million tokens).
+
+## Database
+
+PostgreSQL 14+. Schema is auto-migrated on startup:
+
+- `usage_events` — per-request token usage records
+- `model_pricing` — per-model cost rates (auto-synced from LiteLLM on startup)
+
+On the dogfood cluster this runs as a 3-instance CloudNativePG cluster
+with continuous WAL archiving + daily base backups to IBM COS (PITR
+capable). Architecture diagrams, the DSN secret plumbing, backup layers,
+and the full 2026-09-16 cutover record (including what went wrong and
+how it was verified clean): **[docs/db-design.md](docs/db-design.md)**.
+Day-to-day ops: [docs/db-backup.md](docs/db-backup.md).
+
+## Related
+
+- [Praxis](https://github.com/praxis-proxy/praxis) — the proxy this service was built against
+- [Praxis AI](https://github.com/praxis-proxy/ai) — AI filters, including the `external_metering` filter that sends events to this service
+- [OpenMeter](https://openmeter.io) — production-grade usage metering
+
+## License
+
+Apache License 2.0
