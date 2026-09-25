@@ -13,8 +13,7 @@ import (
 func TestServeWelcomeSubstitution(t *testing.T) {
 	h := NewDashboardHandler(nil, config.Config{
 		Welcome: config.Welcome{
-			UnifiedURL:   "https://unified.test",
-			OpenAIURL:    "https://openai.test/v1",
+			GatewayURL:   "https://gateway.test",
 			DashboardURL: "https://dash.test",
 		},
 		MonthlyTokenQuota: 10_000_000_000,
@@ -28,8 +27,7 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
-		"https://unified.test",
-		"https://openai.test/v1",
+		"https://gateway.test",
 		"https://dash.test",
 		"10B monthly allowance",
 		"Inferact/Qwen3.8-Flash-Next-NVFP4",
@@ -39,8 +37,12 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 		"effortLevel",
 		"Set up Hermes CLI",
 		"~/.hermes/config.yaml",
-		"missing API key",
-		"extra_headers",
+		"/v1/messages",
+		"/v1/chat/completions",
+		"/v1/responses",
+		"https://gateway.test/v1",
+		"anthropic-version",
+		"matching API's model-list envelope",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page missing %q", want)
@@ -68,7 +70,7 @@ func TestServeWelcomeFallbacks(t *testing.T) {
 		t.Errorf("unsubstituted placeholder %s in served page", m)
 	}
 	for _, want := range []string{
-		welcomeUnifiedFallback, welcomeOpenAIFallback, welcomeDashboardFallback,
+		welcomeGatewayFallback, welcomeDashboardFallback,
 		"100M monthly allowance",
 	} {
 		if !strings.Contains(body, want) {

@@ -220,13 +220,9 @@ create)
         exit 1
     fi
 
-    # Unified route is the Claude Code entry point: it serves the Claude
-    # models AND the self-hosted Qwen models (single catalog, model-based
-    # routing). The anthropic route is Claude-only — Qwen model IDs get
-    # "not found" there because its /v1/models is proxied to Anthropic.
-    ANTHROPIC_ROUTE=$(oc -n "$NAMESPACE" get route ai-gateway-unified -o jsonpath='{.spec.host}' 2>/dev/null)
-    [[ -z "$ANTHROPIC_ROUTE" ]] && ANTHROPIC_ROUTE=$(oc -n "$NAMESPACE" get route ai-gateway-anthropic -o jsonpath='{.spec.host}' 2>/dev/null)
-    OPENAI_ROUTE=$(oc -n "$NAMESPACE" get route ai-gateway-openai -o jsonpath='{.spec.host}' 2>/dev/null)
+    # One public gateway host serves the protocol-specific API paths.
+    GATEWAY_ROUTE=$(oc -n "$NAMESPACE" get route ai-gateway -o jsonpath='{.spec.host}' 2>/dev/null)
+    [[ -n "$GATEWAY_ROUTE" ]] || { echo "ERROR: ai-gateway route not found in $NAMESPACE"; exit 1; }
 
     echo ""
     echo "=========================================="
@@ -241,12 +237,12 @@ create)
     echo "  Key: $KEY"
     echo ""
     echo "  Claude Code:"
-    echo "export ANTHROPIC_BASE_URL=\"https://$ANTHROPIC_ROUTE\""
+    echo "export ANTHROPIC_BASE_URL=\"https://$GATEWAY_ROUTE\""
     echo "export ANTHROPIC_API_KEY=\"$KEY\""
     echo "claude --settings '{\"env\":{\"CLAUDE_CODE_USE_VERTEX\":\"\",\"ANTHROPIC_VERTEX_PROJECT_ID\":\"\",\"CLOUD_ML_REGION\":\"\"}}'"
     echo ""
     echo "  Codex:"
-    echo "export OPENAI_BASE_URL=\"https://${OPENAI_ROUTE}/v1\""
+    echo "export OPENAI_BASE_URL=\"https://${GATEWAY_ROUTE}/v1\""
     echo "export OPENAI_API_KEY=\"$KEY\""
     echo "codex"
     echo ""
