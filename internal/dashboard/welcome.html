@@ -619,7 +619,7 @@ curl "$PRICETAG_BASE_URL/v1/messages" \
       <div><div class="name">Inference API</div>
         <div class="dialect">/v1/messages · /v1/chat/completions · /v1/responses · /v1/conversations</div>
         <div class="url">{{GATEWAY_URL}}</div></div>
-      <div class="note">The hostname is shared; path-based routes select the protocol-specific Praxis pipeline. Anthropic clients use <span class="mono">x-api-key</span>; OpenAI-compatible clients use <span class="mono">Authorization: Bearer</span>. OpenAI SDKs typically set their base URL to the gateway plus <span class="mono">/v1</span>; Anthropic SDKs use the host root.</div>
+      <div class="note">The hostname is shared; path-based routes select the protocol-specific Praxis pipeline. Anthropic clients use <span class="mono">x-api-key</span>; OpenAI-compatible clients use <span class="mono">Authorization: Bearer</span>. <span class="mono">GET /v1/models</span> returns the matching API's model-list envelope, selected by Anthropic's <span class="mono">anthropic-version</span> header. OpenAI SDKs typically set their base URL to the gateway plus <span class="mono">/v1</span>; Anthropic SDKs use the host root.</div>
       <div class="auth">one PriceTag key</div>
     </div>
     <div class="route">
@@ -657,9 +657,11 @@ curl "$PRICETAG_BASE_URL/v1/messages" \
   <div class="duo" style="margin-top:24px">
     <div class="card">
       <h3>It's on the menu</h3>
-      <p class="cap">The gateway publishes hosted models on <span class="mono">/v1/models</span> — cheaper than guessing:</p>
+      <p class="cap">The gateway publishes hosted models on <span class="mono">/v1/models</span> — cheaper than guessing. For Anthropic-format discovery, include the version header:</p>
       <div class="codebox"><button class="copy">copy</button><pre>curl <span class="s">{{GATEWAY_URL}}</span>/v1/models \
-  -H <span class="k">"x-api-key: $PRICETAG_KEY"</span></pre></div>
+  -H <span class="k">"x-api-key: $PRICETAG_KEY"</span> \
+  -H <span class="k">"anthropic-version: 2023-06-01"</span></pre></div>
+      <p class="cap" style="margin:10px 0 0">OpenAI-compatible clients use <span class="mono">Authorization: Bearer</span> and receive the OpenAI model-list format from the same path.</p>
       <p class="cap" style="margin:10px 0 0">Claude Code's picker hides it (ids are filtered to <em>claude/anthropic</em>) — that's what the <span class="mono">modelPicker</span> entry in §3 fixes.</p>
     </div>
     <div class="card">

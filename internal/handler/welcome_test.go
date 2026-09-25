@@ -41,6 +41,8 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 		"/v1/chat/completions",
 		"/v1/responses",
 		"https://gateway.test/v1",
+		"anthropic-version",
+		"matching API's model-list envelope",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page missing %q", want)
