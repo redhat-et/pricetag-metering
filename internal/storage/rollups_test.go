@@ -26,7 +26,7 @@ func TestMigrationsIncludeRollupSchema(t *testing.T) {
 }
 
 func TestInsertEventSQLUsesCostExprVerbatim(t *testing.T) {
-	for _, want := range []string{costUSDExpr, "LEFT JOIN model_pricing p ON p.model = e.model", "RETURNING cost_usd"} {
+	for _, want := range []string{costUSDExpr, "LEFT JOIN model_pricing p ON p.model = e.model", "ON CONFLICT DO NOTHING", "RETURNING cost_usd"} {
 		if !strings.Contains(insertEventSQL, want) {
 			t.Error("insertEventSQL lost a required clause — cost must be computed from the SHARED costUSDExpr:", want)
 		}

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -180,6 +181,7 @@ var insertEventSQL = fmt.Sprintf(`
 		$12::int AS cache_creation_tokens, $13::int AS reasoning_tokens, $14::text AS source,
 		$15::text AS user_agent, $16::int AS status_code) e
 	LEFT JOIN model_pricing p ON p.model = e.model
+	ON CONFLICT DO NOTHING
 	RETURNING cost_usd`, costUSDExpr)
 
 // InsertEvent writes the ledger row and maintains the hourly rollup in
@@ -199,6 +201,12 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 		e.EventID, e.Timestamp, e.Username, e.GroupName, e.Subscription, e.Provider, e.Model,
 		e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, e.ReasoningTokens, e.Source, e.UserAgent, e.StatusCode,
 	).Scan(&costUSD)
+	if errors.Is(err, sql.ErrNoRows) {
+		// A replay of an already accepted CloudEvent is idempotent once the
+		// explicit event_id index has been installed. Do not increment the
+		// hourly rollup a second time.
+		return nil
+	}
 	if err != nil {
 		return err
 	}
