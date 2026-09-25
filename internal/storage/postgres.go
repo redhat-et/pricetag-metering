@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -200,6 +201,12 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 		e.EventID, e.Timestamp, e.Username, e.GroupName, e.Subscription, e.Provider, e.Model,
 		e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, e.ReasoningTokens, e.Source, e.UserAgent, e.StatusCode,
 	).Scan(&costUSD)
+	if errors.Is(err, sql.ErrNoRows) {
+		// A replay of an already accepted CloudEvent is idempotent once the
+		// explicit event_id index has been installed. Do not increment the
+		// hourly rollup a second time.
+		return nil
+	}
 	if err != nil {
 		return err
 	}

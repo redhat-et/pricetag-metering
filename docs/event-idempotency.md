@@ -7,7 +7,10 @@ part of application startup.
 
 ## Preconditions
 
-- Use the exact production database DSN through the approved secret mechanism.
+- Provide `DATABASE_URL` through the approved secret mechanism, or configure
+  standard libpq `PGSERVICE`/`PG*` variables. The script translates a
+  `DATABASE_URL` into temporary `PGSERVICEFILE`/`PGPASSFILE` files, so the
+  password is not passed in a process argument.
 - Stop or drain gateway event ingestion for the maintenance window.
 - Take/verify a database backup.
 - Run the read-only preflight first:
