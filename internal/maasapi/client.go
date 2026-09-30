@@ -21,16 +21,31 @@ type Client struct {
 }
 
 type APIKeyResponse struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Key            string `json:"key,omitempty"`
-	Username       string `json:"username"`
-	Subscription   string `json:"subscription"`
-	Tenant         string `json:"tenant"`
-	Status         string `json:"status"`
-	CreationDate   string `json:"creationDate,omitempty"`
-	ExpirationDate string `json:"expirationDate,omitempty"`
-	LastUsedAt     string `json:"lastUsedAt,omitempty"`
+	ID             string            `json:"id"`
+	Name           string            `json:"name"`
+	Key            string            `json:"key,omitempty"`
+	KeyPrefix      string            `json:"keyPrefix,omitempty"`
+	Username       string            `json:"username"`
+	Subscription   string            `json:"subscription"`
+	Tenant         string            `json:"tenant"`
+	Status         string            `json:"status"`
+	CreationDate   string            `json:"creationDate,omitempty"`
+	ExpirationDate string            `json:"expirationDate,omitempty"`
+	CreatedAt      string            `json:"createdAt,omitempty"`
+	ExpiresAt      string            `json:"expiresAt,omitempty"`
+	Ephemeral      bool              `json:"ephemeral,omitempty"`
+	Labels         map[string]string `json:"labels,omitempty"`
+	LastUsedAt     string            `json:"lastUsedAt,omitempty"`
+}
+
+// APIKeyRequest is the metadata sent to MaaS when minting a key. The
+// plaintext key is returned once by MaaS and is never persisted here.
+type APIKeyRequest struct {
+	Name         string            `json:"name"`
+	Description  string            `json:"description,omitempty"`
+	Subscription string            `json:"subscription,omitempty"`
+	ExpiresIn    string            `json:"expiresIn,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
 }
 
 type SearchResult struct {
@@ -53,15 +68,32 @@ func NewClient(baseURL, tenant string) *Client {
 }
 
 func (c *Client) CreateAPIKey(ctx context.Context, username, group, keyName string) (*APIKeyResponse, error) {
-	body, _ := json.Marshal(map[string]string{"name": keyName})
+	return c.createAPIKey(ctx, username, group, APIKeyRequest{Name: keyName})
+}
+
+// CreateGEAPIKey is the SSO partner flow. Atlas does not choose a MaaS group;
+// every user is minted in the single EnMaaS GE group.
+func (c *Client) CreateGEAPIKey(ctx context.Context, username string, in APIKeyRequest) (*APIKeyResponse, error) {
+	return c.createAPIKey(ctx, username, "GE", in)
+}
+
+func (c *Client) createAPIKey(ctx context.Context, username, group string, in APIKeyRequest) (*APIKeyResponse, error) {
+	body, err := json.Marshal(in)
+	if err != nil {
+		return nil, fmt.Errorf("marshal key request: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/api-keys", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-MaaS-Username", username)
-	req.Header.Set("X-MaaS-Group", fmt.Sprintf(`["%s"]`, group))
+	groupJSON, _ := json.Marshal([]string{group})
+	req.Header.Set("X-MaaS-Group", string(groupJSON))
 	req.Header.Set("X-MaaS-Tenant", c.tenant)
+	if token := saToken(); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {

@@ -70,6 +70,14 @@ type Config struct {
 	// unavailable rather than unauthenticated.
 	UsageReportAPISecret string
 
+	// UserAPISecret protects the partner-facing user directory and key-minting
+	// APIs. It is intentionally separate from the read-only usage credential.
+	UserAPISecret string
+
+	// RequiredUserTags are the tags Atlas must provide when creating a user.
+	// Deployments may add organization-specific fields such as manager_uuid.
+	RequiredUserTags []string
+
 	// OrgInviteTTLHours bounds a key invite link: a single-use token that
 	// nobody opened is worthless once it expires.
 	OrgInviteTTLHours int
@@ -222,6 +230,8 @@ func Load() Config {
 		M2MAuthRequired:           envBool("M2M_AUTH_REQUIRED", false),
 		M2MSharedSecret:           os.Getenv("M2M_SHARED_SECRET"),
 		UsageReportAPISecret:      os.Getenv("USAGE_REPORT_API_SECRET"),
+		UserAPISecret:             firstNonEmptyEnv("USER_API_SECRET", "USER_DIRECTORY_API_SECRET"),
+		RequiredUserTags:          envListDefault("USER_REQUIRED_TAGS", []string{"email", "first_name", "last_name"}),
 		OrgInviteTTLHours:         envInt("ORG_INVITE_TTL_HOURS", 72),
 		KeyRotationOverlapDays:    envInt("KEY_ROTATION_OVERLAP_DAYS", 7),
 		// Off by default (PR #19 review): shipping the build must not be
@@ -294,6 +304,22 @@ func envList(key string) []string {
 		}
 	}
 	return result
+}
+
+func envListDefault(key string, fallback []string) []string {
+	if value := envList(key); len(value) > 0 {
+		return value
+	}
+	return fallback
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func envInt(key string, fallback int) int {

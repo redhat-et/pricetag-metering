@@ -89,3 +89,36 @@ func TestUserUsageReportUnknownUserReturnsEmptyTotals(t *testing.T) {
 		t.Fatalf("empty report = %#v", report)
 	}
 }
+
+func TestUsersUsageReportUsesStableIDsAndReturnsTags(t *testing.T) {
+	s, ctx := openTestStore(t)
+	if _, err := s.SeedPricing(ctx, []ModelPrice{{
+		Model: "sso-report-model", Provider: "report-provider", InputCost: 2, OutputCost: 10,
+		CacheWriteCost: 18.75, CacheReadCost: 0.5,
+	}}); err != nil {
+		t.Fatalf("seed pricing: %v", err)
+	}
+	if _, err := s.CreateUser(ctx, "rh-user-1", map[string]string{
+		"email": "alice@example.com", "first_name": "Alice", "last_name": "Example",
+		"manager_uuid": "manager-1",
+	}); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := s.InsertEvent(ctx, UsageEvent{
+		EventID: "sso-report-event", Timestamp: now, Username: "alice@example.com",
+		Provider: "report-provider", Model: "sso-report-model", PromptTokens: 10,
+		CompletionTokens: 5, TotalTokens: 15,
+	}); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+	report, err := s.GetUsersUsageReport(ctx, []string{"rh-user-1"}, now.Add(-time.Hour), now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("GetUsersUsageReport: %v", err)
+	}
+	if len(report.Users) != 1 || report.Users[0].UserID != "rh-user-1" ||
+		report.Users[0].Tags["manager_uuid"] != "manager-1" ||
+		report.Users[0].Totals.TotalTokens != 15 {
+		t.Fatalf("report = %#v", report)
+	}
+}

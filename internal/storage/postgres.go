@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -170,8 +171,8 @@ func (s *Store) UseReadReplica(databaseURL string) error {
 // the unpriced-model fallbacks, the mid-stream price-row visibility and
 // the numeric typing all come from ONE definition.
 var insertEventSQL = fmt.Sprintf(`
-	INSERT INTO usage_events (event_id, timestamp, username, group_name, subscription, provider, model, prompt_tokens, completion_tokens, total_tokens, cached_input_tokens, cache_creation_tokens, reasoning_tokens, source, user_agent, status_code, cost_usd)
-	SELECT e.event_id, e.timestamp, e.username, e.group_name, e.subscription, e.provider, e.model,
+	INSERT INTO usage_events (event_id, timestamp, user_id, username, group_name, subscription, provider, model, prompt_tokens, completion_tokens, total_tokens, cached_input_tokens, cache_creation_tokens, reasoning_tokens, source, user_agent, status_code, cost_usd)
+	SELECT e.event_id, e.timestamp, e.user_id, e.username, e.group_name, e.subscription, e.provider, e.model,
 		e.prompt_tokens, e.completion_tokens, e.total_tokens, e.cached_input_tokens, e.cache_creation_tokens, e.reasoning_tokens,
 		e.source, e.user_agent, e.status_code,
 		%s
@@ -179,7 +180,8 @@ var insertEventSQL = fmt.Sprintf(`
 		$5::text AS subscription, $6::text AS provider, $7::text AS model, $8::int AS prompt_tokens,
 		$9::int AS completion_tokens, $10::int AS total_tokens, $11::int AS cached_input_tokens,
 		$12::int AS cache_creation_tokens, $13::int AS reasoning_tokens, $14::text AS source,
-		$15::text AS user_agent, $16::int AS status_code) e
+		$15::text AS user_agent, $16::int AS status_code,
+		(SELECT user_id FROM user_profiles WHERE username = $3 LIMIT 1) AS user_id) e
 	LEFT JOIN model_pricing p ON p.model = e.model
 	ON CONFLICT DO NOTHING
 	RETURNING cost_usd`, costUSDExpr)
@@ -452,7 +454,9 @@ type GroupSummary struct {
 }
 
 type UserSummary struct {
-	Username string `json:"username"`
+	Username string            `json:"username"`
+	UserID   string            `json:"user_id,omitempty"`
+	Tags     map[string]string `json:"tags,omitempty"`
 	// DisplayName is "First Last" from user_profiles; empty when unknown,
 	// in which case the UI renders the username itself.
 	DisplayName      string  `json:"display_name,omitempty"`
@@ -604,7 +608,9 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 	} else {
 		query += fmt.Sprintf(`
 		SELECT e.username,
+			COALESCE(up.user_id, ''),
 			%s,
+			COALESCE(up.tags, '{}'::jsonb)::text,
 			COALESCE(e.group_name, ''),
 			COUNT(*) as requests,
 			COALESCE(SUM(e.prompt_tokens),0) as prompt_tokens,
@@ -617,7 +623,7 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 		LEFT JOIN user_profiles up ON up.username = e.username
 		LEFT JOIN sv ON sv.username = e.username
 		WHERE e.timestamp >= $1 AND e.timestamp < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
-		GROUP BY e.username, %s, COALESCE(e.group_name, '')
+		GROUP BY e.username, COALESCE(up.user_id, ''), %s, COALESCE(up.tags, '{}'::jsonb)::text, COALESCE(e.group_name, '')
 		ORDER BY %s %s
 		LIMIT $6`, displayNameExpr, costUSDExpr, displayNameExpr, sortExpr, direction)
 	}
@@ -632,10 +638,16 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 	for rows.Next() {
 		var u UserSummary
 		var displayName sql.NullString
-		if err := rows.Scan(&u.Username, &displayName, &u.GroupName, &u.Requests, &u.PromptTokens, &u.CompletionTokens, &u.TotalTokens, &u.CostUSD, &u.SavedUSD); err != nil {
+		var rawTags string
+		if err := rows.Scan(&u.Username, &u.UserID, &displayName, &rawTags, &u.GroupName, &u.Requests, &u.PromptTokens, &u.CompletionTokens, &u.TotalTokens, &u.CostUSD, &u.SavedUSD); err != nil {
 			return nil, err
 		}
 		u.DisplayName = displayName.String
+		if rawTags != "" {
+			if err := json.Unmarshal([]byte(rawTags), &u.Tags); err != nil {
+				return nil, err
+			}
+		}
 		result = append(result, u)
 	}
 	if err := rows.Err(); err != nil {
@@ -960,9 +972,11 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 
 // UserProfile is the human identity behind a usage_events username.
 type UserProfile struct {
-	Username  string `json:"username"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
+	UserID    string            `json:"user_id,omitempty"`
+	Username  string            `json:"username"`
+	FirstName string            `json:"first_name"`
+	LastName  string            `json:"last_name"`
+	Tags      map[string]string `json:"tags,omitempty"`
 }
 
 // DisplayName returns "First Last" (single part when only one is set), or
@@ -980,12 +994,18 @@ func (p UserProfile) DisplayName() string {
 // username without an extra branch.
 func (s *Store) GetUserProfile(ctx context.Context, username string) (UserProfile, error) {
 	var p UserProfile
+	var rawTags string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT username, first_name, last_name FROM user_profiles WHERE username = $1`, username,
-	).Scan(&p.Username, &p.FirstName, &p.LastName)
+		`SELECT COALESCE(user_id, ''), username, first_name, last_name,
+			COALESCE(tags, '{}'::jsonb)::text
+		 FROM user_profiles WHERE username = $1`, username,
+	).Scan(&p.UserID, &p.Username, &p.FirstName, &p.LastName, &rawTags)
 	if err == sql.ErrNoRows {
 		p.Username = username
 		return p, nil
+	}
+	if err == nil {
+		p.Tags, err = decodeUserTags(rawTags, p.Username, p.FirstName, p.LastName)
 	}
 	return p, err
 }
@@ -1000,14 +1020,34 @@ func (s *Store) UpsertUserProfiles(ctx context.Context, profiles []UserProfile) 
 	defer tx.Rollback() //nolint:errcheck // committed or already rolled back
 
 	for _, p := range profiles {
+		tags := normalizeUserTags(p.Tags)
+		if tags["email"] == "" {
+			tags["email"] = p.Username
+		}
+		if tags["first_name"] == "" {
+			tags["first_name"] = p.FirstName
+		}
+		if tags["last_name"] == "" {
+			tags["last_name"] = p.LastName
+		}
+		encoded, encodeErr := encodeUserTags(tags)
+		if encodeErr != nil {
+			return 0, encodeErr
+		}
+		userID := p.UserID
+		if userID == "" {
+			userID = p.Username
+		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO user_profiles (username, first_name, last_name, updated_at)
-			VALUES ($1, $2, $3, NOW())
+			INSERT INTO user_profiles (username, user_id, tags, first_name, last_name, updated_at)
+			VALUES ($1, $2, $3::jsonb, $4, $5, NOW())
 			ON CONFLICT (username) DO UPDATE SET
+				user_id = COALESCE(user_profiles.user_id, EXCLUDED.user_id),
+				tags = COALESCE(user_profiles.tags, '{}'::jsonb) || EXCLUDED.tags,
 				first_name = EXCLUDED.first_name,
 				last_name = EXCLUDED.last_name,
 				updated_at = NOW()`,
-			p.Username, p.FirstName, p.LastName); err != nil {
+			p.Username, userID, string(encoded), p.FirstName, p.LastName); err != nil {
 			return 0, fmt.Errorf("upsert profile %s: %w", p.Username, err)
 		}
 	}
@@ -1020,7 +1060,9 @@ func (s *Store) UpsertUserProfiles(ctx context.Context, profiles []UserProfile) 
 // ListUserProfiles returns every profile, username-ordered.
 func (s *Store) ListUserProfiles(ctx context.Context) ([]UserProfile, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT username, first_name, last_name FROM user_profiles ORDER BY username`)
+		`SELECT COALESCE(user_id, ''), username, first_name, last_name,
+			COALESCE(tags, '{}'::jsonb)::text
+		 FROM user_profiles ORDER BY username`)
 	if err != nil {
 		return nil, err
 	}
@@ -1029,7 +1071,12 @@ func (s *Store) ListUserProfiles(ctx context.Context) ([]UserProfile, error) {
 	var result []UserProfile
 	for rows.Next() {
 		var p UserProfile
-		if err := rows.Scan(&p.Username, &p.FirstName, &p.LastName); err != nil {
+		var rawTags string
+		if err := rows.Scan(&p.UserID, &p.Username, &p.FirstName, &p.LastName, &rawTags); err != nil {
+			return nil, err
+		}
+		p.Tags, err = decodeUserTags(rawTags, p.Username, p.FirstName, p.LastName)
+		if err != nil {
 			return nil, err
 		}
 		result = append(result, p)
@@ -1110,14 +1157,34 @@ var migrations = []string{
 	// themselves as bookable models.
 	`ALTER TABLE model_pricing ADD COLUMN IF NOT EXISTS deprecated BOOLEAN NOT NULL DEFAULT FALSE`,
 	// Human display names for dashboard users. Keyed by the same username
-	// string usage_events carries (the MaaS login identity). Empty names
-	// mean "unknown" — the UI falls back to the username.
+	// string usage_events carries (the MaaS login identity). The stable
+	// user_id and JSON tags are the SSO-facing source of truth; the legacy
+	// columns remain during the migration so existing dashboard/org queries
+	// and old profile imports continue to work.
 	`CREATE TABLE IF NOT EXISTS user_profiles (
 		username TEXT PRIMARY KEY,
+		user_id TEXT,
+		tags JSONB NOT NULL DEFAULT '{}',
 		first_name TEXT NOT NULL DEFAULT '',
 		last_name TEXT NOT NULL DEFAULT '',
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
+	`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS user_id TEXT`,
+	`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '{}'`,
+	`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+	`UPDATE user_profiles
+	 SET user_id = COALESCE(NULLIF(user_id, ''), username),
+	     tags = jsonb_build_object('email', username, 'first_name', first_name, 'last_name', last_name) || COALESCE(tags, '{}'::jsonb)
+	 WHERE user_id IS NULL OR user_id = '' OR tags = '{}'::jsonb`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS user_profiles_user_id_key ON user_profiles (user_id) WHERE user_id IS NOT NULL AND user_id <> ''`,
+	`CREATE INDEX IF NOT EXISTS user_profiles_tags_gin ON user_profiles USING GIN (tags)`,
+	`ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS user_id TEXT`,
+	`UPDATE usage_events e
+	 SET user_id = up.user_id
+	 FROM user_profiles up
+	 WHERE e.user_id IS NULL AND up.username = e.username AND up.user_id IS NOT NULL`,
+	`CREATE INDEX IF NOT EXISTS idx_usage_events_user_id_timestamp ON usage_events (user_id, timestamp)`,
 	// Phase 3 (docs/dashboard-scaling-plan.md): cost frozen at insert.
 	// NULL = "not yet backfilled"; every NEW insert sets it in-statement
 	// from costUSDExpr, so insert-time and read-time cost agree by

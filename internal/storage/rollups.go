@@ -707,7 +707,9 @@ func rollupTimelineSQL(truncInterval, seriesCol string) string {
 // the raw tail's columns, display-name and sort handling exactly.
 var rollupUsersSelect = `
 		SELECT e.username,
+			COALESCE(up.user_id, ''),
 			%s,
+			COALESCE(up.tags, '{}'::jsonb)::text,
 			COALESCE(e.group_name, ''),
 			COALESCE(SUM(e.requests),0) as requests,
 			COALESCE(SUM(e.prompt_tokens),0) as prompt_tokens,
@@ -719,7 +721,7 @@ var rollupUsersSelect = `
 		LEFT JOIN user_profiles up ON up.username = e.username
 		LEFT JOIN sv ON sv.username = e.username
 		WHERE e.hour >= $1 AND e.hour < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
-		GROUP BY e.username, %s, COALESCE(e.group_name, '')
+		GROUP BY e.username, COALESCE(up.user_id, ''), %s, COALESCE(up.tags, '{}'::jsonb)::text, COALESCE(e.group_name, '')
 		ORDER BY %s %s
 		LIMIT $6`
 

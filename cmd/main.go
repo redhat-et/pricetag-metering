@@ -178,6 +178,7 @@ func main() {
 	orgHandler := handler.NewOrgHandler(store, cfg, maasClient)
 	quotaHandler := handler.NewQuotaHandler(store, cfg)
 	usageReportHandler := handler.NewUsageReportHandler(store)
+	usersHandler := handler.NewUsersHandler(store, maasClient, cfg)
 	auth := authHandler.RequireAuth
 
 	mux := http.NewServeMux()
@@ -188,7 +189,14 @@ func main() {
 	mux.HandleFunc("/api/v1/customers/", m2mAuth(entitlementsHandler.HandleEntitlement))
 	// Partner reporting is read-only and has its own fail-closed auth wrapper;
 	// M2M_AUTH_REQUIRED stays independently switchable for gateway compatibility.
+	mux.HandleFunc("/api/v1/usage/users", handler.RequirePartnerAPIAuth(cfg.UsageReportAPISecret, usageReportHandler.HandleUserUsage))
 	mux.HandleFunc("/api/v1/usage/users/", handler.RequirePartnerAPIAuth(cfg.UsageReportAPISecret, usageReportHandler.HandleUserUsage))
+	// SSO user directory and key minting — trusted Atlas backend only.
+	userAPIAuth := func(next http.HandlerFunc) http.HandlerFunc {
+		return handler.RequirePartnerAPIAuth(cfg.UserAPISecret, next)
+	}
+	mux.HandleFunc("/api/v1/users", userAPIAuth(usersHandler.HandleUsers))
+	mux.HandleFunc("/api/v1/users/", userAPIAuth(usersHandler.HandleUsers))
 	// /api/v1/team-usage was REMOVED on purpose: it sat outside auth, took
 	// the group from the query string, and defaulted to a hard-coded team.
 	// Its replacement is /api/v1/org/usage below, which is authenticated

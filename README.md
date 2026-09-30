@@ -12,6 +12,8 @@ A development metering backend for AI inference gateways — provides CloudEvent
 | `GET /api/v1/customers/{id}/entitlements/{key}/value` | Check user balance (quota - usage) |
 | `GET /dashboard` | Authenticated usage dashboard |
 | `GET /api/v1/org/usage` | Authenticated, scope-limited team usage |
+| `POST/GET/PATCH/PUT/DELETE /api/v1/users` | Authenticated SSO user directory and key minting |
+| `GET /api/v1/usage/users` | Authenticated partner usage report for a user list and time window |
 | `GET /health`, `GET /ready` | Liveness and readiness probes |
 
 ## Architecture
@@ -53,6 +55,9 @@ kubectl apply -f deploy/
 | `MONTHLY_TOKEN_QUOTA` | No | `100000000` | Legacy per-user monthly token safety net for the entitlement endpoint. The gateway enforces the response; set a non-positive value only for explicitly unlimited deployments. |
 | `M2M_AUTH_REQUIRED` | No | `false` | Require a bearer token on gateway-to-metering endpoints. Enable only with matching gateway header injection. |
 | `M2M_SHARED_SECRET` | No | — | Runtime secret compared against the M2M bearer token; never commit it. Required when `M2M_AUTH_REQUIRED=true`. |
+| `USER_API_SECRET` | No | — | Bearer secret for trusted SSO user CRUD and MaaS key minting; unset keeps those APIs at `503`. |
+| `USAGE_REPORT_API_SECRET` | No | — | Separate bearer secret for the trusted multi-user usage report API; unset keeps it at `503`. |
+| `USER_REQUIRED_TAGS` | No | `email,first_name,last_name` | Comma/space-separated tags required when creating or replacing a user. |
 
 ## CloudEvents Format
 

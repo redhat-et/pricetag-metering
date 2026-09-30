@@ -784,7 +784,11 @@ function userMatchesSearch(username,q){
   if(!q)return true;
   if(username.toLowerCase().indexOf(q)>=0)return true;
   var user=allUsers.find(function(u){return u.username===username;});
-  return !!(user&&user.display_name&&user.display_name.toLowerCase().indexOf(q)>=0);
+  if(user&&user.display_name&&user.display_name.toLowerCase().indexOf(q)>=0)return true;
+  // SSO directory attributes are returned as tags by the dashboard API;
+  // searching their serialized values lets operators find users by manager,
+  // country, cost center, or any future directory attribute.
+  return !!(user&&user.tags&&JSON.stringify(user.tags).toLowerCase().indexOf(q)>=0);
 }
 
 function renderUserChecklist(){
