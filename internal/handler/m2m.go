@@ -33,3 +33,27 @@ func RequireM2MAuth(cfg config.Config, next http.HandlerFunc) http.HandlerFunc {
 		next(w, r)
 	}
 }
+
+// RequirePartnerAPIAuth always authenticates partner-facing APIs, even when
+// legacy gateway M2M authentication remains disabled for compatibility. An
+// unset secret leaves the endpoint unavailable rather than exposing user
+// usage data.
+func RequirePartnerAPIAuth(secret string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if secret == "" {
+			http.Error(w, "partner API authentication is not configured", http.StatusServiceUnavailable)
+			return
+		}
+
+		header := r.Header.Get("Authorization")
+		provided := ""
+		if strings.HasPrefix(header, bearerPrefix) {
+			provided = strings.TrimSpace(strings.TrimPrefix(header, bearerPrefix))
+		}
+		if provided == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(secret)) != 1 {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
+}
