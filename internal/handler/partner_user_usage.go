@@ -17,6 +17,28 @@ type PartnerUserUsageHandler struct {
 	store *storage.Store
 }
 
+// normalizePartnerUsageRange returns the effective half-open range end. A
+// caller commonly asks for the current week/month using its calendar end,
+// which is in the future while the period is still open. Querying only through
+// the server's current time is useful and unambiguous, so clamp that end rather
+// than rejecting the whole report. A future start still has no meaningful
+// interval and remains invalid.
+func normalizePartnerUsageRange(from, to, now time.Time) (time.Time, error) {
+	if !from.Before(to) {
+		return time.Time{}, errors.New("time range must be ordered")
+	}
+	if !from.Before(now) {
+		return time.Time{}, errors.New("from must be before the current time")
+	}
+	if to.After(now) {
+		to = now
+	}
+	if to.Sub(from) > partnerUsageMaxRange {
+		return time.Time{}, errors.New("time range must be at most 366 days")
+	}
+	return to, nil
+}
+
 func NewPartnerUserUsageHandler(store *storage.Store) *PartnerUserUsageHandler {
 	return &PartnerUserUsageHandler{store: store}
 }
@@ -52,8 +74,9 @@ func (h *PartnerUserUsageHandler) HandleBatchUserUsage(w http.ResponseWriter, r 
 		http.Error(w, "to must be an RFC3339 timestamp", http.StatusBadRequest)
 		return
 	}
-	if !from.Before(to) || to.Sub(from) > partnerUsageMaxRange || to.After(time.Now()) {
-		http.Error(w, "time range must be ordered, at most 366 days, and not in the future", http.StatusBadRequest)
+	to, err = normalizePartnerUsageRange(from, to, time.Now())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	report, err := h.store.GetPartnerUsersUsageReport(r.Context(), body.UserIDs, from, to)
