@@ -195,10 +195,15 @@ func TestPartnerUserAPIEndToEnd(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed usage: %v", err)
 	}
-	report := map[string]any{"user_ids": []string{alice, carol}, "from": time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339), "to": time.Now().UTC().Format(time.RFC3339)}
+	reportStart := time.Now().UTC()
+	report := map[string]any{"user_ids": []string{alice, carol}, "from": reportStart.Add(-24 * time.Hour).Format(time.RFC3339), "to": reportStart.Add(24 * time.Hour).Format(time.RFC3339)}
 	code, out = do(http.MethodPost, "/api/v1/usage/reports", report)
 	if code != http.StatusOK {
 		t.Fatalf("report = %d %v", code, out)
+	}
+	effectiveTo, err := time.Parse(time.RFC3339Nano, out["to"].(string))
+	if err != nil || effectiveTo.Before(reportStart) || effectiveTo.After(time.Now().UTC()) {
+		t.Fatalf("future report end was not clamped to request time: to=%v err=%v", effectiveTo, err)
 	}
 	reportUsers := out["users"].([]any)
 	if len(reportUsers) != 1 || reportUsers[0].(map[string]any)["totals"].(map[string]any)["totalTokens"].(float64) != 7 {
