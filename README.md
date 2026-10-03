@@ -149,6 +149,8 @@ Day-to-day ops: [docs/db-backup.md](docs/db-backup.md).
 
 ## Related
 
+- [Partner user usage reports](docs/partner-user-usage-api.md) — UUID-based
+  batch reports, historical-login attribution, and open-period date handling
 - [Praxis](https://github.com/praxis-proxy/praxis) — the proxy this service was built against
 - [Praxis AI](https://github.com/praxis-proxy/ai) — AI filters, including the `external_metering` filter that sends events to this service
 - [OpenMeter](https://openmeter.io) — production-grade usage metering
