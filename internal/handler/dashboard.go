@@ -117,6 +117,19 @@ func (h *DashboardHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, result)
 }
 
+func (h *DashboardHandler) HandleDirectoryUsers(w http.ResponseWriter, r *http.Request) {
+	result, err := h.store.ListDashboardDirectoryUsers(r.Context())
+	if err != nil {
+		slog.Error("dashboard directory query failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if result == nil {
+		result = []storage.UserSummary{}
+	}
+	writeJSON(w, result)
+}
+
 func (h *DashboardHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
 	since, until := parseTimeWindow(r)
 	group, user, model := parseFilters(r)
