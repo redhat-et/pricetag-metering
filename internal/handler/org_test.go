@@ -160,6 +160,55 @@ func TestRequireSuperAdmin_Fallbacks(t *testing.T) {
 	}
 }
 
+func TestRequireAdminDashboard(t *testing.T) {
+	cfg := config.Config{UserHeader: "X-Forwarded-User", AdminUsers: []string{"admin"}}
+	called := false
+	page := RequireAdminDashboard(cfg,
+		func(http.ResponseWriter, *http.Request) { called = true },
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("coming soon"))
+		},
+	)
+
+	regular := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	regular.Header.Set(cfg.UserHeader, "user")
+	w := httptest.NewRecorder()
+	page(w, regular)
+	if called || w.Code != http.StatusOK || w.Body.String() != "coming soon" {
+		t.Fatalf("regular user dashboard response: called=%v status=%d body=%q", called, w.Code, w.Body.String())
+	}
+
+	admin := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	admin.Header.Set(cfg.UserHeader, "admin")
+	w = httptest.NewRecorder()
+	page(w, admin)
+	if !called {
+		t.Fatal("admin must reach dashboard")
+	}
+}
+
+func TestRequireAdminAPI(t *testing.T) {
+	cfg := config.Config{UserHeader: "X-Forwarded-User", AdminUsers: []string{"admin"}}
+	api := RequireAdminAPI(cfg, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+
+	regular := httptest.NewRequest(http.MethodGet, "/api/v1/dashboard/users", nil)
+	regular.Header.Set(cfg.UserHeader, "user")
+	w := httptest.NewRecorder()
+	api(w, regular)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("regular user API status = %d, want 403", w.Code)
+	}
+
+	admin := httptest.NewRequest(http.MethodGet, "/api/v1/dashboard/users", nil)
+	admin.Header.Set(cfg.UserHeader, "admin")
+	w = httptest.NewRecorder()
+	api(w, admin)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("admin API status = %d, want 204", w.Code)
+	}
+}
+
 func TestHandleRoles(t *testing.T) {
 	h := &AdminHandler{cfg: config.Config{
 		AdminUsers:      []string{"bob", "alice"},

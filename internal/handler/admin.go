@@ -100,6 +100,31 @@ func RequireAdmin(cfg config.Config, next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// RequireAdminDashboard gates dashboard pages while giving regular signed-in
+// users a neutral holding page rather than exposing usage data or redirecting
+// them into another dashboard surface.
+func RequireAdminDashboard(cfg config.Config, next, comingSoon http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !IsAdmin(cfg, r) {
+			comingSoon(w, r)
+			return
+		}
+		next(w, r)
+	}
+}
+
+// RequireAdminAPI protects dashboard data endpoints from direct access by
+// regular users. API callers receive 403 rather than an HTML redirect.
+func RequireAdminAPI(cfg config.Config, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !IsAdmin(cfg, r) {
+			http.Error(w, "administrator access required", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
 // RequireSuperAdmin gates the operator-only surface (admin console, routing,
 // admin APIs). An admin who is not a super-admin lands on the
 // usage dashboard — the one page they should be looking at anyway.

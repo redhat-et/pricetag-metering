@@ -252,20 +252,28 @@ func main() {
 	mux.HandleFunc("/whoami", auth(keysHandler.HandleWhoAmI))
 
 	// Dashboard — session required, per-user scoping in handlers. The API
-	// handlers ride the response cache (inside auth: a hit still pays
-	// session validation, and the cache key contains the resolved scope).
+	// and page are administrator-only while user dashboard access is pending
+	// legal approval. The API handlers ride the response cache (inside auth:
+	// a hit still pays session validation, and the cache key contains the
+	// resolved scope).
 	dashCache := handler.NewDashboardCache(cfg, store)
-	mux.HandleFunc("/dashboard", auth(dashboardHandler.ServeDashboard))
-	mux.HandleFunc("/api/v1/dashboard/overview", auth(dashCache.Wrap(dashboardHandler.HandleOverview)))
-	mux.HandleFunc("/api/v1/dashboard/groups", auth(dashCache.Wrap(dashboardHandler.HandleGroups)))
-	mux.HandleFunc("/api/v1/dashboard/users", auth(dashCache.Wrap(dashboardHandler.HandleUsers)))
-	mux.HandleFunc("/api/v1/dashboard/models", auth(dashCache.Wrap(dashboardHandler.HandleModels)))
-	mux.HandleFunc("/api/v1/dashboard/timeline", auth(dashCache.Wrap(dashboardHandler.HandleTimeline)))
-	mux.HandleFunc("/api/v1/dashboard/recent", auth(dashCache.Wrap(dashboardHandler.HandleRecent)))
+	dashboardPage := func(next http.HandlerFunc) http.HandlerFunc {
+		return auth(handler.RequireAdminDashboard(cfg, next, dashboardHandler.ServeComingSoon))
+	}
+	dashboardAPI := func(next http.HandlerFunc) http.HandlerFunc {
+		return auth(handler.RequireAdminAPI(cfg, next))
+	}
+	mux.HandleFunc("/dashboard", dashboardPage(dashboardHandler.ServeDashboard))
+	mux.HandleFunc("/api/v1/dashboard/overview", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleOverview)))
+	mux.HandleFunc("/api/v1/dashboard/groups", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleGroups)))
+	mux.HandleFunc("/api/v1/dashboard/users", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleUsers)))
+	mux.HandleFunc("/api/v1/dashboard/models", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleModels)))
+	mux.HandleFunc("/api/v1/dashboard/timeline", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleTimeline)))
+	mux.HandleFunc("/api/v1/dashboard/recent", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleRecent)))
 
 	// Pricing modal rate card — readable by any logged-in user: the rates
 	// are the same numbers every request is billed at, no user data.
-	mux.HandleFunc("/api/v1/pricing", auth(handler.NewPricingRefreshHandler(store).HandleList))
+	mux.HandleFunc("/api/v1/pricing", dashboardAPI(handler.NewPricingRefreshHandler(store).HandleList))
 
 	// Operator pages (admin console, routing) are SUPER-ADMIN
 	// only. Regular admins get the org-wide Usage view on /dashboard and
@@ -314,16 +322,16 @@ func main() {
 	// Manager view — session required; the page adapts to the caller's
 	// scope (plain user sees self, manager sees subtree — admins included,
 	// a manager-admin sees their own branch — super-admin sees all).
-	mux.HandleFunc("/manager", auth(orgHandler.ServeManager))
+	mux.HandleFunc("/manager", dashboardPage(orgHandler.ServeManager))
 
 	// Org APIs reachable by any signed-in user; every handler enforces the
 	// caller's scope internally (a manager asking for a tree or usage
 	// outside their subtree gets a 403).
-	mux.HandleFunc("/api/v1/org/scope", auth(orgHandler.HandleScope))
-	mux.HandleFunc("/api/v1/org/tree", auth(orgHandler.HandleOrgTree))
-	mux.HandleFunc("/api/v1/org/usage", auth(orgHandler.HandleOrgUsage))
-	mux.HandleFunc("/api/v1/org/person", auth(orgHandler.HandleOrgPerson))
-	mux.HandleFunc("/api/v1/org/charts", auth(orgHandler.HandleOrgCharts))
+	mux.HandleFunc("/api/v1/org/scope", dashboardAPI(orgHandler.HandleScope))
+	mux.HandleFunc("/api/v1/org/tree", dashboardAPI(orgHandler.HandleOrgTree))
+	mux.HandleFunc("/api/v1/org/usage", dashboardAPI(orgHandler.HandleOrgUsage))
+	mux.HandleFunc("/api/v1/org/person", dashboardAPI(orgHandler.HandleOrgPerson))
+	mux.HandleFunc("/api/v1/org/charts", dashboardAPI(orgHandler.HandleOrgCharts))
 
 	// Monthly dollar quotas. The admin endpoints carry their own super-admin
 	// check that answers fetch() with a 403 instead of RequireSuperAdmin's
