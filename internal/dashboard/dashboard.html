@@ -625,9 +625,10 @@ function collapseUsageUsers(rows){
   (rows||[]).forEach(u=>{
     const key=u.user_id||u.username;
     const existing=byKey.get(key);
-    if(!existing){byKey.set(key,Object.assign({},u,{tags:Object.assign({},u.tags||{})}));return;}
+    if(!existing){byKey.set(key,Object.assign({},u,{usernames:[u.username],tags:Object.assign({},u.tags||{})}));return;}
     ['requests','prompt_tokens','completion_tokens','total_tokens','cost_usd','saved_usd'].forEach(k=>{existing[k]=(existing[k]||0)+(u[k]||0)});
     if(!existing.display_name)existing.display_name=u.display_name;
+    if(existing.usernames.indexOf(u.username)<0)existing.usernames.push(u.username);
     existing.tags=Object.assign(existing.tags||{},u.tags||{});
   });
   return Array.from(byKey.values());
@@ -710,17 +711,18 @@ function openUserDetailsByIndex(index){
   document.getElementById('user-detail-body').innerHTML='<div class="user-detail-grid">'+rows.map(r=>'<div class="user-detail-key">'+esc(r[0])+'</div><div class="user-detail-value">'+esc(r[1])+'</div>').join('')+'</div>';
   document.getElementById('user-detail-models').innerHTML='<div class="expand-loading">Loading model usage…</div>';
   document.getElementById('user-detail-ov').classList.add('show');
-  loadUserDetailModels(user.username);
+  loadUserDetailModels(user);
 }
 function closeUserDetails(){document.getElementById('user-detail-ov').classList.remove('show')}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeUserDetails()});
-async function loadUserDetailModels(username){
+async function loadUserDetailModels(user){
   try{
     let modelRange=range;
     if(modelRange==='custom'&&customFrom&&customTo)modelRange='custom&from='+encodeURIComponent(customFrom)+'&to='+encodeURIComponent(customTo);
     const gf=groupFilter?'&group='+encodeURIComponent(groupFilter):'';
     const mf=modelFilter?'&model='+encodeURIComponent(modelFilter):'';
-    const models=await api('/api/v1/dashboard/models?range='+modelRange+gf+mf+'&user='+encodeURIComponent(username));
+    const usernames=(user.usernames&&user.usernames.length?user.usernames:[user.username]).join(',');
+    const models=await api('/api/v1/dashboard/models?range='+modelRange+gf+mf+'&user='+encodeURIComponent(usernames));
     const body=document.getElementById('user-detail-models');
     if(!models.length){body.innerHTML='<div class="expand-loading">No model usage in this period.</div>';return;}
     body.innerHTML='<h3 style="font-size:13px;margin-bottom:8px">Model usage</h3><table><thead><tr><th>Model</th><th>Requests</th><th>Total</th><th>Cost</th></tr></thead><tbody>'+models.map(m=>'<tr><td>'+String(m.model||'—').replace(/[&<>]/g,'')+'</td><td>'+fmtN(m.requests)+'</td><td>'+fmtN(m.total_tokens)+'</td><td>'+fmtC(m.cost_usd)+'</td></tr>').join('')+'</tbody></table>';
