@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/redhat-et/pricetag-metering/internal/maasapi"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
@@ -29,6 +30,20 @@ type PartnerUsersHandler struct {
 	maas     *maasapi.Client
 	keyGroup string
 	mints    chan struct{}
+}
+
+type adminPartnerUserResponse struct {
+	UserID        string         `json:"user_id"`
+	Tags          map[string]any `json:"tags"`
+	Role          string         `json:"role"`
+	ManagerUserID *string        `json:"manager_user_id,omitempty"`
+	Active        bool           `json:"active"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+}
+
+func adminPartnerUser(user storage.PartnerUser) adminPartnerUserResponse {
+	return adminPartnerUserResponse{UserID: user.UserID, Tags: user.Tags, Role: user.Role, ManagerUserID: user.ManagerUserID, Active: user.Active, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt}
 }
 
 // NewPartnerUsersHandler wires the partner API. keyGroup is the MaaS group
@@ -191,7 +206,7 @@ func (h *PartnerUsersHandler) HandleAdminAccess(w http.ResponseWriter, r *http.R
 		h.userError(w, r, err)
 		return
 	}
-	writeJSON(w, updated)
+	writeJSON(w, adminPartnerUser(updated))
 }
 
 func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +220,11 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 		http.Error(w, "partner user list failed", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, users)
+	result := make([]adminPartnerUserResponse, 0, len(users))
+	for _, user := range users {
+		result = append(result, adminPartnerUser(user))
+	}
+	writeJSON(w, result)
 }
 
 func (h *PartnerUsersHandler) handleCollection(w http.ResponseWriter, r *http.Request) {

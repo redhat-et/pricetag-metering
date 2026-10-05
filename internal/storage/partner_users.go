@@ -301,7 +301,14 @@ func (s *Store) UpdatePartnerUserAccess(ctx context.Context, actor, userID, role
 			return PartnerUser{}, ErrPartnerUserNotFound
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE partner_users SET role=$2, manager_user_id=$3, updated_by=$4, updated_at=NOW() WHERE user_id=$1`, id, role, manager, actor); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE partner_users
+		SET role=$2,
+		    manager_user_id=$3,
+		    tags=CASE WHEN $3::uuid IS NULL THEN tags - 'manager_uuid'
+		              ELSE jsonb_set(tags, '{manager_uuid}', to_jsonb($3::text), true) END,
+		    updated_by=$4, updated_at=NOW()
+		WHERE user_id=$1`, id, role, manager, actor); err != nil {
 		return PartnerUser{}, err
 	}
 	if err := s.auditTx(ctx, tx, actor, "partner_user.access.update", id, map[string]any{"role": role, "manager_user_id": manager}); err != nil {

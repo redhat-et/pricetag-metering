@@ -730,7 +730,7 @@ func (s *Store) ListDashboardDirectoryUsers(ctx context.Context) ([]UserSummary,
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT user_id::text, tags
 		FROM partner_users
-		WHERE active AND (tags ? 'rhat_uuid' OR tags ? 'country' OR tags ? 'manager_uuid')
+		WHERE active
 		ORDER BY created_at, user_id`)
 	if err != nil {
 		return nil, err
