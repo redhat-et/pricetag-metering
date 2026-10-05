@@ -542,7 +542,7 @@ async function refresh(force){
   renderKPI(ov);
   renderGroupFilterBtns(gr);
   populateFilterDropdowns(modelCat, rosterCat);
-  renderUsers(mergeDirectoryUsers(us,directoryUsers,!groupFilter&&!modelFilter,userFilter));
+  renderUsers(mergeDirectoryUsers(collapseUsageUsers(us),directoryUsers,!groupFilter&&!modelFilter,userFilter));
   renderRecent(rc);
   renderModelChart();
   renderUserCostChart();
@@ -620,6 +620,18 @@ function renderKPI(d){
   document.getElementById('kpi-users').textContent=d.active_users;
 }
 
+function collapseUsageUsers(rows){
+  const byKey=new Map();
+  (rows||[]).forEach(u=>{
+    const key=u.user_id||u.username;
+    const existing=byKey.get(key);
+    if(!existing){byKey.set(key,Object.assign({},u,{tags:Object.assign({},u.tags||{})}));return;}
+    ['requests','prompt_tokens','completion_tokens','total_tokens','cost_usd','saved_usd'].forEach(k=>{existing[k]=(existing[k]||0)+(u[k]||0)});
+    if(!existing.display_name)existing.display_name=u.display_name;
+    existing.tags=Object.assign(existing.tags||{},u.tags||{});
+  });
+  return Array.from(byKey.values());
+}
 function mergeDirectoryUsers(usage,directory,includeDirectory,selectedUsers){
   const byEmail=new Map((usage||[]).map(u=>[u.username,u]));
   if(!includeDirectory)return Array.from(byEmail.values());
@@ -627,12 +639,12 @@ function mergeDirectoryUsers(usage,directory,includeDirectory,selectedUsers){
   (directory||[]).forEach(d=>{
     if(!d.username)return;
     if(selected.size&&!selected.has(d.username))return;
-    const existing=byEmail.get(d.username);
+    const existing=Array.from(byEmail.values()).find(function(u){return (d.user_id&&u.user_id===d.user_id)||u.username===d.username});
     if(existing){
       existing.user_id=d.user_id||existing.user_id;
       existing.tags=Object.assign({},d.tags||{},existing.tags||{});
     }else{
-      byEmail.set(d.username,Object.assign({requests:0,prompt_tokens:0,completion_tokens:0,total_tokens:0,cost_usd:0,saved_usd:0,group_name:''},d));
+      byEmail.set(d.user_id||d.username,Object.assign({requests:0,prompt_tokens:0,completion_tokens:0,total_tokens:0,cost_usd:0,saved_usd:0,group_name:''},d));
     }
   });
   return Array.from(byEmail.values());
@@ -704,7 +716,11 @@ function closeUserDetails(){document.getElementById('user-detail-ov').classList.
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeUserDetails()});
 async function loadUserDetailModels(username){
   try{
-    const models=await api('/api/v1/dashboard/models?range='+encodeURIComponent(range)+'&user='+encodeURIComponent(username));
+    let modelRange=range;
+    if(modelRange==='custom'&&customFrom&&customTo)modelRange='custom&from='+encodeURIComponent(customFrom)+'&to='+encodeURIComponent(customTo);
+    const gf=groupFilter?'&group='+encodeURIComponent(groupFilter):'';
+    const mf=modelFilter?'&model='+encodeURIComponent(modelFilter):'';
+    const models=await api('/api/v1/dashboard/models?range='+modelRange+gf+mf+'&user='+encodeURIComponent(username));
     const body=document.getElementById('user-detail-models');
     if(!models.length){body.innerHTML='<div class="expand-loading">No model usage in this period.</div>';return;}
     body.innerHTML='<h3 style="font-size:13px;margin-bottom:8px">Model usage</h3><table><thead><tr><th>Model</th><th>Requests</th><th>Total</th><th>Cost</th></tr></thead><tbody>'+models.map(m=>'<tr><td>'+String(m.model||'—').replace(/[&<>]/g,'')+'</td><td>'+fmtN(m.requests)+'</td><td>'+fmtN(m.total_tokens)+'</td><td>'+fmtC(m.cost_usd)+'</td></tr>').join('')+'</tbody></table>';

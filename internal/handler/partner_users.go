@@ -26,10 +26,11 @@ const partnerMintConcurrency = 4
 var partnerActorPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,31}$`)
 
 type PartnerUsersHandler struct {
-	store    *storage.Store
-	maas     *maasapi.Client
-	keyGroup string
-	mints    chan struct{}
+	store      *storage.Store
+	maas       *maasapi.Client
+	keyGroup   string
+	mints      chan struct{}
+	userHeader string
 }
 
 type adminPartnerUserResponse struct {
@@ -50,7 +51,13 @@ func adminPartnerUser(user storage.PartnerUser) adminPartnerUserResponse {
 // presented on every key operation; when empty, key endpoints answer 503 so a
 // deployment cannot mint under an unintended group.
 func NewPartnerUsersHandler(store *storage.Store, maas *maasapi.Client, keyGroup string) *PartnerUsersHandler {
-	return &PartnerUsersHandler{store: store, maas: maas, keyGroup: strings.TrimSpace(keyGroup), mints: make(chan struct{}, partnerMintConcurrency)}
+	return &PartnerUsersHandler{store: store, maas: maas, keyGroup: strings.TrimSpace(keyGroup), userHeader: "X-Forwarded-User", mints: make(chan struct{}, partnerMintConcurrency)}
+}
+
+func (h *PartnerUsersHandler) SetUserHeader(header string) {
+	if strings.TrimSpace(header) != "" {
+		h.userHeader = header
+	}
 }
 
 // actor returns the audit identity for a request: the validated
@@ -62,8 +69,11 @@ func partnerActor(r *http.Request) string {
 	return "partner-m2m"
 }
 
-func authenticatedActor(r *http.Request) string {
-	if user := strings.TrimSpace(r.Header.Get("X-Forwarded-User")); user != "" {
+func (h *PartnerUsersHandler) authenticatedActor(r *http.Request) string {
+	if user := strings.TrimSpace(r.Header.Get(realUserHeader)); user != "" {
+		return user
+	}
+	if user := strings.TrimSpace(r.Header.Get(h.userHeader)); user != "" {
 		return user
 	}
 	return partnerActor(r)
@@ -208,7 +218,7 @@ func (h *PartnerUsersHandler) HandleAdminAccess(w http.ResponseWriter, r *http.R
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	updated, err := h.store.UpdatePartnerUserAccess(r.Context(), authenticatedActor(r), userID, body.Role, body.ManagerUserID)
+	updated, err := h.store.UpdatePartnerUserAccess(r.Context(), h.authenticatedActor(r), userID, body.Role, body.ManagerUserID)
 	if err != nil {
 		h.userError(w, r, err)
 		return

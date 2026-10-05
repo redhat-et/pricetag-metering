@@ -504,10 +504,12 @@ type UserSummary struct {
 // DashboardTags is the intentionally small metadata surface exposed to
 // administrators; raw partner tags may contain future identity/system data.
 func DashboardTags(tags map[string]any) map[string]any {
-	allowed := map[string]bool{"email": true, "first_name": true, "last_name": true, "country": true, "rhat_uuid": true, "kerberos_id": true, "manager_uuid": true, "ai_usage_guidelines_acknowledged": true, "works_council_restricted": true}
+	allowed := map[string]bool{"email": true, "first_name": true, "last_name": true, "country": true, "rhat_uuid": true, "manager_uuid": true}
 	out := make(map[string]any)
 	for key, value := range tags {
-		if allowed[key] { out[key] = value }
+		if allowed[key] {
+			out[key] = value
+		}
 	}
 	return out
 }
@@ -668,12 +670,14 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 		var u UserSummary
 		var displayName sql.NullString
 		if err := rows.Scan(&u.Username, &displayName, &u.GroupName, &u.Requests, &u.PromptTokens, &u.CompletionTokens, &u.TotalTokens, &u.CostUSD, &u.SavedUSD); err != nil {
+			_ = rows.Close()
 			return nil, err
 		}
 		u.DisplayName = displayName.String
 		result = append(result, u)
 	}
 	if err := rows.Err(); err != nil {
+		_ = rows.Close()
 		return nil, err
 	}
 	if err := rows.Close(); err != nil {

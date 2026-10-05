@@ -187,6 +187,7 @@ func main() {
 	quotaHandler := handler.NewQuotaHandler(store, cfg)
 	usageReportHandler := handler.NewUsageReportHandler(store)
 	partnerUsersHandler := handler.NewPartnerUsersHandler(store, maasClient, cfg.PartnerUserKeyGroup)
+	partnerUsersHandler.SetUserHeader(cfg.UserHeader)
 	partnerUserUsageHandler := handler.NewPartnerUserUsageHandler(store)
 	modelCatalogHandler := handler.NewModelCatalogHandler(k8sClient)
 	userModelPolicyHandler := handler.NewUserModelPolicyHandler(store)

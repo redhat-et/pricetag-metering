@@ -300,7 +300,7 @@ func (s *Store) UpdatePartnerUserAccess(ctx context.Context, actor, userID, role
 			return PartnerUser{}, err
 		}
 		if !exists {
-			manager = nil
+			return PartnerUser{}, ErrPartnerUserNotFound
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `
