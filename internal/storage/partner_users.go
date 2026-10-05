@@ -780,11 +780,9 @@ func (s *Store) ListPartnerUsers(ctx context.Context, tagFilters map[string]stri
 	if err != nil {
 		return PartnerUserPage{}, err
 	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT user_id::text,tags,active,key_revocation_pending,created_at,updated_at
-		FROM partner_users
-		WHERE ($1 OR active=TRUE) AND tags @> $2::jsonb
-		ORDER BY created_at,user_id LIMIT $3 OFFSET $4`, includeInactive, string(filterJSON), limit+1, offset)
+	rows, err := s.db.QueryContext(ctx, partnerUserSelect+`
+		WHERE ($1 OR p.active=TRUE) AND p.tags @> $2::jsonb
+		ORDER BY p.created_at,p.user_id LIMIT $3 OFFSET $4`, includeInactive, string(filterJSON), limit+1, offset)
 	if err != nil {
 		return PartnerUserPage{}, err
 	}
