@@ -48,7 +48,8 @@ func TestAuthenticatedActorPrefersSessionIdentity(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPatch, "/", nil)
 	r.Header.Set("X-Forwarded-User", "admin@example.com")
 	r.Header.Set("X-Partner-Client", "atlas")
-	if got := authenticatedActor(r); got != "admin@example.com" {
+	h := NewPartnerUsersHandler(nil, nil, "")
+	if got := h.authenticatedActor(r); got != "admin@example.com" {
 		t.Fatalf("authenticatedActor = %q, want dashboard identity", got)
 	}
 }
