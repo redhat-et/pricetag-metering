@@ -165,6 +165,35 @@ func (h *PartnerUsersHandler) HandleUsers(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// HandleAdminAccess updates operator-controlled role and manager fields. The
+// route is mounted behind RequireSuperAdmin; Atlas never reaches it.
+func (h *PartnerUsersHandler) HandleAdminAccess(w http.ResponseWriter, r *http.Request) {
+	const prefix = "/api/v1/admin/partner-users/"
+	userID := strings.TrimPrefix(r.URL.Path, prefix)
+	if userID == r.URL.Path || userID == "" || strings.Contains(userID, "/") {
+		http.Error(w, "user id is required", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPatch {
+		w.Header().Set("Allow", http.MethodPatch)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Role          string  `json:"role"`
+		ManagerUserID *string `json:"manager_user_id"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	updated, err := h.store.UpdatePartnerUserAccess(r.Context(), partnerActor(r), userID, body.Role, body.ManagerUserID)
+	if err != nil {
+		h.userError(w, r, err)
+		return
+	}
+	writeJSON(w, updated)
+}
+
 func (h *PartnerUsersHandler) handleCollection(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
