@@ -529,6 +529,7 @@ func TestQuotaDenialRows(t *testing.T) {
 	}
 
 	// The feed shows each block as its own row, no synthesis needed.
+	quotaExec(t, s, ctx, `UPDATE user_profiles SET tags = COALESCE(tags, '{}'::jsonb) || '{"country":"PL"}'::jsonb WHERE username = 'alice'`)
 	feed, err := s.GetRecentEvents(ctx, 50, "", "", "")
 	if err != nil {
 		t.Fatalf("feed: %v", err)
@@ -545,6 +546,9 @@ func TestQuotaDenialRows(t *testing.T) {
 			continue
 		}
 		blockRows++
+		if e.Username == "alice" && e.Country != "PL" {
+			t.Fatalf("block feed row %s: country %q, want PL", e.Username, e.Country)
+		}
 		if e.Username != "bob" && e.GroupName != "eng" {
 			t.Fatalf("block feed row %s: group %q, want eng (directory-resolved)", e.Username, e.GroupName)
 		}
