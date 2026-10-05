@@ -205,7 +205,7 @@ func main() {
 	mux.HandleFunc("/api/v1/models", handler.RequirePartnerAPIAuthAny(cfg.ModelCatalogAPISecrets, modelCatalogHandler.Handle))
 	mux.HandleFunc("/api/v1/users", handler.RequirePartnerAPIAuth(cfg.UserManagementAPISecret, partnerUsersHandler.HandleUsers))
 	mux.HandleFunc("/api/v1/users/", handler.RequirePartnerAPIAuth(cfg.UserManagementAPISecret, partnerUsersHandler.HandleUsers))
-	mux.HandleFunc("/api/v1/admin/partner-users/", auth(handler.RequireSuperAdmin(cfg, partnerUsersHandler.HandleAdminAccess)))
+	mux.HandleFunc("/api/v1/admin/partner-users/", auth(handler.RequirePartnerSuperAdmin(cfg, store, partnerUsersHandler.HandleAdminAccess)))
 	mux.HandleFunc("/api/v1/model-policies/users/", handler.RequirePartnerAPIAuthAny(cfg.ModelPolicyAPISecrets, userModelPolicyHandler.HandleUserModelPolicy))
 	// /api/v1/team-usage was REMOVED on purpose: it sat outside auth, took
 	// the group from the query string, and defaulted to a hard-coded team.
@@ -259,10 +259,10 @@ func main() {
 	// resolved scope).
 	dashCache := handler.NewDashboardCache(cfg, store)
 	dashboardPage := func(next http.HandlerFunc) http.HandlerFunc {
-		return auth(handler.RequireAdminDashboard(cfg, next, dashboardHandler.ServeComingSoon))
+		return auth(handler.RequirePartnerAdminPage(cfg, store, next, dashboardHandler.ServeComingSoon))
 	}
 	dashboardAPI := func(next http.HandlerFunc) http.HandlerFunc {
-		return auth(handler.RequireAdminAPI(cfg, next))
+		return auth(handler.RequirePartnerAdminAPI(cfg, store, next))
 	}
 	mux.HandleFunc("/dashboard", dashboardPage(dashboardHandler.ServeDashboard))
 	mux.HandleFunc("/api/v1/dashboard/overview", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleOverview)))

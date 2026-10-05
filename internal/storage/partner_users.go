@@ -230,6 +230,19 @@ func (s *Store) GetPartnerUser(ctx context.Context, userID string) (PartnerUser,
 	return user, err
 }
 
+func (s *Store) GetPartnerRoleByUsername(ctx context.Context, username string) (string, error) {
+	var role string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT p.role
+		FROM partner_user_logins l
+		JOIN partner_users p ON p.user_id = l.user_id
+		WHERE l.username = $1 AND l.is_current AND p.active`, username).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PartnerRoleUser, nil
+	}
+	return role, err
+}
+
 // UpdatePartnerUserAccess changes operator-controlled authorization fields.
 // It is intentionally separate from Atlas profile PATCH so external callers
 // cannot grant themselves dashboard roles.
