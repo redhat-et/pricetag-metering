@@ -680,7 +680,7 @@ function renderUsers(data){
     let cls='clickable';
     if(i<5&&len>10)cls+=' top5';
     if(i>=len-5&&len>10)cls+=' bottom5';
-    let row=`<tr class="${cls}" onclick="openUserDetailsByIndex(${i})">
+    let row=`<tr class="${cls}" tabindex="0" onclick="openUserDetailsByIndex(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openUserDetailsByIndex(${i})}">
       <td style="color:var(--text2);font-size:10px">&#9654;</td>
       <td>${userCell(u.username,u.display_name,u.tags)}</td>
       <td>${fmtGroup(u.group_name)}</td>

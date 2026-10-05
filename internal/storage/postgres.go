@@ -665,6 +665,7 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	var result []UserSummary
 	for rows.Next() {
 		var u UserSummary

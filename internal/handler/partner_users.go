@@ -76,7 +76,7 @@ func (h *PartnerUsersHandler) authenticatedActor(r *http.Request) string {
 	if user := strings.TrimSpace(r.Header.Get(h.userHeader)); user != "" {
 		return user
 	}
-	return partnerActor(r)
+	return ""
 }
 
 func (h *PartnerUsersHandler) requireKeyGroup(w http.ResponseWriter) bool {
@@ -218,7 +218,12 @@ func (h *PartnerUsersHandler) HandleAdminAccess(w http.ResponseWriter, r *http.R
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	updated, err := h.store.UpdatePartnerUserAccess(r.Context(), h.authenticatedActor(r), userID, body.Role, body.ManagerUserID)
+	actor := h.authenticatedActor(r)
+	if actor == "" {
+		http.Error(w, "authenticated administrator identity required", http.StatusUnauthorized)
+		return
+	}
+	updated, err := h.store.UpdatePartnerUserAccess(r.Context(), actor, userID, body.Role, body.ManagerUserID)
 	if err != nil {
 		h.userError(w, r, err)
 		return
