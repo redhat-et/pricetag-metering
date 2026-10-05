@@ -33,6 +33,17 @@ func (h *DashboardHandler) ServeDashboard(w http.ResponseWriter, r *http.Request
 	w.Write(data)
 }
 
+func (h *DashboardHandler) ServeComingSoon(w http.ResponseWriter, r *http.Request) {
+	data, err := fs.ReadFile(dashboard.FS, "coming-soon.html")
+	if err != nil {
+		http.Error(w, "coming-soon page not found", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(data)
+}
+
 func (h *DashboardHandler) HandleOverview(w http.ResponseWriter, r *http.Request) {
 	since, until := parseTimeWindow(r)
 	group, user, model := parseFilters(r)
