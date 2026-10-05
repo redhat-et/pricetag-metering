@@ -928,7 +928,7 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
-		SELECT e.timestamp, e.username, %s, COALESCE(up.tags->>'country',''), COALESCE(e.group_name,''), e.model, COALESCE(e.provider,''),
+		SELECT e.timestamp, e.username, %s, COALESCE(pu.tags->>'country',''), COALESCE(e.group_name,''), e.model, COALESCE(e.provider,''),
 			e.prompt_tokens, e.completion_tokens, e.total_tokens,
 			COALESCE(e.cached_input_tokens, 0), COALESCE(e.cache_creation_tokens, 0),
 			COALESCE(ROUND((%s)::numeric, 4), 0),
@@ -937,6 +937,8 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 		FROM usage_events e
 		LEFT JOIN model_pricing p ON e.model = p.model
 		LEFT JOIN user_profiles up ON up.username = e.username
+		LEFT JOIN partner_user_logins pul ON pul.username = e.username AND pul.is_current
+		LEFT JOIN partner_users pu ON pu.user_id = pul.user_id
 		WHERE ($2 = '' OR e.group_name = $2) AND ($3 = '' OR e.username = ANY(string_to_array($3, ','))) AND ($4 = '' OR e.model = $4)
 		ORDER BY e.timestamp DESC
 		LIMIT $1`, displayNameExpr, costUSDExpr), limit, group, user, model)
