@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 type UsageEvent struct {
@@ -475,7 +476,9 @@ type GroupSummary struct {
 }
 
 type UserSummary struct {
-	Username string `json:"username"`
+	Username string         `json:"username"`
+	UserID   string         `json:"user_id,omitempty"`
+	Tags     map[string]any `json:"tags,omitempty"`
 	// DisplayName is "First Last" from user_profiles; empty when unknown,
 	// in which case the UI renders the username itself.
 	DisplayName      string  `json:"display_name,omitempty"`
@@ -649,8 +652,6 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
 	var result []UserSummary
 	for rows.Next() {
 		var u UserSummary
@@ -664,7 +665,99 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := s.enrichDashboardUsers(ctx, result); err != nil {
+		return nil, err
+	}
 	return result, nil
+}
+
+// enrichDashboardUsers attaches Atlas metadata to usage rows. The usage
+// ledger is keyed by MaaS username, while Atlas owns the stable UUID and tags.
+func (s *Store) enrichDashboardUsers(ctx context.Context, users []UserSummary) error {
+	if len(users) == 0 {
+		return nil
+	}
+	usernames := make([]string, 0, len(users))
+	for _, user := range users {
+		usernames = append(usernames, user.Username)
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT l.username, p.user_id::text, p.tags
+		FROM partner_user_logins l
+		JOIN partner_users p ON p.user_id = l.user_id
+		WHERE l.is_current AND l.username = ANY($1)`, pq.Array(usernames))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	metadata := make(map[string]struct {
+		id   string
+		tags map[string]any
+	}, len(users))
+	for rows.Next() {
+		var username, id string
+		var raw []byte
+		if err := rows.Scan(&username, &id, &raw); err != nil {
+			return err
+		}
+		var tags map[string]any
+		if err := json.Unmarshal(raw, &tags); err != nil {
+			return err
+		}
+		metadata[username] = struct {
+			id   string
+			tags map[string]any
+		}{id: id, tags: tags}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range users {
+		if meta, ok := metadata[users[i].Username]; ok {
+			users[i].UserID = meta.id
+			users[i].Tags = meta.tags
+		}
+	}
+	return nil
+}
+
+// ListDashboardDirectoryUsers returns active Atlas users with enrichment
+// metadata, including users that have not generated usage yet.
+func (s *Store) ListDashboardDirectoryUsers(ctx context.Context) ([]UserSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT user_id::text, tags
+		FROM partner_users
+		WHERE active AND (tags ? 'rhat_uuid' OR tags ? 'country' OR tags ? 'manager_uuid')
+		ORDER BY created_at, user_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []UserSummary
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, err
+		}
+		var tags map[string]any
+		if err := json.Unmarshal(raw, &tags); err != nil {
+			return nil, err
+		}
+		email, _ := tags["email"].(string)
+		first, _ := tags["first_name"].(string)
+		last, _ := tags["last_name"].(string)
+		result = append(result, UserSummary{
+			Username:    email,
+			UserID:      id,
+			Tags:        tags,
+			DisplayName: strings.TrimSpace(first + " " + last),
+		})
+	}
+	return result, rows.Err()
 }
 
 // hostedSavingsWithSQL is the single source of truth for the
