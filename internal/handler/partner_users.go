@@ -194,6 +194,20 @@ func (h *PartnerUsersHandler) HandleAdminAccess(w http.ResponseWriter, r *http.R
 	writeJSON(w, updated)
 }
 
+func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	users, err := h.store.ListAllPartnerUsers(r.Context())
+	if err != nil {
+		http.Error(w, "partner user list failed", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, users)
+}
+
 func (h *PartnerUsersHandler) handleCollection(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:

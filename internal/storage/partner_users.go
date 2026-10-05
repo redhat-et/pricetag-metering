@@ -46,14 +46,16 @@ var (
 // attributes live in Tags; UserID is the stable external UUID and is not the
 // MaaS username or a MaaS API-key UUID.
 type PartnerUser struct {
-	UserID               string         `json:"user_id"`
-	Tags                 map[string]any `json:"tags"`
-	Role                 string         `json:"role"`
-	ManagerUserID        *string        `json:"manager_user_id,omitempty"`
-	Active               bool           `json:"active"`
-	KeyRevocationPending bool           `json:"key_revocation_pending,omitempty"`
-	CreatedAt            time.Time      `json:"created_at"`
-	UpdatedAt            time.Time      `json:"updated_at"`
+	UserID string         `json:"user_id"`
+	Tags   map[string]any `json:"tags"`
+	// Operator-only fields are intentionally excluded from the existing partner
+	// API response contract; dashboard/admin DTOs expose them separately.
+	Role                 string    `json:"-"`
+	ManagerUserID        *string   `json:"-"`
+	Active               bool      `json:"active"`
+	KeyRevocationPending bool      `json:"key_revocation_pending,omitempty"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 type PartnerUserPage struct {
@@ -241,6 +243,23 @@ func (s *Store) GetPartnerRoleByUsername(ctx context.Context, username string) (
 		return PartnerRoleUser, nil
 	}
 	return role, err
+}
+
+func (s *Store) ListAllPartnerUsers(ctx context.Context) ([]PartnerUser, error) {
+	rows, err := s.db.QueryContext(ctx, partnerUserSelect+` WHERE p.active ORDER BY p.created_at, p.user_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []PartnerUser
+	for rows.Next() {
+		user, err := scanPartnerUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
 }
 
 // UpdatePartnerUserAccess changes operator-controlled authorization fields.
