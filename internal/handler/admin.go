@@ -14,6 +14,7 @@ import (
 	"github.com/redhat-et/pricetag-metering/internal/dashboard"
 	"github.com/redhat-et/pricetag-metering/internal/k8s"
 	"github.com/redhat-et/pricetag-metering/internal/maasapi"
+	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
 type AdminHandler struct {
@@ -119,6 +120,60 @@ func RequireAdminAPI(cfg config.Config, next http.HandlerFunc) http.HandlerFunc 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !IsAdmin(cfg, r) {
 			http.Error(w, "administrator access required", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
+// IsPartnerAdmin keeps the deployment allowlist as a break-glass path while
+// making partner_users.role the normal dashboard authorization source.
+func IsPartnerAdmin(ctx context.Context, cfg config.Config, store *storage.Store, r *http.Request) bool {
+	if IsAdmin(cfg, r) {
+		return true
+	}
+	if store == nil {
+		return false
+	}
+	role, err := store.GetPartnerRoleByUsername(ctx, r.Header.Get(cfg.UserHeader))
+	return err == nil && (role == storage.PartnerRoleAdmin || role == storage.PartnerRoleSuperAdmin)
+}
+
+func RequirePartnerAdminPage(cfg config.Config, store *storage.Store, next, comingSoon http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !IsPartnerAdmin(r.Context(), cfg, store, r) {
+			comingSoon(w, r)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func RequirePartnerAdminAPI(cfg config.Config, store *storage.Store, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !IsPartnerAdmin(r.Context(), cfg, store, r) {
+			http.Error(w, "administrator access required", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func IsPartnerSuperAdmin(ctx context.Context, cfg config.Config, store *storage.Store, r *http.Request) bool {
+	if IsSuperAdmin(cfg, r) {
+		return true
+	}
+	if store == nil {
+		return false
+	}
+	role, err := store.GetPartnerRoleByUsername(ctx, r.Header.Get(cfg.UserHeader))
+	return err == nil && role == storage.PartnerRoleSuperAdmin
+}
+
+func RequirePartnerSuperAdmin(cfg config.Config, store *storage.Store, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !IsPartnerSuperAdmin(r.Context(), cfg, store, r) {
+			http.Error(w, "super administrator access required", http.StatusForbidden)
 			return
 		}
 		next(w, r)

@@ -89,6 +89,14 @@ tr.clickable{cursor:pointer}
 .user-name{font-weight:600;line-height:1.2}
 .user-mail{font-size:10px;color:var(--text2);margin-top:1px}
 .country-flag{display:inline-block;margin-right:6px;font-size:15px;line-height:1;vertical-align:-1px}
+.user-detail-ov{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:180;align-items:center;justify-content:center;padding:20px}
+.user-detail-ov.show{display:flex}
+.user-detail-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;width:100%;max-width:620px;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.user-detail-head{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--border)}
+.user-detail-head h2{font-size:16px;margin:0;flex:1}
+.user-detail-close{background:var(--bg-hover);color:var(--text2);border:1px solid var(--border);width:28px;height:28px;border-radius:6px;cursor:pointer}
+.user-detail-body{padding:18px}.user-detail-grid{display:grid;grid-template-columns:150px 1fr;gap:8px 14px;font-size:12px}
+.user-detail-key{color:var(--text2);font-weight:600}.user-detail-value{word-break:break-word}
 @media(max-width:600px){.kpi-row{grid-template-columns:1fr}}
 /* ── Model pricing modal ──────────────────────────────────────────── */
 .pricing-ov{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:150;align-items:flex-start;justify-content:center;padding:5vh 16px}
@@ -368,6 +376,14 @@ tr.clickable{cursor:pointer}
 
 </main>
 
+<div class="user-detail-ov" id="user-detail-ov" onclick="if(event.target===this)closeUserDetails()">
+  <section class="user-detail-card" role="dialog" aria-modal="true" aria-labelledby="user-detail-title">
+    <div class="user-detail-head"><h2 id="user-detail-title">User details</h2><button class="user-detail-close" onclick="closeUserDetails()" aria-label="Close">×</button></div>
+    <div class="user-detail-body" id="user-detail-body"></div>
+    <div class="user-detail-body" id="user-detail-models"></div>
+  </section>
+</div>
+
 <!-- ── Subtle welcome-page background animation (issue #11) ────────────── -->
 <script>
 (function(){
@@ -451,7 +467,7 @@ let modelMetric='tokens', userPieMetric='cost';
 let savingsRef='claude-opus-4-8';
 let tokenChart=null, userCostChart=null, tlChart=null, savingsChart=null;
 let currentSort='total_tokens', currentOrder='desc';
-let cachedGroups=[], cachedModels=[], cachedUsers=[];
+let cachedGroups=[], cachedModels=[], cachedUsers=[], directoryUsers=[], renderedUsers=[];
 // Overview payload of the current refresh; it carries the server-computed
 // "Saved · Hosted Models" KPI (the sum of the user table's saved_usd
 // column), which is what the card shows — no client-side re-derivation.
@@ -503,7 +519,7 @@ async function refresh(force){
   // unfiltered "catalog" fetches so selecting a filter never shrinks
   // the list of things you can still pick.
   try {
-    const [ov,gr,us,mo,tl,rc,rosterCat,modelCat]=await Promise.all([
+    const [ov,gr,us,mo,tl,rc,rosterCat,modelCat,directory]=await Promise.all([
       api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/groups?'+filters,force),
       api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&ref='+encodeURIComponent(savingsRef),force),
@@ -511,7 +527,8 @@ async function refresh(force){
       api('/api/v1/dashboard/timeline?'+filters+'&group_by='+tlGroupBy,force),
       api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
       api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200',force),
-      api('/api/v1/dashboard/models?'+rangeOnly,force)
+      api('/api/v1/dashboard/models?'+rangeOnly,force),
+      api('/api/v1/dashboard/directory-users',force)
     ]);
   cachedOverview=ov;
   cachedGroups=gr;
@@ -520,11 +537,12 @@ async function refresh(force){
   // cache ratio in renderSavings, so a user/group filter that contains no
   // paid traffic doesn't silently drop the cache assumption.
   catalogModels=modelCat;
+  directoryUsers=directory||[];
   cachedUsers=us;
   renderKPI(ov);
   renderGroupFilterBtns(gr);
   populateFilterDropdowns(modelCat, rosterCat);
-  renderUsers(us);
+  renderUsers(mergeDirectoryUsers(collapseUsageUsers(us),directoryUsers,!groupFilter&&!modelFilter,userFilter));
   renderRecent(rc);
   renderModelChart();
   renderUserCostChart();
@@ -602,6 +620,37 @@ function renderKPI(d){
   document.getElementById('kpi-users').textContent=d.active_users;
 }
 
+function collapseUsageUsers(rows){
+  const byKey=new Map();
+  (rows||[]).forEach(u=>{
+    const key=u.user_id||u.username;
+    const existing=byKey.get(key);
+    if(!existing){byKey.set(key,Object.assign({},u,{usernames:[u.username],tags:Object.assign({},u.tags||{})}));return;}
+    ['requests','prompt_tokens','completion_tokens','total_tokens','cost_usd','saved_usd'].forEach(k=>{existing[k]=(existing[k]||0)+(u[k]||0)});
+    if(!existing.display_name)existing.display_name=u.display_name;
+    if(existing.usernames.indexOf(u.username)<0)existing.usernames.push(u.username);
+    existing.tags=Object.assign(existing.tags||{},u.tags||{});
+  });
+  return Array.from(byKey.values());
+}
+function mergeDirectoryUsers(usage,directory,includeDirectory,selectedUsers){
+  const byEmail=new Map((usage||[]).map(u=>[u.username,u]));
+  if(!includeDirectory)return Array.from(byEmail.values());
+  const selected=new Set(selectedUsers||[]);
+  (directory||[]).forEach(d=>{
+    if(!d.username)return;
+    if(selected.size&&!selected.has(d.username))return;
+    const existing=Array.from(byEmail.values()).find(function(u){return (d.user_id&&u.user_id===d.user_id)||u.username===d.username});
+    if(existing){
+      existing.user_id=d.user_id||existing.user_id;
+      existing.tags=Object.assign({},d.tags||{},existing.tags||{});
+    }else{
+      byEmail.set(d.user_id||d.username,Object.assign({requests:0,prompt_tokens:0,completion_tokens:0,total_tokens:0,cost_usd:0,saved_usd:0,group_name:''},d));
+    }
+  });
+  return Array.from(byEmail.values());
+}
+
 function renderGroupFilterBtns(data){}
 
 const COLS=[
@@ -618,6 +667,7 @@ const COLS=[
 let expandedUser='';
 
 function renderUsers(data){
+  renderedUsers=data;
   const thead=document.getElementById('users-thead');
   thead.innerHTML='<th style="width:30px;cursor:default"></th>'+COLS.map(c=>{
     let cls='';
@@ -631,10 +681,8 @@ function renderUsers(data){
     let cls='clickable';
     if(i<5&&len>10)cls+=' top5';
     if(i>=len-5&&len>10)cls+=' bottom5';
-    const isExpanded=expandedUser===u.username;
-    const arrow=isExpanded?'&#9660;':'&#9654;';
-    let row=`<tr class="${cls}" onclick="toggleExpand('${u.username}')">
-      <td style="color:var(--text2);font-size:10px">${arrow}</td>
+    let row=`<tr class="${cls}" tabindex="0" onclick="openUserDetailsByIndex(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openUserDetailsByIndex(${i})}">
+      <td style="color:var(--text2);font-size:10px">&#9654;</td>
       <td>${userCell(u.username,u.display_name,u.tags)}</td>
       <td>${fmtGroup(u.group_name)}</td>
       <td class="num">${fmtN(u.requests)}</td>
@@ -645,11 +693,40 @@ function renderUsers(data){
       <td class="num">${fmtC(u.saved_usd||0)}</td>
       ${isSuperAdmin?`<td><a href="/admin/impersonate?as=${encodeURIComponent(u.username)}" onclick="event.stopPropagation()" title="Open this user's personal view" style="color:var(--blue);font-size:11px;text-decoration:none;white-space:nowrap">view as &#8594;</a></td>`:''}
     </tr>`;
-    if(isExpanded)row+=`<tr id="expand-${u.username}"><td colspan="${isSuperAdmin?10:9}" style="padding:0"><div class="expand-loading" id="expand-content-${u.username}">Loading...</div></td></tr>`;
     return row;
   }).join('');
 
-  if(expandedUser)loadUserModels(expandedUser);
+}
+
+function openUserDetailsByIndex(index){
+  const user=renderedUsers[index];
+  if(!user)return;
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const tags=user.tags||{};
+  const rows=[];
+  if(user.user_id)rows.push(['RH UUID',user.user_id]);
+  Object.keys(tags).sort().forEach(key=>rows.push([key,typeof tags[key]==='object'?JSON.stringify(tags[key]):tags[key]]));
+  rows.push(['Requests',fmtN(user.requests||0)],['Total tokens',fmtN(user.total_tokens||0)],['Cost',fmtC(user.cost_usd||0)]);
+  document.getElementById('user-detail-title').innerHTML=countryFlag(tags.country)+esc(user.display_name||user.username||'User');
+  document.getElementById('user-detail-body').innerHTML='<div class="user-detail-grid">'+rows.map(r=>'<div class="user-detail-key">'+esc(r[0])+'</div><div class="user-detail-value">'+esc(r[1])+'</div>').join('')+'</div>';
+  document.getElementById('user-detail-models').innerHTML='<div class="expand-loading">Loading model usage…</div>';
+  document.getElementById('user-detail-ov').classList.add('show');
+  loadUserDetailModels(user);
+}
+function closeUserDetails(){document.getElementById('user-detail-ov').classList.remove('show')}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeUserDetails()});
+async function loadUserDetailModels(user){
+  try{
+    let modelRange=range;
+    if(modelRange==='custom'&&customFrom&&customTo)modelRange='custom&from='+encodeURIComponent(customFrom)+'&to='+encodeURIComponent(customTo);
+    const gf=groupFilter?'&group='+encodeURIComponent(groupFilter):'';
+    const mf=modelFilter?'&model='+encodeURIComponent(modelFilter):'';
+    const usernames=(user.usernames&&user.usernames.length?user.usernames:[user.username]).join(',');
+    const models=await api('/api/v1/dashboard/models?range='+modelRange+gf+mf+'&user='+encodeURIComponent(usernames));
+    const body=document.getElementById('user-detail-models');
+    if(!models.length){body.innerHTML='<div class="expand-loading">No model usage in this period.</div>';return;}
+    body.innerHTML='<h3 style="font-size:13px;margin-bottom:8px">Model usage</h3><table><thead><tr><th>Model</th><th>Requests</th><th>Total</th><th>Cost</th></tr></thead><tbody>'+models.map(m=>'<tr><td>'+String(m.model||'—').replace(/[&<>]/g,'')+'</td><td>'+fmtN(m.requests)+'</td><td>'+fmtN(m.total_tokens)+'</td><td>'+fmtC(m.cost_usd)+'</td></tr>').join('')+'</tbody></table>';
+  }catch(e){document.getElementById('user-detail-models').innerHTML='<div class="expand-loading">Model usage unavailable.</div>'}
 }
 
 async function toggleExpand(username){

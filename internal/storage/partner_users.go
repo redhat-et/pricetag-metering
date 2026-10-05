@@ -26,6 +26,12 @@ var (
 )
 
 const (
+	PartnerRoleUser       = "user"
+	PartnerRoleAdmin      = "admin"
+	PartnerRoleSuperAdmin = "super_admin"
+)
+
+const (
 	partnerUserMaxTags      = 100
 	partnerUserMaxTagValue  = 2048
 	partnerUserMaxListLimit = 100
@@ -40,12 +46,16 @@ var (
 // attributes live in Tags; UserID is the stable external UUID and is not the
 // MaaS username or a MaaS API-key UUID.
 type PartnerUser struct {
-	UserID               string         `json:"user_id"`
-	Tags                 map[string]any `json:"tags"`
-	Active               bool           `json:"active"`
-	KeyRevocationPending bool           `json:"key_revocation_pending,omitempty"`
-	CreatedAt            time.Time      `json:"created_at"`
-	UpdatedAt            time.Time      `json:"updated_at"`
+	UserID string         `json:"user_id"`
+	Tags   map[string]any `json:"tags"`
+	// Operator-only fields are intentionally excluded from the existing partner
+	// API response contract; dashboard/admin DTOs expose them separately.
+	Role                 string    `json:"-"`
+	ManagerUserID        *string   `json:"-"`
+	Active               bool      `json:"active"`
+	KeyRevocationPending bool      `json:"key_revocation_pending,omitempty"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 type PartnerUserPage struct {
@@ -75,6 +85,8 @@ func (s *Store) migratePartnerUsers(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS partner_users (
 			user_id UUID PRIMARY KEY,
 			tags JSONB NOT NULL CHECK (jsonb_typeof(tags) = 'object'),
+			role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin', 'super_admin')),
+			manager_user_id UUID REFERENCES partner_users(user_id) ON DELETE SET NULL,
 			active BOOLEAN NOT NULL DEFAULT TRUE,
 			key_revocation_pending BOOLEAN NOT NULL DEFAULT FALSE,
 			created_by TEXT NOT NULL,
@@ -83,6 +95,9 @@ func (s *Store) migratePartnerUsers(ctx context.Context) error {
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			revoked_at TIMESTAMPTZ
 		)`,
+		`ALTER TABLE partner_users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`,
+		`ALTER TABLE partner_users ADD COLUMN IF NOT EXISTS manager_user_id UUID REFERENCES partner_users(user_id) ON DELETE SET NULL`,
+		`CREATE INDEX IF NOT EXISTS partner_users_manager_idx ON partner_users (manager_user_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS partner_users_email_unique ON partner_users (LOWER(tags->>'email'))`,
 		`CREATE INDEX IF NOT EXISTS partner_users_tags_gin ON partner_users USING GIN (tags jsonb_path_ops)`,
 		`CREATE TABLE IF NOT EXISTS partner_user_logins (
@@ -194,7 +209,7 @@ func normalizePartnerUserTags(tags map[string]any) (map[string]any, string, erro
 func scanPartnerUser(row interface{ Scan(...any) error }) (PartnerUser, error) {
 	var user PartnerUser
 	var tagsJSON []byte
-	if err := row.Scan(&user.UserID, &tagsJSON, &user.Active, &user.KeyRevocationPending, &user.CreatedAt, &user.UpdatedAt); err != nil {
+	if err := row.Scan(&user.UserID, &tagsJSON, &user.Role, &user.ManagerUserID, &user.Active, &user.KeyRevocationPending, &user.CreatedAt, &user.UpdatedAt); err != nil {
 		return PartnerUser{}, err
 	}
 	if err := json.Unmarshal(tagsJSON, &user.Tags); err != nil {
@@ -203,7 +218,7 @@ func scanPartnerUser(row interface{ Scan(...any) error }) (PartnerUser, error) {
 	return user, nil
 }
 
-const partnerUserSelect = `SELECT p.user_id::text, p.tags, p.active, p.key_revocation_pending, p.created_at, p.updated_at FROM partner_users p`
+const partnerUserSelect = `SELECT p.user_id::text, p.tags, p.role, p.manager_user_id::text, p.active, p.key_revocation_pending, p.created_at, p.updated_at FROM partner_users p`
 
 func (s *Store) GetPartnerUser(ctx context.Context, userID string) (PartnerUser, error) {
 	id, err := normalizePartnerUserID(userID)
@@ -215,6 +230,96 @@ func (s *Store) GetPartnerUser(ctx context.Context, userID string) (PartnerUser,
 		return PartnerUser{}, ErrPartnerUserNotFound
 	}
 	return user, err
+}
+
+func (s *Store) GetPartnerRoleByUsername(ctx context.Context, username string) (string, error) {
+	var role string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT p.role
+		FROM partner_user_logins l
+		JOIN partner_users p ON p.user_id = l.user_id
+		WHERE l.username = $1 AND l.is_current AND p.active`, username).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PartnerRoleUser, nil
+	}
+	return role, err
+}
+
+func (s *Store) ListAllPartnerUsers(ctx context.Context) ([]PartnerUser, error) {
+	rows, err := s.db.QueryContext(ctx, partnerUserSelect+` WHERE p.active ORDER BY p.created_at, p.user_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []PartnerUser
+	for rows.Next() {
+		user, err := scanPartnerUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
+}
+
+// UpdatePartnerUserAccess changes operator-controlled authorization fields.
+// It is intentionally separate from Atlas profile PATCH so external callers
+// cannot grant themselves dashboard roles.
+func (s *Store) UpdatePartnerUserAccess(ctx context.Context, actor, userID, role string, managerUserID *string) (PartnerUser, error) {
+	id, err := normalizePartnerUserID(userID)
+	if err != nil {
+		return PartnerUser{}, err
+	}
+	if role != PartnerRoleUser && role != PartnerRoleAdmin && role != PartnerRoleSuperAdmin {
+		return PartnerUser{}, fmt.Errorf("%w: invalid role", ErrInvalidPartnerUser)
+	}
+	var manager *string
+	var managerTag *string
+	if managerUserID != nil && strings.TrimSpace(*managerUserID) != "" {
+		clean, err := normalizePartnerUserID(*managerUserID)
+		if err != nil || clean == id {
+			return PartnerUser{}, fmt.Errorf("%w: manager_user_id must be another valid user", ErrInvalidPartnerUser)
+		}
+		managerTag = &clean
+		manager = &clean
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return PartnerUser{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM partner_users WHERE user_id=$1)`, id).Scan(&exists); err != nil {
+		return PartnerUser{}, err
+	}
+	if !exists {
+		return PartnerUser{}, ErrPartnerUserNotFound
+	}
+	if manager != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM partner_users WHERE user_id=$1 AND active)`, *manager).Scan(&exists); err != nil {
+			return PartnerUser{}, err
+		}
+		if !exists {
+			return PartnerUser{}, ErrPartnerUserNotFound
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE partner_users
+		SET role=$2,
+		    manager_user_id=$3,
+		    tags=CASE WHEN $4::text IS NULL THEN tags - 'manager_uuid'
+	              ELSE jsonb_set(tags, '{manager_uuid}', to_jsonb($4::text), true) END,
+		    updated_by=$5, updated_at=NOW()
+		WHERE user_id=$1`, id, role, manager, managerTag, actor); err != nil {
+		return PartnerUser{}, err
+	}
+	if err := s.auditTx(ctx, tx, actor, "partner_user.access.update", id, map[string]any{"role": role, "manager_user_id": manager}); err != nil {
+		return PartnerUser{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return PartnerUser{}, err
+	}
+	return s.GetPartnerUser(ctx, id)
 }
 
 // GetActivePartnerUser is the pre-mint check. It deliberately takes no lock:
@@ -493,7 +598,8 @@ func (s *Store) CreatePartnerUser(ctx context.Context, actor, userID string, tag
 		return PartnerUser{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO partner_users (user_id,tags,created_by,updated_by) VALUES ($1,$2,$3,$3)`, id, string(tagsJSON), actor); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO partner_users (user_id,tags,manager_user_id,created_by,updated_by)
+		VALUES ($1,$2,(SELECT p.user_id FROM partner_users p WHERE p.user_id = NULLIF($2::jsonb->>'manager_uuid','')::uuid),$3,$3)`, id, string(tagsJSON), actor); err != nil {
 		if isUniqueViolation(err) {
 			return PartnerUser{}, ErrPartnerUserConflict
 		}
@@ -610,7 +716,10 @@ func (s *Store) updatePartnerUser(ctx context.Context, actor, userID string, tag
 			}
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE partner_users SET tags=$2,updated_by=$3,updated_at=NOW() WHERE user_id=$1`, id, string(tagsJSON), actor); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE partner_users SET tags=$2,
+			manager_user_id=(SELECT p.user_id FROM partner_users p WHERE p.user_id = NULLIF($2::jsonb->>'manager_uuid','')::uuid),
+			updated_by=$3,updated_at=NOW() WHERE user_id=$1`, id, string(tagsJSON), actor); err != nil {
 		if isUniqueViolation(err) {
 			return PartnerUser{}, ErrPartnerUserConflict
 		}

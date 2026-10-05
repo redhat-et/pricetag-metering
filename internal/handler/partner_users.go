@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/redhat-et/pricetag-metering/internal/maasapi"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
@@ -25,17 +26,38 @@ const partnerMintConcurrency = 4
 var partnerActorPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,31}$`)
 
 type PartnerUsersHandler struct {
-	store    *storage.Store
-	maas     *maasapi.Client
-	keyGroup string
-	mints    chan struct{}
+	store      *storage.Store
+	maas       *maasapi.Client
+	keyGroup   string
+	mints      chan struct{}
+	userHeader string
+}
+
+type adminPartnerUserResponse struct {
+	UserID        string         `json:"user_id"`
+	Tags          map[string]any `json:"tags"`
+	Role          string         `json:"role"`
+	ManagerUserID *string        `json:"manager_user_id,omitempty"`
+	Active        bool           `json:"active"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+}
+
+func adminPartnerUser(user storage.PartnerUser) adminPartnerUserResponse {
+	return adminPartnerUserResponse{UserID: user.UserID, Tags: storage.DashboardTags(user.Tags), Role: user.Role, ManagerUserID: user.ManagerUserID, Active: user.Active, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt}
 }
 
 // NewPartnerUsersHandler wires the partner API. keyGroup is the MaaS group
 // presented on every key operation; when empty, key endpoints answer 503 so a
 // deployment cannot mint under an unintended group.
 func NewPartnerUsersHandler(store *storage.Store, maas *maasapi.Client, keyGroup string) *PartnerUsersHandler {
-	return &PartnerUsersHandler{store: store, maas: maas, keyGroup: strings.TrimSpace(keyGroup), mints: make(chan struct{}, partnerMintConcurrency)}
+	return &PartnerUsersHandler{store: store, maas: maas, keyGroup: strings.TrimSpace(keyGroup), userHeader: "X-Forwarded-User", mints: make(chan struct{}, partnerMintConcurrency)}
+}
+
+func (h *PartnerUsersHandler) SetUserHeader(header string) {
+	if strings.TrimSpace(header) != "" {
+		h.userHeader = header
+	}
 }
 
 // actor returns the audit identity for a request: the validated
@@ -45,6 +67,16 @@ func partnerActor(r *http.Request) string {
 		return "partner-m2m:" + v
 	}
 	return "partner-m2m"
+}
+
+func (h *PartnerUsersHandler) authenticatedActor(r *http.Request) string {
+	if user := strings.TrimSpace(r.Header.Get(realUserHeader)); user != "" {
+		return user
+	}
+	if user := strings.TrimSpace(r.Header.Get(h.userHeader)); user != "" {
+		return user
+	}
+	return ""
 }
 
 func (h *PartnerUsersHandler) requireKeyGroup(w http.ResponseWriter) bool {
@@ -163,6 +195,58 @@ func (h *PartnerUsersHandler) HandleUsers(w http.ResponseWriter, r *http.Request
 		w.Header().Set("Allow", "GET, PUT, PATCH, DELETE")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// HandleAdminAccess updates operator-controlled role and manager fields. The
+// route is mounted behind RequireSuperAdmin; Atlas never reaches it.
+func (h *PartnerUsersHandler) HandleAdminAccess(w http.ResponseWriter, r *http.Request) {
+	const prefix = "/api/v1/admin/partner-users/"
+	userID := strings.TrimPrefix(r.URL.Path, prefix)
+	if userID == r.URL.Path || userID == "" || strings.Contains(userID, "/") {
+		http.Error(w, "user id is required", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPatch {
+		w.Header().Set("Allow", http.MethodPatch)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Role          string  `json:"role"`
+		ManagerUserID *string `json:"manager_user_id"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	actor := h.authenticatedActor(r)
+	if actor == "" {
+		http.Error(w, "authenticated administrator identity required", http.StatusUnauthorized)
+		return
+	}
+	updated, err := h.store.UpdatePartnerUserAccess(r.Context(), actor, userID, body.Role, body.ManagerUserID)
+	if err != nil {
+		h.userError(w, r, err)
+		return
+	}
+	writeJSON(w, adminPartnerUser(updated))
+}
+
+func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	users, err := h.store.ListAllPartnerUsers(r.Context())
+	if err != nil {
+		http.Error(w, "partner user list failed", http.StatusInternalServerError)
+		return
+	}
+	result := make([]adminPartnerUserResponse, 0, len(users))
+	for _, user := range users {
+		result = append(result, adminPartnerUser(user))
+	}
+	writeJSON(w, result)
 }
 
 func (h *PartnerUsersHandler) handleCollection(w http.ResponseWriter, r *http.Request) {

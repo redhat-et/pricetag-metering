@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
 // Key endpoints fail closed when no MaaS group is configured, before any
@@ -39,6 +41,26 @@ func TestPartnerActorHeader(t *testing.T) {
 		if got := partnerActor(r); got != want {
 			t.Fatalf("partnerActor(%q) = %q, want %q", header, got, want)
 		}
+	}
+}
+
+func TestAuthenticatedActorPrefersSessionIdentity(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPatch, "/", nil)
+	r.Header.Set("X-Forwarded-User", "admin@example.com")
+	r.Header.Set("X-Partner-Client", "atlas")
+	h := NewPartnerUsersHandler(nil, nil, "")
+	if got := h.authenticatedActor(r); got != "admin@example.com" {
+		t.Fatalf("authenticatedActor = %q, want dashboard identity", got)
+	}
+}
+
+func TestAdminPartnerUserResponseAllowlistsTags(t *testing.T) {
+	got := adminPartnerUser(storage.PartnerUser{
+		UserID: "u", Role: storage.PartnerRoleAdmin,
+		Tags: map[string]any{"email": "a@example.com", "country": "US", "internal_secret": "hidden"},
+	})
+	if got.Role != storage.PartnerRoleAdmin || got.Tags["email"] != "a@example.com" || got.Tags["internal_secret"] != nil {
+		t.Fatalf("admin partner response leaked or lost fields: %#v", got)
 	}
 }
 

@@ -22,6 +22,7 @@
   --cyn:#38d4c2;
 }
 body{background:var(--bg);color:var(--t);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;line-height:1.5}
+.country-flag{display:inline-block;margin-right:6px;font-size:15px;vertical-align:-1px}
 .pg{max-width:1800px;margin:0 auto;padding:20px 40px}
 
 /* Header */
@@ -685,6 +686,11 @@ td .tag{white-space:nowrap}
       <div class="loading"><div class="spinner"></div>Loading users...</div>
     </div>
   </div>
+  <div class="card" style="margin-top:16px">
+  <div class="card-hdr"><div><span class="card-title">Partner / Atlas Users</span><span class="card-count" id="partner-users-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPartnerUsers()">Refresh</button></div>
+  <div class="ts" style="margin-bottom:10px">Partner identity records used by Atlas. Role changes are restricted to super-admins; profile metadata remains separate from the legacy roster projection.</div>
+  <div id="partner-users-list"><div class="loading"><div class="spinner"></div>Loading partner users...</div></div>
+  </div>
 </div>
 
 <!-- ============ TAB: Platform ============ -->
@@ -915,6 +921,12 @@ function esc(s) {
   escDiv.textContent = String(s);
   return escDiv.innerHTML;
 }
+function countryFlag(code) {
+  var normalized = String(code || '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(normalized)) return '';
+  return '<span class="country-flag" title="Country: ' + normalized + '">' +
+    Array.from(normalized).map(function(c) { return String.fromCodePoint(127397 + c.charCodeAt(0)); }).join('') + '</span>';
+}
 
 /* ================================================================
    Fetch helpers
@@ -982,6 +994,7 @@ function refreshTab(name, manual) {
     loadSubscriptions();
   } else if (name === 'people') {
     loadPeople();
+    loadPartnerUsers();
     loadValidGroups();
     loadRoles();
   } else if (name === 'quotas') {
@@ -2078,6 +2091,48 @@ function loadPeople(cb) {
     document.getElementById('people-list').innerHTML = '<div class="err-msg">' + esc(e.message) + '</div>';
     if (cb) cb();
   });
+}
+var partnerUsersAll = [];
+function loadPartnerUsers() {
+  fetchJSON('/api/v1/admin/partner-users').then(function(users) {
+    partnerUsersAll = Array.isArray(users) ? users : [];
+    document.getElementById('partner-users-count').textContent = '(' + partnerUsersAll.length + ')';
+    renderPartnerUsers();
+  }).catch(function(e) {
+    document.getElementById('partner-users-list').innerHTML = '<div class="err-msg">' + esc(e.message) + '</div>';
+  });
+}
+function renderPartnerUsers() {
+  var byId = {};
+  partnerUsersAll.forEach(function(u) { byId[u.user_id] = u; });
+  var html = '<table><thead><tr><th>User</th><th>Country</th><th>Manager</th><th>Role</th><th>Status</th></tr></thead><tbody>';
+  partnerUsersAll.forEach(function(u) {
+    var t = u.tags || {};
+    var name = ((t.first_name || '') + ' ' + (t.last_name || '')).trim() || t.email || u.user_id;
+    var managers = '<option value="">— none —</option>' + partnerUsersAll.filter(function(m) { return m.user_id !== u.user_id; }).map(function(m) {
+      var mt = m.tags || {}, mn = ((mt.first_name || '') + ' ' + (mt.last_name || '')).trim() || mt.email || m.user_id;
+      return '<option value="' + esc(m.user_id) + '"' + (u.manager_user_id === m.user_id ? ' selected' : '') + '>' + esc(mn) + '</option>';
+    }).join('');
+    html += '<tr data-user-id="' + esc(u.user_id) + '"><td><b>' + esc(name) + '</b><div class="ts">' + esc(t.email || '') + '<br>' + esc(u.user_id) + '</div></td>' +
+      '<td>' + countryFlag(t.country) + esc(t.country || '—') + '</td>' +
+      '<td><select class="tbl-input partner-manager" onchange="updatePartnerAccess(this)">' + managers + '</select></td>' +
+      '<td><select class="tbl-input partner-role" onchange="updatePartnerAccess(this)">' +
+      ['user','admin','super_admin'].map(function(role) { return '<option value="' + role + '"' + (u.role === role ? ' selected' : '') + '>' + role + '</option>'; }).join('') +
+      '</select></td><td>' + (u.active ? 'active' : 'inactive') + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('partner-users-list').innerHTML = html;
+}
+function updatePartnerAccess(select) {
+  var row = select.closest('tr');
+  var userID = row.getAttribute('data-user-id');
+  var manager = row.querySelector('.partner-manager');
+  var role = row.querySelector('.partner-role');
+  var controls = row.querySelectorAll('select');
+  controls.forEach(function(control) { control.disabled = true; });
+  updateJSON('/api/v1/admin/partner-users/' + encodeURIComponent(userID), 'PATCH', {role: role.value, manager_user_id: manager.value || null})
+    .then(function() { showToast('Partner access updated', 'success'); loadPartnerUsers(); })
+    .catch(function(e) { showToast('Failed to update partner access: ' + e.message, 'error'); loadPartnerUsers(); });
 }
 function subtreeSet(rootSlug) {
   var byMgr = {};
