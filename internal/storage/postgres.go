@@ -501,6 +501,17 @@ type UserSummary struct {
 	SavedUSD float64 `json:"saved_usd"`
 }
 
+// DashboardTags is the intentionally small metadata surface exposed to
+// administrators; raw partner tags may contain future identity/system data.
+func DashboardTags(tags map[string]any) map[string]any {
+	allowed := map[string]bool{"email": true, "first_name": true, "last_name": true, "country": true, "rhat_uuid": true, "kerberos_id": true, "manager_uuid": true, "ai_usage_guidelines_acknowledged": true, "works_council_restricted": true}
+	out := make(map[string]any)
+	for key, value := range tags {
+		if allowed[key] { out[key] = value }
+	}
+	return out
+}
+
 type ModelSummary struct {
 	Model               string  `json:"model"`
 	Provider            string  `json:"provider"`
@@ -688,7 +699,7 @@ func (s *Store) enrichDashboardUsers(ctx context.Context, users []UserSummary) e
 		SELECT l.username, p.user_id::text, p.tags
 		FROM partner_user_logins l
 		JOIN partner_users p ON p.user_id = l.user_id
-		WHERE l.is_current AND l.username = ANY($1)`, pq.Array(usernames))
+		WHERE l.username = ANY($1)`, pq.Array(usernames))
 	if err != nil {
 		return err
 	}
@@ -718,7 +729,7 @@ func (s *Store) enrichDashboardUsers(ctx context.Context, users []UserSummary) e
 	for i := range users {
 		if meta, ok := metadata[users[i].Username]; ok {
 			users[i].UserID = meta.id
-			users[i].Tags = meta.tags
+			users[i].Tags = DashboardTags(meta.tags)
 		}
 	}
 	return nil
@@ -753,7 +764,7 @@ func (s *Store) ListDashboardDirectoryUsers(ctx context.Context) ([]UserSummary,
 		result = append(result, UserSummary{
 			Username:    email,
 			UserID:      id,
-			Tags:        tags,
+			Tags:        DashboardTags(tags),
 			DisplayName: strings.TrimSpace(first + " " + last),
 		})
 	}

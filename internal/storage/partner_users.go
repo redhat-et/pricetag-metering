@@ -274,11 +274,13 @@ func (s *Store) UpdatePartnerUserAccess(ctx context.Context, actor, userID, role
 		return PartnerUser{}, fmt.Errorf("%w: invalid role", ErrInvalidPartnerUser)
 	}
 	var manager *string
+	var managerTag *string
 	if managerUserID != nil && strings.TrimSpace(*managerUserID) != "" {
 		clean, err := normalizePartnerUserID(*managerUserID)
 		if err != nil || clean == id {
 			return PartnerUser{}, fmt.Errorf("%w: manager_user_id must be another valid user", ErrInvalidPartnerUser)
 		}
+		managerTag = &clean
 		manager = &clean
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -298,17 +300,17 @@ func (s *Store) UpdatePartnerUserAccess(ctx context.Context, actor, userID, role
 			return PartnerUser{}, err
 		}
 		if !exists {
-			return PartnerUser{}, ErrPartnerUserNotFound
+			manager = nil
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE partner_users
 		SET role=$2,
 		    manager_user_id=$3,
-		    tags=CASE WHEN $3::uuid IS NULL THEN tags - 'manager_uuid'
-		              ELSE jsonb_set(tags, '{manager_uuid}', to_jsonb($3::text), true) END,
-		    updated_by=$4, updated_at=NOW()
-		WHERE user_id=$1`, id, role, manager, actor); err != nil {
+		    tags=CASE WHEN $4::text IS NULL THEN tags - 'manager_uuid'
+	              ELSE jsonb_set(tags, '{manager_uuid}', to_jsonb($4::text), true) END,
+		    updated_by=$5, updated_at=NOW()
+		WHERE user_id=$1`, id, role, manager, managerTag, actor); err != nil {
 		return PartnerUser{}, err
 	}
 	if err := s.auditTx(ctx, tx, actor, "partner_user.access.update", id, map[string]any{"role": role, "manager_user_id": manager}); err != nil {
@@ -596,7 +598,8 @@ func (s *Store) CreatePartnerUser(ctx context.Context, actor, userID string, tag
 		return PartnerUser{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO partner_users (user_id,tags,created_by,updated_by) VALUES ($1,$2,$3,$3)`, id, string(tagsJSON), actor); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO partner_users (user_id,tags,manager_user_id,created_by,updated_by)
+		VALUES ($1,$2,(SELECT p.user_id FROM partner_users p WHERE p.user_id = NULLIF($2::jsonb->>'manager_uuid','')::uuid),$3,$3)`, id, string(tagsJSON), actor); err != nil {
 		if isUniqueViolation(err) {
 			return PartnerUser{}, ErrPartnerUserConflict
 		}
@@ -713,7 +716,10 @@ func (s *Store) updatePartnerUser(ctx context.Context, actor, userID string, tag
 			}
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE partner_users SET tags=$2,updated_by=$3,updated_at=NOW() WHERE user_id=$1`, id, string(tagsJSON), actor); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE partner_users SET tags=$2,
+			manager_user_id=(SELECT p.user_id FROM partner_users p WHERE p.user_id = NULLIF($2::jsonb->>'manager_uuid','')::uuid),
+			updated_by=$3,updated_at=NOW() WHERE user_id=$1`, id, string(tagsJSON), actor); err != nil {
 		if isUniqueViolation(err) {
 			return PartnerUser{}, ErrPartnerUserConflict
 		}

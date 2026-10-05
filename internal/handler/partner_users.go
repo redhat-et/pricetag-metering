@@ -43,7 +43,7 @@ type adminPartnerUserResponse struct {
 }
 
 func adminPartnerUser(user storage.PartnerUser) adminPartnerUserResponse {
-	return adminPartnerUserResponse{UserID: user.UserID, Tags: user.Tags, Role: user.Role, ManagerUserID: user.ManagerUserID, Active: user.Active, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt}
+	return adminPartnerUserResponse{UserID: user.UserID, Tags: storage.DashboardTags(user.Tags), Role: user.Role, ManagerUserID: user.ManagerUserID, Active: user.Active, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt}
 }
 
 // NewPartnerUsersHandler wires the partner API. keyGroup is the MaaS group
@@ -60,6 +60,13 @@ func partnerActor(r *http.Request) string {
 		return "partner-m2m:" + v
 	}
 	return "partner-m2m"
+}
+
+func authenticatedActor(r *http.Request) string {
+	if user := strings.TrimSpace(r.Header.Get("X-Forwarded-User")); user != "" {
+		return user
+	}
+	return partnerActor(r)
 }
 
 func (h *PartnerUsersHandler) requireKeyGroup(w http.ResponseWriter) bool {
@@ -201,7 +208,7 @@ func (h *PartnerUsersHandler) HandleAdminAccess(w http.ResponseWriter, r *http.R
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	updated, err := h.store.UpdatePartnerUserAccess(r.Context(), partnerActor(r), userID, body.Role, body.ManagerUserID)
+	updated, err := h.store.UpdatePartnerUserAccess(r.Context(), authenticatedActor(r), userID, body.Role, body.ManagerUserID)
 	if err != nil {
 		h.userError(w, r, err)
 		return

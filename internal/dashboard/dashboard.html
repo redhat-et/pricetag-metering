@@ -380,6 +380,7 @@ tr.clickable{cursor:pointer}
   <section class="user-detail-card" role="dialog" aria-modal="true" aria-labelledby="user-detail-title">
     <div class="user-detail-head"><h2 id="user-detail-title">User details</h2><button class="user-detail-close" onclick="closeUserDetails()" aria-label="Close">×</button></div>
     <div class="user-detail-body" id="user-detail-body"></div>
+    <div class="user-detail-body" id="user-detail-models"></div>
   </section>
 </div>
 
@@ -541,7 +542,7 @@ async function refresh(force){
   renderKPI(ov);
   renderGroupFilterBtns(gr);
   populateFilterDropdowns(modelCat, rosterCat);
-  renderUsers(mergeDirectoryUsers(us,directoryUsers));
+  renderUsers(mergeDirectoryUsers(us,directoryUsers,!groupFilter&&!modelFilter,userFilter));
   renderRecent(rc);
   renderModelChart();
   renderUserCostChart();
@@ -619,10 +620,13 @@ function renderKPI(d){
   document.getElementById('kpi-users').textContent=d.active_users;
 }
 
-function mergeDirectoryUsers(usage,directory){
+function mergeDirectoryUsers(usage,directory,includeDirectory,selectedUsers){
   const byEmail=new Map((usage||[]).map(u=>[u.username,u]));
+  if(!includeDirectory)return Array.from(byEmail.values());
+  const selected=new Set(selectedUsers||[]);
   (directory||[]).forEach(d=>{
     if(!d.username)return;
+    if(selected.size&&!selected.has(d.username))return;
     const existing=byEmail.get(d.username);
     if(existing){
       existing.user_id=d.user_id||existing.user_id;
@@ -692,10 +696,20 @@ function openUserDetailsByIndex(index){
   rows.push(['Requests',fmtN(user.requests||0)],['Total tokens',fmtN(user.total_tokens||0)],['Cost',fmtC(user.cost_usd||0)]);
   document.getElementById('user-detail-title').innerHTML=countryFlag(tags.country)+esc(user.display_name||user.username||'User');
   document.getElementById('user-detail-body').innerHTML='<div class="user-detail-grid">'+rows.map(r=>'<div class="user-detail-key">'+esc(r[0])+'</div><div class="user-detail-value">'+esc(r[1])+'</div>').join('')+'</div>';
+  document.getElementById('user-detail-models').innerHTML='<div class="expand-loading">Loading model usage…</div>';
   document.getElementById('user-detail-ov').classList.add('show');
+  loadUserDetailModels(user.username);
 }
 function closeUserDetails(){document.getElementById('user-detail-ov').classList.remove('show')}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeUserDetails()});
+async function loadUserDetailModels(username){
+  try{
+    const models=await api('/api/v1/dashboard/models?range='+encodeURIComponent(range)+'&user='+encodeURIComponent(username));
+    const body=document.getElementById('user-detail-models');
+    if(!models.length){body.innerHTML='<div class="expand-loading">No model usage in this period.</div>';return;}
+    body.innerHTML='<h3 style="font-size:13px;margin-bottom:8px">Model usage</h3><table><thead><tr><th>Model</th><th>Requests</th><th>Total</th><th>Cost</th></tr></thead><tbody>'+models.map(m=>'<tr><td>'+String(m.model||'—').replace(/[&<>]/g,'')+'</td><td>'+fmtN(m.requests)+'</td><td>'+fmtN(m.total_tokens)+'</td><td>'+fmtC(m.cost_usd)+'</td></tr>').join('')+'</tbody></table>';
+  }catch(e){document.getElementById('user-detail-models').innerHTML='<div class="expand-loading">Model usage unavailable.</div>'}
+}
 
 async function toggleExpand(username){
   if(expandedUser===username){expandedUser='';refresh();return;}

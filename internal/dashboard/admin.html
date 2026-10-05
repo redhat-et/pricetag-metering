@@ -995,6 +995,7 @@ function refreshTab(name, manual) {
     loadSubscriptions();
   } else if (name === 'people') {
     loadPeople();
+    loadPartnerUsers();
     loadValidGroups();
     loadRoles();
   } else if (name === 'quotas') {
@@ -2486,7 +2487,6 @@ function openAddUserModal() {
 function closeAddUserModal() {
   document.getElementById('addUserModal').classList.remove('open');
   loadPeople();
-  loadPartnerUsers();
 }
 
 function submitAddUser() {
