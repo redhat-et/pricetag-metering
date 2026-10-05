@@ -50,7 +50,7 @@ func openClaimTestStore(t *testing.T) (*storage.Store, context.Context) {
 		t.Fatalf("create test db: %v", err)
 	}
 	admin.Close()
-	store, err := storage.New(replaceDBName(dsn, dbName), 0)
+	store, err := storage.New(replaceDBName(dsn, dbName), 0, storage.PoolConfig{})
 	if err != nil {
 		t.Fatalf("connect fresh db: %v", err)
 	}

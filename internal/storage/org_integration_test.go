@@ -27,7 +27,7 @@ func openTestStore(t *testing.T) (*Store, context.Context) {
 	dbName := fmt.Sprintf("orgtest_%d", time.Now().UnixNano())
 	// Create a throwaway database so tests never see (or pollute) real data.
 	{
-		s, err := New(dsn, 0)
+		s, err := New(dsn, 0, PoolConfig{})
 		if err != nil {
 			t.Fatalf("connect: %v", err)
 		}
@@ -38,13 +38,13 @@ func openTestStore(t *testing.T) (*Store, context.Context) {
 		s.Close()
 	}
 	testDSN := replaceDBName(dsn, dbName)
-	store, err := New(testDSN, 0)
+	store, err := New(testDSN, 0, PoolConfig{})
 	if err != nil {
 		t.Fatalf("connect fresh db: %v", err)
 	}
 	t.Cleanup(func() {
 		store.Close()
-		s, err := New(dsn, 0)
+		s, err := New(dsn, 0, PoolConfig{})
 		if err == nil {
 			s.db.Exec("DROP DATABASE " + dbName) //nolint:errcheck
 			s.Close()

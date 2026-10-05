@@ -295,7 +295,7 @@ func openFreshStore(t *testing.T, dsn string) *storage.Store {
 	if q := strings.Index(rest, "?"); q >= 0 {
 		query = rest[q:]
 	}
-	store, err := storage.New(dsn[:slash+1]+dbName+query, 0)
+	store, err := storage.New(dsn[:slash+1]+dbName+query, 0, storage.PoolConfig{})
 	if err != nil {
 		t.Fatalf("open fresh store: %v", err)
 	}

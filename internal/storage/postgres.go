@@ -98,15 +98,30 @@ type Store struct {
 	servingRollups atomic.Bool
 }
 
-func New(databaseURL string, tokenQuota int64) (*Store, error) {
+// PoolConfig sizes the database connection pools (primary and read
+// replica). Values are applied as-is; zero values leave the database/sql
+// defaults in place.
+type PoolConfig struct {
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+}
+
+func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) {
 	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(14400 * time.Second)
+	if pool.MaxOpenConns > 0 {
+		db.SetMaxOpenConns(pool.MaxOpenConns)
+	}
+	if pool.MaxIdleConns > 0 {
+		db.SetMaxIdleConns(pool.MaxIdleConns)
+	}
+	if pool.ConnMaxLifetime > 0 {
+		db.SetConnMaxLifetime(pool.ConnMaxLifetime)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -143,14 +158,20 @@ func (s *Store) reader() *sql.DB {
 // primary during failover). It pings before accepting — a replica DSN
 // that can't answer is a configuration error, not a reason to refuse to
 // boot, so callers log and continue on the primary.
-func (s *Store) UseReadReplica(databaseURL string) error {
+func (s *Store) UseReadReplica(databaseURL string, pool PoolConfig) error {
 	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
 		return fmt.Errorf("open read replica: %w", err)
 	}
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(14400 * time.Second)
+	if pool.MaxOpenConns > 0 {
+		db.SetMaxOpenConns(pool.MaxOpenConns)
+	}
+	if pool.MaxIdleConns > 0 {
+		db.SetMaxIdleConns(pool.MaxIdleConns)
+	}
+	if pool.ConnMaxLifetime > 0 {
+		db.SetConnMaxLifetime(pool.ConnMaxLifetime)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -29,6 +29,19 @@ type Config struct {
 	// report no access once a user exceeds it.
 	MonthlyTokenQuota float64
 
+	// DBMaxOpenConns caps open connections in each database pool
+	// (primary and read replica). Raised from the previous hardcoded value
+	// so bursts of distinct-user balance checks no longer queue past the
+	// gateway's metering deadline.
+	DBMaxOpenConns int
+
+	// DBMaxIdleConns caps idle connections held open per pool.
+	DBMaxIdleConns int
+
+	// DBConnMaxLifetimeSeconds bounds the lifetime of a pooled
+	// connection, guarding against stale connections.
+	DBConnMaxLifetimeSeconds int
+
 	// EventSource labels ingested events that arrive without a
 	// CloudEvents `source` attribute.
 	EventSource string
@@ -214,13 +227,16 @@ func (k Kubernetes) Enabled() bool {
 // Load resolves configuration from the environment.
 func Load() Config {
 	return Config{
-		DatabaseURL:       os.Getenv("DATABASE_URL"),
-		Port:              envDefault("PORT", "8080"),
-		MonthlyTokenQuota: envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
-		EventSource:       envDefault("EVENT_SOURCE", "ai-gateway"),
-		UserHeader:        envDefault("AUTH_USER_HEADER", "X-Forwarded-User"),
-		GroupsHeader:      envDefault("AUTH_GROUPS_HEADER", "X-Forwarded-Groups"),
-		AdminUsers:        envList("ADMIN_USERS"),
+		DatabaseURL:              os.Getenv("DATABASE_URL"),
+		Port:                     envDefault("PORT", "8080"),
+		MonthlyTokenQuota:        envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
+		DBMaxOpenConns:           envInt("DB_MAX_OPEN_CONNS", 50),
+		DBMaxIdleConns:           envInt("DB_MAX_IDLE_CONNS", 10),
+		DBConnMaxLifetimeSeconds: envInt("DB_CONN_MAX_LIFETIME_SECONDS", 14400),
+		EventSource:              envDefault("EVENT_SOURCE", "ai-gateway"),
+		UserHeader:               envDefault("AUTH_USER_HEADER", "X-Forwarded-User"),
+		GroupsHeader:             envDefault("AUTH_GROUPS_HEADER", "X-Forwarded-Groups"),
+		AdminUsers:               envList("ADMIN_USERS"),
 		// The gateway operators. Set via the SUPERADMIN_USERS deployment
 		// env var (comma/space separated); empty means no one holds the
 		// super-admin surfaces, so the deployment must set it explicitly.

@@ -32,7 +32,11 @@ func main() {
 	// MonthlyTokenQuota is the per-user monthly token budget the entitlement
 	// endpoint reports against. Enforcement of actual traffic belongs in the
 	// gateway (praxis-proxy/ai#121); here it only shapes the reported balance.
-	store, err := storage.New(cfg.DatabaseURL, int64(cfg.MonthlyTokenQuota))
+	store, err := storage.New(cfg.DatabaseURL, int64(cfg.MonthlyTokenQuota), storage.PoolConfig{
+		MaxOpenConns:    cfg.DBMaxOpenConns,
+		MaxIdleConns:    cfg.DBMaxIdleConns,
+		ConnMaxLifetime: time.Duration(cfg.DBConnMaxLifetimeSeconds) * time.Second,
+	})
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
@@ -43,7 +47,11 @@ func main() {
 	// enforcement paths ignore this pool. A replica that can't be pinged
 	// is a loud config error, not a boot failure — reads stay on primary.
 	if cfg.ReadDatabaseURL != "" {
-		if err := store.UseReadReplica(cfg.ReadDatabaseURL); err != nil {
+		if err := store.UseReadReplica(cfg.ReadDatabaseURL, storage.PoolConfig{
+			MaxOpenConns:    cfg.DBMaxOpenConns,
+			MaxIdleConns:    cfg.DBMaxIdleConns,
+			ConnMaxLifetime: time.Duration(cfg.DBConnMaxLifetimeSeconds) * time.Second,
+		}); err != nil {
 			slog.Error("read replica unavailable — all reads stay on the primary", "error", err)
 		} else {
 			slog.Info("read replica enabled for dashboard/report reads")

@@ -72,3 +72,29 @@ func TestPartnerAPIAdditionalSecretsLoadFromEnvironment(t *testing.T) {
 		t.Fatalf("additional partner API secrets loaded incorrectly: usage=%v policy=%v catalog=%v", cfg.UsageReportAPISecrets, cfg.ModelPolicyAPISecrets, cfg.ModelCatalogAPISecrets)
 	}
 }
+
+// DB pool envs control database/sql pool sizing. Unset values must fall
+// back to the defaults that lift metering off the 5s gateway deadline
+// under distinct-user bursts; set values must win.
+func TestDBPoolEnv(t *testing.T) {
+	os.Unsetenv("DB_MAX_OPEN_CONNS")
+	os.Unsetenv("DB_MAX_IDLE_CONNS")
+	os.Unsetenv("DB_CONN_MAX_LIFETIME_SECONDS")
+	cfg := Load()
+	if cfg.DBMaxOpenConns != 50 {
+		t.Errorf("DBMaxOpenConns default = %d, want 50", cfg.DBMaxOpenConns)
+	}
+	if cfg.DBMaxIdleConns != 10 {
+		t.Errorf("DBMaxIdleConns default = %d, want 10", cfg.DBMaxIdleConns)
+	}
+	if cfg.DBConnMaxLifetimeSeconds != 14400 {
+		t.Errorf("DBConnMaxLifetimeSeconds default = %d, want 14400", cfg.DBConnMaxLifetimeSeconds)
+	}
+	t.Setenv("DB_MAX_OPEN_CONNS", "37")
+	t.Setenv("DB_MAX_IDLE_CONNS", "9")
+	t.Setenv("DB_CONN_MAX_LIFETIME_SECONDS", "3600")
+	cfg = Load()
+	if cfg.DBMaxOpenConns != 37 || cfg.DBMaxIdleConns != 9 || cfg.DBConnMaxLifetimeSeconds != 3600 {
+		t.Errorf("DB pool env overrides not honored: %+v", cfg)
+	}
+}

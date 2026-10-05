@@ -40,7 +40,7 @@ func TestReaderSelection(t *testing.T) {
 func TestUseReadReplicaRejectsUnreachable(t *testing.T) {
 	s := &Store{db: openFakePool(t, "primary")}
 	// A refused TCP connection fails the ping promptly.
-	err := s.UseReadReplica("postgres://u:p@127.0.0.1:1/nope?sslmode=disable")
+	err := s.UseReadReplica("postgres://u:p@127.0.0.1:1/nope?sslmode=disable", PoolConfig{})
 	if err == nil {
 		t.Fatal("expected ping failure for unreachable replica DSN")
 	}
