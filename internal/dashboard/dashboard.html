@@ -88,6 +88,7 @@ tr.clickable{cursor:pointer}
 @media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row{grid-template-columns:1fr}}
 .user-name{font-weight:600;line-height:1.2}
 .user-mail{font-size:10px;color:var(--text2);margin-top:1px}
+.country-flag{display:inline-block;margin-right:6px;font-size:15px;line-height:1;vertical-align:-1px}
 @media(max-width:600px){.kpi-row{grid-template-columns:1fr}}
 /* ── Model pricing modal ──────────────────────────────────────────── */
 .pricing-ov{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:150;align-items:flex-start;justify-content:center;padding:5vh 16px}
@@ -464,12 +465,20 @@ const COLORS=['#58a6ff','#3fb950','#d29922','#f85149','#bc8cff','#39d2c0','#f778
 function fmtN(n){if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toString()}
 function fmtC(n){if(n==null)return'$0.00';if(n!==0&&Math.abs(n)<0.01)return'$'+n.toFixed(4);return'$'+n.toFixed(2)}
 function fmtGroup(g){if(!g)return'';try{var a=JSON.parse(g);return Array.isArray(a)?a.join(', '):g;}catch(e){return g.replace(/^\["|"\]$/g,'').replace(/","/g,', ');}}
-// Render a user cell: "First Last" with the email muted beneath it when a
-// display name is known, otherwise just the username.
-function userCell(username,displayName){
+function countryFlag(code){
+  const normalized=String(code||'').trim().toUpperCase();
+  if(!/^[A-Z]{2}$/.test(normalized))return '';
+  const flag=[...normalized].map(c=>String.fromCodePoint(127397+c.charCodeAt(0))).join('');
+  return `<span class="country-flag" title="Country: ${normalized}" aria-label="Country: ${normalized}">${flag}</span>`;
+}
+
+// Render a user cell: country flag, then "First Last" with the email muted
+// beneath it when a display name is known, otherwise just the username.
+function userCell(username,displayName,tags){
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  if(displayName)return `<div class="user-name">${esc(displayName)}</div><div class="user-mail">${esc(username)}</div>`;
-  return esc(username);
+  const flag=countryFlag(tags&&tags.country);
+  if(displayName)return `<div class="user-name">${flag}${esc(displayName)}</div><div class="user-mail">${esc(username)}</div>`;
+  return flag+esc(username);
 }
 
 async function api(path, fresh){
@@ -570,7 +579,7 @@ function renderRecent(data){
     if(r.status_code===429&&r.provider==='gateway')st.title='Blocked at the gateway: monthly budget exceeded';
     return `<tr>
       <td style="white-space:nowrap;color:var(--text2)">${timeAgo(r.timestamp)}</td>
-      <td>${userCell(r.username,r.display_name)}</td>
+      <td>${userCell(r.username,r.display_name,{country:r.country})}</td>
       <td>${fmtGroup(r.group_name)}</td>
       <td style="color:${clientColor}" title="${r.user_agent||''}">${client||'—'}</td>
       <td>${r.model||'—'}</td>
@@ -626,7 +635,7 @@ function renderUsers(data){
     const arrow=isExpanded?'&#9660;':'&#9654;';
     let row=`<tr class="${cls}" onclick="toggleExpand('${u.username}')">
       <td style="color:var(--text2);font-size:10px">${arrow}</td>
-      <td>${userCell(u.username,u.display_name)}</td>
+      <td>${userCell(u.username,u.display_name,u.tags)}</td>
       <td>${fmtGroup(u.group_name)}</td>
       <td class="num">${fmtN(u.requests)}</td>
       <td class="num">${fmtN(u.prompt_tokens)}</td>

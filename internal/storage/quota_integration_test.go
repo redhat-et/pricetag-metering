@@ -529,6 +529,10 @@ func TestQuotaDenialRows(t *testing.T) {
 	}
 
 	// The feed shows each block as its own row, no synthesis needed.
+	quotaExec(t, s, ctx, `INSERT INTO partner_users (user_id, tags, created_by, updated_by)
+		VALUES ('11111111-1111-4111-8111-111111111111', '{"email":"alice","first_name":"Alice","last_name":"Andrew","country":"PL"}', 'test', 'test')`)
+	quotaExec(t, s, ctx, `INSERT INTO partner_user_logins (username, user_id, is_current)
+		VALUES ('alice', '11111111-1111-4111-8111-111111111111', TRUE)`)
 	feed, err := s.GetRecentEvents(ctx, 50, "", "", "")
 	if err != nil {
 		t.Fatalf("feed: %v", err)
@@ -545,6 +549,9 @@ func TestQuotaDenialRows(t *testing.T) {
 			continue
 		}
 		blockRows++
+		if e.Username == "alice" && e.Country != "PL" {
+			t.Fatalf("block feed row %s: country %q, want PL", e.Username, e.Country)
+		}
 		if e.Username != "bob" && e.GroupName != "eng" {
 			t.Fatalf("block feed row %s: group %q, want eng (directory-resolved)", e.Username, e.GroupName)
 		}
