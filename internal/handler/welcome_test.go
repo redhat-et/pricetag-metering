@@ -31,6 +31,7 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 		"About EnMaaS",
 		"enmaas-glm-5-3",
 		"openai-completions",
+		`"contextWindow": 262144`,
 		"https://gateway.test/v1",
 		"enmaas-welcome-height",
 		"modelPicker",
