@@ -434,40 +434,29 @@ func (d QuotaDecision) ModelAllowedOverLimit(model string) bool {
 func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool) (QuotaDecision, error) {
 	d := QuotaDecision{Exempt: exempt}
 
-	var slugArg any
-	groupName := ""
-	logins := []string{username}
-	person, err := s.GetPersonByUsername(ctx, username)
-	if err == nil {
-		d.HasPerson = true
-		slugArg, groupName = person.Slug, person.GroupName
-		if own, err := s.PersonUsernames(ctx, person.Slug); err == nil && len(own) > 0 {
-			logins = own
-		}
-	} else if err != sql.ErrNoRows {
+	// Identity resolution is partner-user based: logins aggregate a person's
+	// spend across their MaaS logins. Group- and grant-based resolution were
+	// removed with the legacy org directory; only a per-username override and
+	// the policy default remain until the quota model is rewritten.
+	logins, err := s.PartnerLoginsForUsername(ctx, username)
+	if err != nil {
 		return d, err
 	}
 
-	var userOv, groupOv, grantUSD, defaultUSD float64
+	var userOv, defaultUSD float64
 	var overCapNull sql.NullFloat64
 	err = s.db.QueryRowContext(ctx, `
 		SELECT pol.default_monthly_usd, pol.enforced,
 			pol.allowed_over_limit_models, pol.over_cap_ceiling_usd,
-			COALESCE(ou.monthly_usd, -1), COALESCE(og.monthly_usd, -1),
-			g.grant,
+			COALESCE(ou.monthly_usd, -1),
 			to_char(date_trunc('month', NOW()), 'YYYY-MM'),
 			date_trunc('month', NOW()) + interval '1 month'
 		FROM (SELECT default_monthly_usd, enforced, allowed_over_limit_models, over_cap_ceiling_usd
 			FROM quota_policy WHERE id = true) pol
-		LEFT JOIN quota_overrides ou ON ou.scope = 'user' AND ou.principal = $1
-		LEFT JOIN quota_overrides og ON og.scope = 'group' AND $2 <> '' AND og.principal = $2
-		LEFT JOIN LATERAL (
-			SELECT COALESCE(SUM(extra_usd), 0) as grant
-			FROM quota_grants WHERE person_slug = $1 AND month = to_char(date_trunc('month', NOW()), 'YYYY-MM')
-		) g ON true`,
-		slugArg, groupName,
+		LEFT JOIN quota_overrides ou ON ou.scope = 'user' AND ou.principal = $1`,
+		username,
 	).Scan(&defaultUSD, &d.Enforced, pq.Array(&d.OverLimitModels), &overCapNull,
-		&userOv, &groupOv, &grantUSD, &d.Month, &d.MonthEnds)
+		&userOv, &d.Month, &d.MonthEnds)
 	if err != nil {
 		return d, fmt.Errorf("quota policy lookup: %w", err)
 	}
@@ -475,17 +464,13 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 		d.OverCapCeilingUSD = overCapNull.Float64
 	}
 
-	// Resolution order: user override → group override → policy default.
+	// Resolution order: user override → policy default.
 	// -1 marks "no override row" (NUMERIC is never negative for a real row).
-	switch {
-	case userOv >= 0:
+	if userOv >= 0 {
 		d.BaseUSD = userOv
-	case groupOv >= 0:
-		d.BaseUSD = groupOv
-	default:
+	} else {
 		d.BaseUSD = defaultUSD
 	}
-	d.GrantUSD = grantUSD
 	d.LimitUSD = d.BaseUSD + d.GrantUSD
 
 	err = s.db.QueryRowContext(ctx, fmt.Sprintf(`
