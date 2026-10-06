@@ -54,21 +54,9 @@ type Config struct {
 	UserHeader   string
 	GroupsHeader string
 
-	// AdminUsers may see the org-wide Usage view (they see everyone's
-	// usage on the dashboard, not just their own). They do NOT get the
-	// Admin console or Routing pages — those are SuperAdmin-only. Most
-	// admins only ever want the usage page.
-	AdminUsers []string
-
-	// SuperAdminUsers may reach the admin console, the routing pages, and
-	// every admin-gated API. Membership in this list
-	// implies AdminUsers. The narrow blast radius is deliberate: only the
-	// gateway operators themselves should mutate platform state.
-	SuperAdminUsers []string
-
 	// AllowUnauthenticatedAdmin grants admin access when no identity
 	// header is present. Convenient for local development, unsafe once
-	// the service is exposed.
+	// the service is exposed. Deprecated — retained only for local dev.
 	AllowUnauthenticatedAdmin bool
 
 	// DefaultGroup is attributed to callers whose group cannot be
@@ -240,11 +228,6 @@ func Load() Config {
 		EventSource:              envDefault("EVENT_SOURCE", "ai-gateway"),
 		UserHeader:               envDefault("AUTH_USER_HEADER", "X-Forwarded-User"),
 		GroupsHeader:             envDefault("AUTH_GROUPS_HEADER", "X-Forwarded-Groups"),
-		AdminUsers:               envList("ADMIN_USERS"),
-		// The gateway operators. Set via the SUPERADMIN_USERS deployment
-		// env var (comma/space separated); empty means no one holds the
-		// super-admin surfaces, so the deployment must set it explicitly.
-		SuperAdminUsers: envList("SUPERADMIN_USERS"),
 		// Default false: since the org/manager feature this service decides
 		// who may see whose spend, so an anonymous caller is nobody. Set
 		// ALLOW_UNAUTHENTICATED_ADMIN=true deliberately for local
@@ -312,11 +295,8 @@ func envDefault(key, fallback string) string {
 	return fallback
 }
 
-// envList parses a user/identity list from an env var. Entries may be
-// separated by commas, whitespace, or any mix of the two — the deployment
-// manifests use both (ADMIN_USERS is comma-separated, SUPERADMIN_USERS is
-// space-separated), and a list that only splits on commas silently collapses
-// the space-separated form into one bogus entry that never matches a caller.
+// envList parses a list from an env var. Entries may be separated by commas,
+// whitespace, or any mix of the two.
 func envList(key string) []string {
 	raw := os.Getenv(key)
 	if raw == "" {

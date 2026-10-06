@@ -44,7 +44,7 @@ func (h *EntitlementsHandler) HandleEntitlement(w http.ResponseWriter, r *http.R
 
 	// Operators never gate themselves: a quota misfire must not lock the
 	// people who can fix it out of their own dogfood keys.
-	exempt := IsSuperAdminUsername(h.cfg, username)
+	exempt := IsSuperAdminUsername(r.Context(), h.store, username)
 
 	stats, err := h.store.GetMonthlyUsage(r.Context(), username, model, exempt)
 	if err != nil {

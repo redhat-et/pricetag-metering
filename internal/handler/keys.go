@@ -169,8 +169,8 @@ func (h *KeysHandler) HandleWhoAmI(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{
 		"user":              user,
 		"groups":            groups,
-		"isAdmin":           IsAdmin(h.cfg, r),
-		"isSuperAdmin":      IsSuperAdmin(h.cfg, r),
+		"isAdmin":           IsAdmin(r.Context(), h.cfg, h.store, r),
+		"isSuperAdmin":      IsSuperAdmin(r.Context(), h.cfg, h.store, r),
 		"keyServiceEnabled": h.cfg.KeyService.Enabled(),
 		"impersonating":     impersonating,
 		"real_user":         "",
@@ -190,7 +190,7 @@ func (h *KeysHandler) HandleWhoAmI(w http.ResponseWriter, r *http.Request) {
 		// Quota carrier (additive): the dashboard's over-limit popup/banner
 		// renders straight off this — no extra round-trip on boot. A quota
 		// lookup failure degrades the banner away, not the whole whoami.
-		if q, err := h.store.GetQuotaView(r.Context(), user, IsSuperAdmin(h.cfg, r)); err == nil {
+		if q, err := h.store.GetQuotaView(r.Context(), user, IsSuperAdmin(r.Context(), h.cfg, h.store, r)); err == nil {
 			resp["quota"] = q
 		} else {
 			slog.Error("quota view lookup failed", "user", user, "error", err)
