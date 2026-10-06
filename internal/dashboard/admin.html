@@ -803,12 +803,14 @@ function resolveModelName(crdName) {
 var TABS = ['people', 'keys'];
 
 function showTab(name, pushHash) {
-  if (TABS.indexOf(name) < 0) name = 'users';
+  if (TABS.indexOf(name) < 0) name = 'people';
   activeTab = name;
   for (var i = 0; i < TABS.length; i++) {
     var t = TABS[i];
-    document.getElementById('tab-' + t).classList.toggle('on', t === name);
-    document.getElementById('vtab-' + t).classList.toggle('on', t === name);
+    var panel = document.getElementById('tab-' + t);
+    var button = document.getElementById('vtab-' + t);
+    if (panel) panel.classList.toggle('on', t === name);
+    if (button) button.classList.toggle('on', t === name);
   }
   try { localStorage.setItem('admin-tab', name); } catch (e) {}
   if (pushHash !== false) {
