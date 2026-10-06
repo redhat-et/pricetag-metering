@@ -325,6 +325,37 @@ func (s *Store) PartnerManagerScope(ctx context.Context, username string) (usern
 	return out, reports > 0, nil
 }
 
+// PartnerLoginsForUsername returns every MaaS login mapped to the same partner
+// user as the given username, so usage and spend aggregate across a person's
+// logins (for example after an email change). A username with no partner record
+// resolves to just itself, which keeps tool-facing reports working for logins
+// that predate the partner directory.
+func (s *Store) PartnerLoginsForUsername(ctx context.Context, username string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT other.username
+		FROM partner_user_logins self
+		JOIN partner_user_logins other ON other.user_id = self.user_id
+		WHERE self.username = $1
+		ORDER BY other.username`, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	seen := map[string]bool{username: true}
+	out := []string{username}
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			return nil, err
+		}
+		if !seen[u] {
+			out = append(out, u)
+			seen[u] = true
+		}
+	}
+	return out, rows.Err()
+}
+
 // UpdatePartnerUserAccess changes operator-controlled authorization fields.
 // It is intentionally separate from Atlas profile PATCH so external callers
 // cannot grant themselves dashboard roles.

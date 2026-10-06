@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 )
@@ -42,18 +41,8 @@ type UserUsageReport struct {
 // multiple MaaS logins to one person, those logins are aggregated together,
 // matching the dollar-quota spend calculation.
 func (s *Store) GetUserUsageReport(ctx context.Context, username string) (UserUsageReport, error) {
-	logins := []string{username}
-	person, err := s.GetPersonByUsername(ctx, username)
-	switch {
-	case err == nil:
-		linked, linkedErr := s.PersonUsernames(ctx, person.Slug)
-		if linkedErr != nil {
-			return UserUsageReport{}, fmt.Errorf("resolve linked usernames: %w", linkedErr)
-		}
-		if len(linked) > 0 {
-			logins = linked
-		}
-	case err != sql.ErrNoRows:
+	logins, err := s.PartnerLoginsForUsername(ctx, username)
+	if err != nil {
 		return UserUsageReport{}, fmt.Errorf("resolve usage identity: %w", err)
 	}
 
