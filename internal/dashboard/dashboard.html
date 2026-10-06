@@ -58,6 +58,9 @@ tr.top5 td:first-child{border-left:3px solid var(--green)}
 tr.bottom5 td:first-child{border-left:3px solid var(--red)}
 tr.clickable{cursor:pointer}
 .num{text-align:right;font-variant-numeric:tabular-nums}
+.users-pager{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:10px;color:var(--text2);font-size:12px}
+.users-pager button{background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:5px 10px;cursor:pointer}
+.users-pager button:disabled{opacity:.4;cursor:not-allowed}
 
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
 .chart-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px}
@@ -350,13 +353,14 @@ tr.clickable{cursor:pointer}
   </div>
 </div>
 
-<div class="section">
-  <h2>Users</h2>
-  <table>
-    <thead><tr id="users-thead"></tr></thead>
-    <tbody id="users-tbody"></tbody>
-  </table>
-</div>
+ <div class="section">
+   <h2>Users</h2>
+   <table>
+     <thead><tr id="users-thead"></tr></thead>
+     <tbody id="users-tbody"></tbody>
+   </table>
+   <div class="users-pager"><button id="users-prev" onclick="changeUsersPage(-1)">Previous</button><span id="users-page-label">Page 1</span><button id="users-next" onclick="changeUsersPage(1)">Next</button></div>
+ </div>
 
 <div class="timeline-box">
   <h2>Tokens Over Time</h2>
@@ -459,6 +463,7 @@ let isSuperAdmin=false;   // operator tools: Routing/Compression/Admin nav + "vi
 let modelMetric='tokens', userPieMetric='cost';
 let savingsRef='claude-opus-4-8';
 let tokenChart=null, userCostChart=null, tlChart=null, savingsChart=null;
+let usersPage=0, usersPageSize=50, usersHasMore=false;
 let currentSort='total_tokens', currentOrder='desc';
 let cachedGroups=[], cachedModels=[], cachedUsers=[], directoryUsers=[], renderedUsers=[];
 // Overview payload of the current refresh; it carries the server-computed
@@ -515,7 +520,7 @@ async function refresh(force){
     const [ov,gr,us,mo,tl,rc,rosterCat,modelCat,directory]=await Promise.all([
       api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/groups?'+filters,force),
-      api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&ref='+encodeURIComponent(savingsRef),force),
+       api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&limit='+usersPageSize+'&offset='+(usersPage*usersPageSize)+'&paginate=true&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/models?'+filters,force),
       api('/api/v1/dashboard/timeline?'+filters+'&group_by='+tlGroupBy,force),
       api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
@@ -531,11 +536,13 @@ async function refresh(force){
   // paid traffic doesn't silently drop the cache assumption.
   catalogModels=modelCat;
   directoryUsers=directory||[];
-  cachedUsers=us;
+   cachedUsers=us.users||[];
+   usersHasMore=!!us.has_more;
   renderKPI(ov);
   renderGroupFilterBtns(gr);
   populateFilterDropdowns(modelCat, rosterCat);
-  renderUsers(mergeDirectoryUsers(collapseUsageUsers(us),directoryUsers,!groupFilter&&!modelFilter,userFilter));
+   renderUsers(mergeDirectoryUsers(collapseUsageUsers(cachedUsers),[],false,userFilter));
+   renderUsersPager();
   renderRecent(rc);
   renderModelChart();
   renderUserCostChart();
@@ -545,6 +552,20 @@ async function refresh(force){
   } finally {
     if(force&&refreshBtn){refreshBtn.disabled=false;refreshBtn.textContent='Refresh';}
   }
+}
+
+function renderUsersPager(){
+  var prev=document.getElementById('users-prev'), next=document.getElementById('users-next');
+  if(!prev||!next)return;
+  prev.disabled=usersPage===0;
+  next.disabled=!usersHasMore;
+  document.getElementById('users-page-label').textContent='Page '+(usersPage+1);
+}
+function changeUsersPage(delta){
+  var next=usersPage+delta;
+  if(next<0||(delta>0&&!usersHasMore))return;
+  usersPage=next;
+  refresh();
 }
 
 function timeAgo(ts){
@@ -965,11 +986,13 @@ function onUserCheck(cb){
   var u=cb.value, i=userFilter.indexOf(u);
   if(cb.checked){if(i<0)userFilter.push(u);}
   else if(i>=0)userFilter.splice(i,1);
+  usersPage=0;
   updateUserFilterLabel();
   refresh();
 }
 
 function selectAllUsers(all){
+  usersPage=0;
   if(all){
     var s=document.getElementById('user-filter-search');
     var q=(s?s.value:'').toLowerCase();
@@ -997,8 +1020,8 @@ document.addEventListener('click',function(e){
   }
 });
 
-function setModelFilter(v){modelFilter=v;refresh();}
-function clearUserFilter(){userFilter=[];updateUserFilterLabel();renderUserChecklist();refresh();}
+function setModelFilter(v){modelFilter=v;usersPage=0;refresh();}
+function clearUserFilter(){userFilter=[];usersPage=0;updateUserFilterLabel();renderUserChecklist();refresh();}
 
 var customFrom='',customTo='';
 
@@ -1029,14 +1052,14 @@ function setCustomRange(){
   var from=document.getElementById('date-from').value;
   var to=document.getElementById('date-to').value;
   if(from&&to){
-    range='custom';customFrom=from;customTo=to;
+    range='custom';customFrom=from;customTo=to;usersPage=0;
     document.querySelectorAll('#range-btns .active').forEach(function(b){b.classList.remove('active');});
     refresh();
   }
 }
 
 function clearAllFilters(){
-  range='mtd';groupFilter='';modelFilter='';userFilter=[];customFrom='';customTo='';
+  range='mtd';groupFilter='';modelFilter='';userFilter=[];customFrom='';customTo='';usersPage=0;
   document.querySelectorAll('#range-btns .active').forEach(function(b){b.classList.remove('active');});
   var bm=document.querySelector('#range-btns button[data-range="mtd"]');if(bm)bm.classList.add('active');
   var gs=document.getElementById('group-filter-select');if(gs)gs.value='';
@@ -1093,16 +1116,16 @@ function renderTimeline(data){
   });
 }
 
-function setGroupFilter(g){groupFilter=g;userFilter=[];expandedUser='';updateUserFilterLabel();renderUserChecklist();refresh()}
-function clearGroupFilter(){groupFilter='';userFilter=[];expandedUser='';updateUserFilterLabel();renderUserChecklist();refresh()}
-function setUserFilter(u){var i=userFilter.indexOf(u);if(i>=0)userFilter.splice(i,1);else userFilter.push(u);updateUserFilterLabel();renderUserChecklist();refresh()}
-function sortBy(col){if(currentSort===col)currentOrder=currentOrder==='desc'?'asc':'desc';else{currentSort=col;currentOrder='desc'}refresh()}
+function setGroupFilter(g){groupFilter=g;userFilter=[];expandedUser='';usersPage=0;updateUserFilterLabel();renderUserChecklist();refresh()}
+function clearGroupFilter(){groupFilter='';userFilter=[];expandedUser='';usersPage=0;updateUserFilterLabel();renderUserChecklist();refresh()}
+function setUserFilter(u){var i=userFilter.indexOf(u);if(i>=0)userFilter.splice(i,1);else userFilter.push(u);usersPage=0;updateUserFilterLabel();renderUserChecklist();refresh()}
+function sortBy(col){if(currentSort===col)currentOrder=currentOrder==='desc'?'asc':'desc';else{currentSort=col;currentOrder='desc'}usersPage=0;refresh()}
 
 document.getElementById('range-btns').addEventListener('click',e=>{
   if(e.target.tagName!=='BUTTON')return;
   document.querySelectorAll('#range-btns .active').forEach(function(b){b.classList.remove('active');});
   e.target.classList.add('active');
-  range=e.target.dataset.range;
+  range=e.target.dataset.range;usersPage=0;
   syncDateInputs();
   refresh();
 });
