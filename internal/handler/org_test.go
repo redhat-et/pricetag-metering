@@ -1,12 +1,12 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/redhat-et/pricetag-metering/internal/config"
+	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
 func testCfg() config.Config {
@@ -206,25 +206,16 @@ func TestRequireAdminAPI(t *testing.T) {
 }
 
 func TestHandleRoles(t *testing.T) {
-	h := &AdminHandler{cfg: config.Config{
-		AdminUsers:      []string{"bob", "alice"},
-		SuperAdminUsers: []string{"operator"},
-	}}
-	w := httptest.NewRecorder()
-	h.HandleRoles(w, httptest.NewRequest(http.MethodGet, "/api/v1/admin/org/roles", nil))
-
-	var got struct {
-		Admins      []string `json:"admins"`
-		SuperAdmins []string `json:"superAdmins"`
+	admins, supers := partnerRoleLists([]storage.PartnerUser{
+		{Role: storage.PartnerRoleAdmin, Tags: map[string]any{"email": "bob@example.com"}},
+		{Role: storage.PartnerRoleAdmin, Tags: map[string]any{"email": "alice@example.com"}},
+		{Role: storage.PartnerRoleSuperAdmin, Tags: map[string]any{"email": "operator@example.com"}},
+		{Role: storage.PartnerRoleUser, Tags: map[string]any{"email": "user@example.com"}},
+	})
+	if len(admins) != 2 || admins[0] != "alice@example.com" || admins[1] != "bob@example.com" {
+		t.Errorf("admins = %v, want [alice@example.com bob@example.com]", admins)
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode roles: %v", err)
-	}
-	// Sorted for a stable table order.
-	if len(got.Admins) != 2 || got.Admins[0] != "alice" || got.Admins[1] != "bob" {
-		t.Errorf("admins = %v, want [alice bob]", got.Admins)
-	}
-	if len(got.SuperAdmins) != 1 || got.SuperAdmins[0] != "operator" {
-		t.Errorf("superAdmins = %v, want [operator]", got.SuperAdmins)
+	if len(supers) != 1 || supers[0] != "operator@example.com" {
+		t.Errorf("superAdmins = %v, want [operator@example.com]", supers)
 	}
 }

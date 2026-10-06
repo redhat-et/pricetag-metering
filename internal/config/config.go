@@ -54,16 +54,13 @@ type Config struct {
 	UserHeader   string
 	GroupsHeader string
 
-	// AdminUsers may see the org-wide Usage view (they see everyone's
-	// usage on the dashboard, not just their own). They do NOT get the
-	// Admin console or Routing pages — those are SuperAdmin-only. Most
-	// admins only ever want the usage page.
+	// AdminUsers is a break-glass list used only when the Partner identity
+	// store cannot be read. Normal authorization comes from partner_users.role.
 	AdminUsers []string
 
-	// SuperAdminUsers may reach the admin console, the routing pages, and
-	// every admin-gated API. Membership in this list
-	// implies AdminUsers. The narrow blast radius is deliberate: only the
-	// gateway operators themselves should mutate platform state.
+	// SuperAdminUsers is the break-glass list for operator access when the
+	// Partner identity store cannot be read. Normal authorization comes from
+	// partner_users.role; membership here does not override a stored demotion.
 	SuperAdminUsers []string
 
 	// AllowUnauthenticatedAdmin grants admin access when no identity

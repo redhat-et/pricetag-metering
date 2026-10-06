@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -13,9 +14,49 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redhat-et/pricetag-metering/internal/config"
 	"github.com/redhat-et/pricetag-metering/internal/maasapi"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
+
+func TestPartnerRoleOverridesBreakGlassWhenStoreIsAvailable(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set — Partner role authorization integration test needs a Postgres")
+	}
+	store := openFreshStore(t, dsn)
+	ctx := context.Background()
+	const userID = "123e4567-e89b-12d3-a456-426614174020"
+	if _, err := store.CreatePartnerUser(ctx, "partner-m2m", userID, map[string]any{
+		"email": "canonical@example.com", "first_name": "Canonical", "last_name": "User",
+	}); err != nil {
+		t.Fatalf("CreatePartnerUser: %v", err)
+	}
+
+	cfg := config.Config{
+		UserHeader:      "X-Forwarded-User",
+		AdminUsers:      []string{"canonical@example.com"},
+		SuperAdminUsers: []string{"canonical@example.com"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/whoami", nil)
+	req.Header.Set(cfg.UserHeader, "CANONICAL@EXAMPLE.COM")
+
+	if IsPartnerAdmin(ctx, cfg, store, req) || IsPartnerSuperAdmin(ctx, cfg, store, req) {
+		t.Fatal("break-glass lists must not override the stored default user role")
+	}
+	if _, err := store.UpdatePartnerUserAccess(ctx, "partner-m2m", userID, storage.PartnerRoleAdmin, nil); err != nil {
+		t.Fatalf("UpdatePartnerUserAccess admin: %v", err)
+	}
+	if !IsPartnerAdmin(ctx, cfg, store, req) || IsPartnerSuperAdmin(ctx, cfg, store, req) {
+		t.Fatal("stored admin role must grant admin only")
+	}
+	if _, err := store.UpdatePartnerUserAccess(ctx, "partner-m2m", userID, storage.PartnerRoleSuperAdmin, nil); err != nil {
+		t.Fatalf("UpdatePartnerUserAccess super-admin: %v", err)
+	}
+	if !IsPartnerAdmin(ctx, cfg, store, req) || !IsPartnerSuperAdmin(ctx, cfg, store, req) {
+		t.Fatal("stored super-admin role must grant both admin levels")
+	}
+}
 
 // End-to-end partner API flow against a real Postgres and a MaaS stand-in:
 // create → search → mint (fixed GE group) → report → UUID policy →
