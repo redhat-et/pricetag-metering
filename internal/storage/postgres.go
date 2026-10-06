@@ -669,7 +669,7 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 		LEFT JOIN sv ON sv.username = e.username
 		WHERE e.timestamp >= $1 AND e.timestamp < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
 		GROUP BY e.username, %s, COALESCE(e.group_name, '')
-		ORDER BY %s %s
+		ORDER BY %s %s, e.username ASC, COALESCE(e.group_name, '') ASC
 			LIMIT $6 OFFSET $7`, displayNameExpr, costUSDExpr, displayNameExpr, sortExpr, direction)
 	}
 

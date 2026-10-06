@@ -1431,9 +1431,9 @@ function setPeopleRoleFilter(sel) {
 }
 /* Platform roles come from the active Partner identity rows. The Partner
    Users table and the People table therefore show the same role source. */
-function loadRoles() {
+function loadRoles(users) {
   roleData = { admins: [], superAdmins: [] };
-  (Array.isArray(partnerUsersAll) ? partnerUsersAll : []).forEach(function(u) {
+  (Array.isArray(users) ? users : (Array.isArray(partnerUsersAll) ? partnerUsersAll : [])).forEach(function(u) {
     if (!u || !u.active) return;
     var email = u.tags && u.tags.email;
     if (!email) return;
@@ -1921,16 +1921,17 @@ function loadPeople(cb) {
     if (cb) cb();
   });
 }
-var partnerUsersAll = [], partnerUsersPage = 0, partnerUsersPageSize = 50, partnerUsersHasMore = false;
+var partnerUsersAll = [], partnerManagersAll = [], partnerUsersPage = 0, partnerUsersPageSize = 50, partnerUsersHasMore = false;
 function loadPartnerUsers(page) {
   if (typeof page === 'number') partnerUsersPage = page;
   var offset = partnerUsersPage * partnerUsersPageSize;
   fetchJSON('/api/v1/admin/partner-users?limit=' + partnerUsersPageSize + '&offset=' + offset).then(function(payload) {
-    var pageData = Array.isArray(payload) ? {users: payload, next_page: null} : payload;
+    var pageData = Array.isArray(payload) ? {users: payload, managers: payload, total: payload.length, has_more: false} : payload;
     partnerUsersAll = Array.isArray(pageData.users) ? pageData.users : [];
-    partnerUsersHasMore = !!pageData.next_page || partnerUsersAll.length === partnerUsersPageSize;
-    document.getElementById('partner-users-count').textContent = '(' + partnerUsersAll.length + ' on page)';
-    loadRoles();
+    partnerManagersAll = Array.isArray(pageData.managers) ? pageData.managers : partnerUsersAll;
+    partnerUsersHasMore = !!pageData.has_more;
+    document.getElementById('partner-users-count').textContent = '(' + (pageData.total || partnerUsersAll.length) + ')';
+    loadRoles(partnerManagersAll);
     renderPartnerUsers();
   }).catch(function(e) {
     document.getElementById('partner-users-list').innerHTML = '<div class="err-msg">' + esc(e.message) + '</div>';
@@ -1956,7 +1957,7 @@ function renderPartnerUsers() {
   partnerUsersAll.forEach(function(u) {
     var t = u.tags || {};
     var name = ((t.first_name || '') + ' ' + (t.last_name || '')).trim() || t.email || u.user_id;
-    var managers = '<option value="">— none —</option>' + partnerUsersAll.filter(function(m) { return m.user_id !== u.user_id; }).map(function(m) {
+    var managers = '<option value="">— none —</option>' + partnerManagersAll.filter(function(m) { return m.user_id !== u.user_id; }).map(function(m) {
       var mt = m.tags || {}, mn = ((mt.first_name || '') + ' ' + (mt.last_name || '')).trim() || mt.email || m.user_id;
       return '<option value="' + esc(m.user_id) + '"' + (u.manager_user_id === m.user_id ? ' selected' : '') + '>' + esc(mn) + '</option>';
     }).join('');

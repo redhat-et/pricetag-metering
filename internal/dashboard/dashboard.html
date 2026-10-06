@@ -465,7 +465,7 @@ let savingsRef='claude-opus-4-8';
 let tokenChart=null, userCostChart=null, tlChart=null, savingsChart=null;
 let usersPage=0, usersPageSize=50, usersHasMore=false;
 let currentSort='total_tokens', currentOrder='desc';
-let cachedGroups=[], cachedModels=[], cachedUsers=[], directoryUsers=[], renderedUsers=[];
+let cachedGroups=[], cachedModels=[], cachedUsers=[], chartUsers=[], directoryUsers=[], renderedUsers=[];
 // Overview payload of the current refresh; it carries the server-computed
 // "Saved · Hosted Models" KPI (the sum of the user table's saved_usd
 // column), which is what the card shows — no client-side re-derivation.
@@ -517,10 +517,11 @@ async function refresh(force){
   // unfiltered "catalog" fetches so selecting a filter never shrinks
   // the list of things you can still pick.
   try {
-    const [ov,gr,us,mo,tl,rc,rosterCat,modelCat,directory]=await Promise.all([
+    const [ov,gr,us,chartUs,mo,tl,rc,rosterCat,modelCat,directory]=await Promise.all([
       api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/groups?'+filters,force),
        api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&limit='+usersPageSize+'&offset='+(usersPage*usersPageSize)+'&paginate=true&ref='+encodeURIComponent(savingsRef),force),
+      api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&limit=10&offset=0&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/models?'+filters,force),
       api('/api/v1/dashboard/timeline?'+filters+'&group_by='+tlGroupBy,force),
       api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
@@ -537,6 +538,7 @@ async function refresh(force){
   catalogModels=modelCat;
   directoryUsers=directory||[];
    cachedUsers=us.users||[];
+   chartUsers=collapseUsageUsers(Array.isArray(chartUs)?chartUs:[]);
    usersHasMore=!!us.has_more;
   renderKPI(ov);
   renderGroupFilterBtns(gr);
@@ -1070,7 +1072,7 @@ function clearAllFilters(){
 }
 
 function renderUserCostChart(){
-  const data=cachedUsers.slice(0,10);
+  const data=chartUsers.slice(0,10);
   const m=userPieMetric;
   const vals=data.map(d=>pieVal(d,m));
   const labels=data.map((d,i)=>`${d.display_name||d.username} — ${pieFmt(vals[i],m)}`);
