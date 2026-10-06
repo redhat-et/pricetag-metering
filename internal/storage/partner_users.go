@@ -678,13 +678,13 @@ func (s *Store) CreatePartnerUser(ctx context.Context, actor, userID string, tag
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `INSERT INTO partner_users (user_id,tags,manager_user_id,created_by,updated_by)
-		VALUES ($1,$2,(SELECT p.user_id FROM partner_users p WHERE p.user_id = NULLIF($2::jsonb->>'manager_uuid','')::uuid),$3,$3)`, id, string(tagsJSON), actor); err != nil {
+		VALUES ($1,$2,(SELECT p.user_id FROM partner_users p WHERE p.active AND p.user_id = NULLIF($2::jsonb->>'manager_uuid','')::uuid),$3,$3)`, id, string(tagsJSON), actor); err != nil {
 		if isUniqueViolation(err) {
 			return PartnerUser{}, ErrPartnerUserConflict
 		}
 		return PartnerUser{}, fmt.Errorf("create partner user: %w", err)
 	}
-	if _, err := reconcilePartnerManagerLinksTx(ctx, tx); err != nil {
+	if _, err := reconcilePartnerManagerLinksForManagerTx(ctx, tx, id, actor); err != nil {
 		return PartnerUser{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO partner_user_logins (username,user_id,is_current) VALUES ($1,$2,TRUE)`, email, id); err != nil {
@@ -702,17 +702,41 @@ func (s *Store) CreatePartnerUser(ctx context.Context, actor, userID string, tag
 	return s.GetPartnerUser(ctx, id)
 }
 
-// reconcilePartnerManagerLinksTx repairs the relational hierarchy from the
-// imported manager_uuid tag. It is intentionally idempotent and uses text UUID
-// comparison so legacy malformed tags cannot make the whole repair fail.
-func reconcilePartnerManagerLinksTx(ctx context.Context, tx *sql.Tx) (int64, error) {
+// reconcilePartnerManagerLinksForManagerTx repairs only reports for the
+// manager affected by the current write. It keeps normal SSO writes narrow and
+// uses text UUID comparison so malformed legacy tags do not abort the repair.
+func reconcilePartnerManagerLinksForManagerTx(ctx context.Context, tx *sql.Tx, managerID, actor string) (int64, error) {
 	result, err := tx.ExecContext(ctx, `
 		UPDATE partner_users child
-		SET manager_user_id = manager.user_id, updated_at = NOW()
+		SET manager_user_id = manager.user_id, updated_by = $2, updated_at = NOW()
 		FROM partner_users manager
-		WHERE child.user_id <> manager.user_id
+		WHERE manager.user_id = $1::uuid
+		  AND manager.active
+		  AND child.user_id <> manager.user_id
 		  AND lower(child.tags->>'manager_uuid') = lower(manager.user_id::text)
-		  AND child.manager_user_id IS DISTINCT FROM manager.user_id`)
+		  AND child.manager_user_id IS DISTINCT FROM manager.user_id`, managerID, actor)
+	if err != nil {
+		return 0, fmt.Errorf("reconcile partner manager links: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// reconcilePartnerManagerLinksTx repairs all existing rows from imported
+// manager_uuid tags. It is reserved for the bounded startup repair and takes a
+// transaction advisory lock so multiple replicas do not perform the scan at
+// the same time.
+func reconcilePartnerManagerLinksTx(ctx context.Context, tx *sql.Tx, actor string) (int64, error) {
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext('pricetag.partner.manager.reconcile'))`); err != nil {
+		return 0, fmt.Errorf("lock manager-link reconciliation: %w", err)
+	}
+	result, err := tx.ExecContext(ctx, `
+		UPDATE partner_users child
+		SET manager_user_id = manager.user_id, updated_by = $1, updated_at = NOW()
+		FROM partner_users manager
+		WHERE manager.active
+		  AND child.user_id <> manager.user_id
+		  AND lower(child.tags->>'manager_uuid') = lower(manager.user_id::text)
+		  AND child.manager_user_id IS DISTINCT FROM manager.user_id`, actor)
 	if err != nil {
 		return 0, fmt.Errorf("reconcile partner manager links: %w", err)
 	}
@@ -727,7 +751,7 @@ func (s *Store) ReconcilePartnerManagerLinks(ctx context.Context) (int64, error)
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	updated, err := reconcilePartnerManagerLinksTx(ctx, tx)
+	updated, err := reconcilePartnerManagerLinksTx(ctx, tx, "partner-reconcile")
 	if err != nil {
 		return 0, err
 	}
@@ -832,14 +856,11 @@ func (s *Store) updatePartnerUser(ctx context.Context, actor, userID string, tag
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE partner_users SET tags=$2,
-			manager_user_id=(SELECT p.user_id FROM partner_users p WHERE p.user_id = NULLIF($2::jsonb->>'manager_uuid','')::uuid),
+		manager_user_id=(SELECT p.user_id FROM partner_users p WHERE p.active AND p.user_id = NULLIF($2::jsonb->>'manager_uuid','')::uuid),
 			updated_by=$3,updated_at=NOW() WHERE user_id=$1`, id, string(tagsJSON), actor); err != nil {
 		if isUniqueViolation(err) {
 			return PartnerUser{}, ErrPartnerUserConflict
 		}
-		return PartnerUser{}, err
-	}
-	if _, err := reconcilePartnerManagerLinksTx(ctx, tx); err != nil {
 		return PartnerUser{}, err
 	}
 	action := "partner_user.update"

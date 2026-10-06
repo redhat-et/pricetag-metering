@@ -44,11 +44,12 @@ func main() {
 	defer store.Close()
 	store.SetQuotaEnforcement(cfg.QuotaEnforcementEnabled)
 	// Repair manager links imported before the manager's Partner identity was
-	// provisioned. This is idempotent and complements reconciliation on every
-	// Partner user create/update; login and inference are not part of hierarchy
-	// maintenance.
+	// provisioned. This is a bounded, idempotent startup repair; normal writes
+	// reconcile only the manager affected by that write.
 	go func() {
-		updated, err := store.ReconcilePartnerManagerLinks(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		updated, err := store.ReconcilePartnerManagerLinks(ctx)
 		if err != nil {
 			slog.Error("partner manager-link reconciliation failed", "error", err)
 			return
