@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,44 +10,19 @@ import (
 	"github.com/lib/pq"
 )
 
-// Lifecycle sentinels the handler maps to HTTP statuses. Validation stays
-// in the handler; anything surfacing from this package past these is a
-// server-side failure and gets a 500, not an echoed message.
-var (
-	// ErrQuotaAlreadyPending: the person has a live pending request (or a
-	// stale pending from an earlier month, which still holds the slot).
-	ErrQuotaAlreadyPending = errors.New("a pending request already exists")
-	// ErrQuotaNoPending: the row exists but is no longer pending — decided,
-	// cancelled, or gone. Decisions are atomic in WHERE status='pending',
-	// so the loser of a double-click sees this, not a lost write.
-	ErrQuotaNoPending = errors.New("request is no longer pending")
-	// ErrQuotaNotInDirectory: the username has no people row, so there is
-	// no slug to attach a request to and no manager to route it to.
-	ErrQuotaNotInDirectory = errors.New("username not found in the directory")
-)
-
 // Quota management: monthly dollar budgets per user, resolved through the
-// org directory, enforced at the gateway via the entitlement endpoint's
+// partner directory, enforced at the gateway via the entitlement endpoint's
 // hasAccess flag.
 //
 // The design guarantees that hold across this file:
 //   - The calendar month is computed in SQL (date_trunc('month', NOW())),
-//     never in Go, so the spend window and the grant month key can never
-//     disagree across the app/server timezone boundary.
-//   - Nothing here writes usage_events. Spend is derived at query time with
-//     the shared costUSDExpr — the same number the dashboard shows — over
-//     every login linked to the person.
-//   - A request decision is atomic in `WHERE status = 'pending'` (the
-//     ClaimInvite idiom): two approvers deciding at once yield one success
-//     and one no-op, never a double grant.
-//   - Approvals are ONE hop: a request routes to the requester's direct
-//     manager at creation and never moves again. A manager who needs someone
-//     else's sign-off settles it offline and still records approve/reject
-//     here. People without a manager land on the super-admin backstop
-//     (approver_slug NULL, visible to super-admins).
+//     never in Go, so the spend window can never disagree across the
+//     app/server timezone boundary.
+//   - Nothing here writes usage_events except RecordQuotaDenial. Spend is
+//     derived at query time with the shared costUSDExpr — the same number the
+//     dashboard shows — over every login linked to the partner user.
 
-// quotaMigrations run after the org migrations (the quota tables FK to
-// people). Appended-slice convention from org.go: every statement is
+// quotaMigrations create the policy and override tables. Every statement is
 // idempotent.
 var quotaMigrations = []string{
 	// Single-row table: the boolean PK that must be true is the classic
@@ -63,10 +37,10 @@ var quotaMigrations = []string{
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
 	`INSERT INTO quota_policy (id) VALUES (true) ON CONFLICT DO NOTHING`,
-	// Per-scope limits. User scope is keyed by person slug (stable identity,
-	// covers all their logins); group scope by people.group_name. A NULL
-	// lookup result is "no override" — resolution order user → group →
-	// policy default happens in one query.
+	// Per-scope limits. Only the 'user' scope is consulted now (keyed by the
+	// MaaS login); the legacy 'group' scope is retained in the schema for
+	// historical rows but no longer resolved. A NULL lookup result is "no
+	// override" — resolution order user → policy default happens in one query.
 	`CREATE TABLE IF NOT EXISTS quota_overrides (
 		scope TEXT NOT NULL CHECK (scope IN ('user','group')),
 		principal TEXT NOT NULL,
@@ -75,36 +49,6 @@ var quotaMigrations = []string{
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		PRIMARY KEY (scope, principal)
 	)`,
-	// Approval requests, one hop: approver_slug is stamped at creation from
-	// the requester's manager (NULL = super-admin backstop) and never
-	// re-pointed. decided_by/comment fill in at decision time.
-	`CREATE TABLE IF NOT EXISTS quota_requests (
-		id BIGSERIAL PRIMARY KEY,
-		person_slug TEXT NOT NULL REFERENCES people(slug) ON DELETE CASCADE,
-		month TEXT NOT NULL,
-		asked_usd NUMERIC(12,2) NOT NULL,
-		reason TEXT NOT NULL DEFAULT '',
-		status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','cancelled')),
-		approver_slug TEXT REFERENCES people(slug) ON DELETE SET NULL,
-		decided_by TEXT NOT NULL DEFAULT '',
-		comment TEXT NOT NULL DEFAULT '',
-		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-		decided_at TIMESTAMPTZ
-	)`,
-	// One pending request per person, in the database: every create path
-	// (and any future one) inherits the rule.
-	`CREATE UNIQUE INDEX IF NOT EXISTS uq_quota_requests_pending ON quota_requests (person_slug) WHERE status = 'pending'`,
-	`CREATE INDEX IF NOT EXISTS idx_quota_requests_approver ON quota_requests (approver_slug, status)`,
-	`CREATE INDEX IF NOT EXISTS idx_quota_requests_person ON quota_requests (person_slug, month)`,
-	// Requester questionnaire (mirrors the org's Token Budget Escalation
-	// form). `reason` carries the per-project task description; the rest are
-	// the additional answers the approver sees. All default '' so rows filed
-	// before the questionnaire keep working (shown with what they have).
-	`ALTER TABLE quota_requests ADD COLUMN IF NOT EXISTS reduction_steps TEXT NOT NULL DEFAULT ''`,
-	`ALTER TABLE quota_requests ADD COLUMN IF NOT EXISTS estimate_basis TEXT NOT NULL DEFAULT ''`,
-	`ALTER TABLE quota_requests ADD COLUMN IF NOT EXISTS timeline TEXT NOT NULL DEFAULT ''`,
-	`ALTER TABLE quota_requests ADD COLUMN IF NOT EXISTS feasible_within_base TEXT NOT NULL DEFAULT ''`,
-	`ALTER TABLE quota_requests ADD COLUMN IF NOT EXISTS why_not_enough TEXT NOT NULL DEFAULT ''`,
 	// Post-cap model allowance (issue #22): exact, case-sensitive model
 	// identifiers that still pass the entitlement check when the dollar
 	// gate would deny, plus an optional ceiling on how far a month's
@@ -116,19 +60,6 @@ var quotaMigrations = []string{
 	// (upstream sends an empty one today, see the issue).
 	`ALTER TABLE quota_policy ADD COLUMN IF NOT EXISTS allowed_over_limit_models TEXT[] NOT NULL DEFAULT '{}'`,
 	`ALTER TABLE quota_policy ADD COLUMN IF NOT EXISTS over_cap_ceiling_usd NUMERIC(12,2)`,
-	// Approved extra budget for ONE calendar month, keyed by 'YYYY-MM'.
-	// Expiry is automatic — the effective-limit query only sums grants whose
-	// month key is the current month — no cron, no cleanup.
-	`CREATE TABLE IF NOT EXISTS quota_grants (
-		id BIGSERIAL PRIMARY KEY,
-		person_slug TEXT NOT NULL REFERENCES people(slug) ON DELETE CASCADE,
-		month TEXT NOT NULL,
-		extra_usd NUMERIC(12,2) NOT NULL,
-		request_id BIGINT REFERENCES quota_requests(id) ON DELETE SET NULL,
-		granted_by TEXT NOT NULL DEFAULT '',
-		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-	)`,
-	`CREATE INDEX IF NOT EXISTS idx_quota_grants_person_month ON quota_grants (person_slug, month)`,
 	// The entitlement endpoint now runs a month-scoped SUM per username on
 	// every gateway request inside its 5s subrequest budget; the best
 	// existing index was username-only with a timestamp recheck.
@@ -365,16 +296,14 @@ const quotaAllowanceMax = 50
 // included), priced by the shared costUSDExpr, summed across every login
 // linked to the person.
 type QuotaDecision struct {
-	HasPerson bool `json:"has_person"`
-	Enforced  bool `json:"enforced"` // the policy flag
-	Exempt    bool `json:"exempt"`   // super-admin — never gated
+	Enforced bool `json:"enforced"` // the policy flag
+	Exempt   bool `json:"exempt"`   // super-admin — never gated
 	// User model allowlist is enforcement state internal to the entitlement
 	// decision; the dedicated model-policy endpoint owns its public schema.
 	ModelPolicyActive bool     `json:"-"`
 	UserAllowedModels []string `json:"-"`
-	BaseUSD           float64  `json:"base_usd"` // user/group override or policy default
-	GrantUSD          float64  `json:"grant_usd"`
-	LimitUSD          float64  `json:"limit_usd"` // base + this month's grants
+	BaseUSD           float64  `json:"base_usd"`  // user override or policy default
+	LimitUSD          float64  `json:"limit_usd"` // effective monthly limit
 	SpentUSD          float64  `json:"spent_usd"`
 	// Post-cap allowance (issue #22): admin-listed exact model identifiers
 	// that pass when the dollar gate denies, and the optional SOFT ceiling
@@ -424,13 +353,9 @@ func (d QuotaDecision) ModelAllowedOverLimit(model string) bool {
 }
 
 // quotaDecision computes the full decision in two queries: one for policy +
-// overrides + grants + month bounds, one for month-to-date spend across the
-// person's logins. A username absent from the directory is fail-secure:
-// bare-username spend at the policy default (mirrors selfScope). The no-person
-// case binds a SQL NULL as the slug — comparisons against NULL never match, so
-// overrides and grants can never apply to an unknown username. (A sentinel
-// string cannot work here: Postgres TEXT rejects NUL bytes, and any printable
-// sentinel a slug could one day collide with is worse than NULL.)
+// the per-username override + month bounds, one for month-to-date spend across
+// the partner user's logins. A username absent from the partner directory
+// resolves to just itself and the policy default.
 func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool) (QuotaDecision, error) {
 	d := QuotaDecision{Exempt: exempt}
 
@@ -471,7 +396,7 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	} else {
 		d.BaseUSD = defaultUSD
 	}
-	d.LimitUSD = d.BaseUSD + d.GrantUSD
+	d.LimitUSD = d.BaseUSD
 
 	err = s.db.QueryRowContext(ctx, fmt.Sprintf(`
 		SELECT COALESCE(SUM(%s), 0)
@@ -537,302 +462,6 @@ func (s *Store) invalidateQuotaCache() {
 	s.quotaMu.Unlock()
 }
 
-// --- Request view (what every UI surface renders) ---
-
-// QuotaRequest is one approval request with its people joined in, so a
-// manager inbox renders without a second lookup.
-type QuotaRequest struct {
-	ID         int64   `json:"id"`
-	PersonSlug string  `json:"person_slug"`
-	PersonName string  `json:"person_name"`
-	Username   string  `json:"username,omitempty"` // primary login, for "contact them"
-	Month      string  `json:"month"`
-	AskedUSD   float64 `json:"asked_usd"`
-	Reason     string  `json:"reason"` // per-project task description (questionnaire Q1)
-	// Questionnaire answers added alongside the free-text reason; '' on rows
-	// filed before the questionnaire existed — the UI shows what's there.
-	ReductionSteps     string     `json:"reduction_steps,omitempty"`
-	EstimateBasis      string     `json:"estimate_basis,omitempty"`
-	Timeline           string     `json:"timeline,omitempty"`
-	FeasibleWithinBase string     `json:"feasible_within_base,omitempty"` // "yes" | "no" | "" (old rows)
-	WhyNotEnough       string     `json:"why_not_enough,omitempty"`       // only when FeasibleWithinBase == "no"
-	Status             string     `json:"status"`
-	ApproverSlug       string     `json:"approver_slug,omitempty"` // "" = super-admin backstop
-	ApproverName       string     `json:"approver_name,omitempty"`
-	DecidedBy          string     `json:"decided_by,omitempty"`
-	Comment            string     `json:"comment,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	DecidedAt          *time.Time `json:"decided_at,omitempty"`
-	// PendingFromPriorMonth marks a pending row whose month key is no longer
-	// the current month: shown for history, not actionable, no longer
-	// blocking new requests (it is still 'pending' but its month has passed).
-	PendingFromPriorMonth bool `json:"pending_from_prior_month"`
-	// IsCurrentMonth duplicates the same fact positively, for the UI.
-	IsCurrentMonth bool `json:"is_current_month"`
-}
-
-const quotaRequestSelect = `
-	SELECT q.id, q.person_slug, p.full_name, COALESCE(pi.username, ''), q.month,
-		q.asked_usd, q.reason, q.reduction_steps, q.estimate_basis, q.timeline,
-		q.feasible_within_base, q.why_not_enough,
-		q.status, COALESCE(q.approver_slug, ''), COALESCE(a.full_name, ''),
-		q.decided_by, q.comment, q.created_at, q.decided_at,
-		q.month = to_char(date_trunc('month', NOW()), 'YYYY-MM')
-	FROM quota_requests q
-	JOIN people p ON p.slug = q.person_slug
-	LEFT JOIN people a ON a.slug = q.approver_slug
-	LEFT JOIN LATERAL (SELECT username FROM person_identities WHERE person_slug = q.person_slug AND is_service = false ORDER BY username LIMIT 1) pi ON true
-`
-
-func scanQuotaRequest(row interface{ Scan(...any) error }) (QuotaRequest, error) {
-	var q QuotaRequest
-	var decided sql.NullTime
-	err := row.Scan(&q.ID, &q.PersonSlug, &q.PersonName, &q.Username, &q.Month,
-		&q.AskedUSD, &q.Reason, &q.ReductionSteps, &q.EstimateBasis, &q.Timeline,
-		&q.FeasibleWithinBase, &q.WhyNotEnough,
-		&q.Status, &q.ApproverSlug, &q.ApproverName,
-		&q.DecidedBy, &q.Comment, &q.CreatedAt, &decided, &q.IsCurrentMonth)
-	if err != nil {
-		return q, err
-	}
-	if decided.Valid {
-		q.DecidedAt = &decided.Time
-	}
-	q.PendingFromPriorMonth = q.Status == "pending" && !q.IsCurrentMonth
-	return q, nil
-}
-
-func (s *Store) GetQuotaRequest(ctx context.Context, id int64) (QuotaRequest, error) {
-	return scanQuotaRequest(s.db.QueryRowContext(ctx, quotaRequestSelect+`WHERE q.id = $1`, id))
-}
-
-// QuotaRequestInput is the questionnaire the requester fills: the ask
-// amount plus the org's Token-Budget-Escalation questions. Tasks carries
-// the historical `reason` column. Validate is the single source of truth
-// for what a complete questionnaire is — the HTTP handler calls it verbatim.
-type QuotaRequestInput struct {
-	AskedUSD           float64
-	Tasks              string // Q: tasks per project needing the increase
-	ReductionSteps     string // Q: steps already taken to reduce spend
-	EstimateBasis      string // Q: what the estimate is based on
-	Timeline           string // Q: this month only, continuing, etc.
-	FeasibleWithinBase string // Q: can the work fit the standard budget? "yes"|"no"
-	WhyNotEnough       string // Q: required only when FeasibleWithinBase == "no"
-}
-
-const quotaAnswerMax = 2000
-
-func (in QuotaRequestInput) Validate() error {
-	if in.AskedUSD <= 0 || in.AskedUSD > 100000 {
-		return errors.New("enter the additional amount you are asking for (up to $100,000)")
-	}
-	for _, q := range []struct {
-		name, val string
-	}{
-		{"describe the tasks that need the extra budget", in.Tasks},
-		{"say what you have done to reduce token usage", in.ReductionSteps},
-		{"explain what your estimate is based on", in.EstimateBasis},
-		{"give a timeline for the increase", in.Timeline},
-	} {
-		if strings.TrimSpace(q.val) == "" {
-			return errors.New("please " + q.name)
-		}
-		if len(q.val) > quotaAnswerMax {
-			return fmt.Errorf("%s is too long (%d characters max)", q.name, quotaAnswerMax)
-		}
-	}
-	switch in.FeasibleWithinBase {
-	case "yes":
-	case "no":
-		if strings.TrimSpace(in.WhyNotEnough) == "" {
-			return errors.New("explain why the standard budget is not enough")
-		}
-		if len(in.WhyNotEnough) > quotaAnswerMax {
-			return fmt.Errorf("the explanation is too long (%d characters max)", quotaAnswerMax)
-		}
-	default:
-		return errors.New("answer whether the work can fit within your standard budget")
-	}
-	return nil
-}
-
-// CreateQuotaRequest files the caller's questionnaire with their directory
-// manager as the approver (NULL = super-admin backstop for the
-// manager-less). The partial unique index enforces one live pending request
-// per person; a stale pending from an earlier month was already non-blocking
-// by definition only if cancelled first — it isn't auto-cancelled here, the
-// unique index still holds, and the handler explains it.
-func (s *Store) CreateQuotaRequest(ctx context.Context, username string, in QuotaRequestInput) (QuotaRequest, error) {
-	person, err := s.GetPersonByUsername(ctx, username)
-	if err == sql.ErrNoRows {
-		return QuotaRequest{}, ErrQuotaNotInDirectory
-	}
-	if err != nil {
-		return QuotaRequest{}, err
-	}
-	var approver any
-	if person.ManagerSlug != "" {
-		approver = person.ManagerSlug
-	}
-	why := strings.TrimSpace(in.WhyNotEnough)
-	if in.FeasibleWithinBase == "yes" {
-		why = "" // a "yes" answer never carries an explanation, even if one was sent
-	}
-	var id int64
-	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO quota_requests (person_slug, month, asked_usd, reason, reduction_steps,
-			estimate_basis, timeline, feasible_within_base, why_not_enough, approver_slug)
-		VALUES ($1, to_char(date_trunc('month', NOW()), 'YYYY-MM'), $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id`,
-		person.Slug, in.AskedUSD, strings.TrimSpace(in.Tasks), strings.TrimSpace(in.ReductionSteps),
-		strings.TrimSpace(in.EstimateBasis), strings.TrimSpace(in.Timeline),
-		in.FeasibleWithinBase, why, approver,
-	).Scan(&id)
-	if err != nil {
-		// The 23505 constraint name is the precise signal for "a live
-		// pending row already exists"; any other insert failure is a 500.
-		if strings.Contains(err.Error(), "uq_quota_requests_pending") {
-			return QuotaRequest{}, ErrQuotaAlreadyPending
-		}
-		return QuotaRequest{}, err
-	}
-	if err := s.Audit(ctx, username, "quota.request", person.Slug, map[string]any{"id": id, "asked_usd": in.AskedUSD}); err != nil {
-		return QuotaRequest{}, err
-	}
-	q, err := s.GetQuotaRequest(ctx, id)
-	if err == nil {
-		s.invalidateQuotaCache() // pending state shows in the banner
-	}
-	return q, err
-}
-
-// CancelQuotaRequest withdraws a pending request. The requester may cancel
-// their own; isAdmin (checked by the handler) cancels anyone's. Atomic in
-// status='pending' like every other decision, so cancel-while-decided is a
-// clean 409, not a surprise.
-func (s *Store) CancelQuotaRequest(ctx context.Context, id int64, actor string, personSlug string, isAdmin bool) error {
-	query := `UPDATE quota_requests SET status = 'cancelled', decided_by = $2, decided_at = NOW() WHERE id = $1 AND status = 'pending'`
-	args := []any{id, actor}
-	if !isAdmin {
-		query += ` AND person_slug = $3`
-		args = append(args, personSlug)
-	}
-	res, err := s.db.ExecContext(ctx, query, args...)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrQuotaNoPending // nothing pending at this id for this caller
-	}
-	if err := s.Audit(ctx, actor, "quota.cancel", fmt.Sprint(id), nil); err != nil {
-		return err
-	}
-	s.invalidateQuotaCache()
-	return nil
-}
-
-// ApproveQuotaRequest records the decision AND mints the grant for the
-// month of approval (which covers the remainder of that calendar month;
-// expiry is automatic through the month key). approvedUSD is the manager's
-// answer — the asked amount as-is, or an edited figure, up or down.
-func (s *Store) ApproveQuotaRequest(ctx context.Context, id int64, actor string, approvedUSD float64) (QuotaRequest, error) {
-	if approvedUSD <= 0 {
-		return QuotaRequest{}, fmt.Errorf("approved_usd must be > 0")
-	}
-	if approvedUSD > 100000 {
-		return QuotaRequest{}, fmt.Errorf("approved_usd is unreasonably large")
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return QuotaRequest{}, err
-	}
-	defer tx.Rollback() //nolint:errcheck // committed or rolled back
-	var personSlug, month string
-	err = tx.QueryRowContext(ctx, `
-		UPDATE quota_requests SET status = 'approved', decided_by = $2, decided_at = NOW()
-		WHERE id = $1 AND status = 'pending'
-		RETURNING person_slug, month`,
-		id, actor).Scan(&personSlug, &month)
-	if err == sql.ErrNoRows {
-		return QuotaRequest{}, ErrQuotaNoPending
-	}
-	if err != nil {
-		return QuotaRequest{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO quota_grants (person_slug, month, extra_usd, request_id, granted_by)
-		VALUES ($1, to_char(date_trunc('month', NOW()), 'YYYY-MM'), $2, $3, $4)`,
-		personSlug, approvedUSD, id, actor); err != nil {
-		return QuotaRequest{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return QuotaRequest{}, err
-	}
-	if err := s.Audit(ctx, actor, "quota.approve", fmt.Sprint(id),
-		map[string]any{"person": personSlug, "asked_month": month, "approved_usd": approvedUSD}); err != nil {
-		return QuotaRequest{}, err
-	}
-	s.invalidateQuotaCache()
-	return s.GetQuotaRequest(ctx, id)
-}
-
-// RejectQuotaRequest turns the request down; the comment is mandatory and
-// the requester sees it in their banner.
-func (s *Store) RejectQuotaRequest(ctx context.Context, id int64, actor string, comment string) (QuotaRequest, error) {
-	comment = strings.TrimSpace(comment)
-	if comment == "" {
-		return QuotaRequest{}, fmt.Errorf("a comment is required when rejecting")
-	}
-	res, err := s.db.ExecContext(ctx, `
-		UPDATE quota_requests SET status = 'rejected', decided_by = $2, comment = $3, decided_at = NOW()
-		WHERE id = $1 AND status = 'pending'`,
-		id, actor, comment)
-	if err != nil {
-		return QuotaRequest{}, err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return QuotaRequest{}, ErrQuotaNoPending
-	}
-	if err := s.Audit(ctx, actor, "quota.reject", fmt.Sprint(id), map[string]any{"comment": comment}); err != nil {
-		return QuotaRequest{}, err
-	}
-	s.invalidateQuotaCache()
-	return s.GetQuotaRequest(ctx, id)
-}
-
-// ListQuotaRequests is the approver inbox plus the admin list. all=true
-// (super-admin) sees every request; otherwise only requests whose stamped
-// approver is the given slug. state: "pending", "decided", or "" (all).
-func (s *Store) ListQuotaRequests(ctx context.Context, approverSlug string, all bool, state string) ([]QuotaRequest, error) {
-	where := "WHERE 1=1"
-	args := []any{}
-	if !all {
-		args = append(args, approverSlug)
-		where += fmt.Sprintf(" AND q.approver_slug = $%d", len(args))
-	}
-	switch state {
-	case "pending":
-		where += " AND q.status = 'pending'"
-	case "decided":
-		where += " AND q.status <> 'pending'"
-	}
-	rows, err := s.db.QueryContext(ctx, quotaRequestSelect+where+
-		" ORDER BY (q.status = 'pending') DESC, q.created_at DESC LIMIT 200", args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []QuotaRequest
-	for rows.Next() {
-		q, err := scanQuotaRequest(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, q)
-	}
-	return out, rows.Err()
-}
-
 // --- Denial counters (who has been 429'd, and how often) ---
 
 // RecordQuotaDenial writes one blocked request into usage_events — the
@@ -850,18 +479,15 @@ func (s *Store) RecordQuotaDenial(ctx context.Context, username, model string) e
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// The rollup must see the same group_name the ledger row got, and the
-	// row's hour, so both come back from the insert rather than being
-	// re-derived (the group subquery is part of the row's identity).
+	// Group attribution was removed with the legacy org directory; denial
+	// rows carry a NULL group_name. The row's hour comes back from the
+	// insert so the rollup lands in the same bucket.
 	var ts time.Time
 	var group sql.NullString
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO usage_events (event_id, username, model, provider, group_name, status_code, source, cost_usd)
 		VALUES ('deny-' || gen_random_uuid()::text, $1, $2, 'gateway',
-			(SELECT p.group_name FROM person_identities pi
-			 JOIN people p ON p.slug = pi.person_slug
-			 WHERE pi.username = $1 LIMIT 1),
-			429, 'metering-quota', 0)
+			NULL, 429, 'metering-quota', 0)
 		RETURNING timestamp, group_name`,
 		username, model).Scan(&ts, &group)
 	if err != nil {
@@ -877,9 +503,9 @@ func (s *Store) RecordQuotaDenial(ctx context.Context, username, model string) e
 	return tx.Commit()
 }
 
-// sumQuotaDenials counts this month's gateway refusals across a person's
-// logins (denials are keyed by the ledger username the gateway used, which
-// is only one of several identities for multi-login people). Covered by
+// sumQuotaDenials counts this month's gateway refusals across a partner
+// user's logins (denials are keyed by the ledger username the gateway used,
+// which is only one of several logins a partner user may hold). Covered by
 // idx_usage_events_user_ts like the spend query itself.
 func (s *Store) sumQuotaDenials(ctx context.Context, logins []string) int {
 	var n int
@@ -929,129 +555,31 @@ func (s *Store) QuotaDenialTotals(ctx context.Context) (int, []QuotaDenialStat, 
 	return total, out, rows.Err()
 }
 
-// --- Status view (whoami / me / gauges carrier) ---
+// --- Status view (whoami / me carrier) ---
 
-// QuotaView is the full quota picture for one login: what the dashboard
-// popup and banner render, and what the manager page's gauges reuse per
-// person.
+// QuotaView is the quota picture for one login: what the dashboard popup and
+// banner render. Quota request/approval was removed in phase one; only the
+// decision and this month's denial count remain.
 type QuotaView struct {
 	Username string `json:"username"`
 	QuotaDecision
-	// Request is the person's most recent request in the current month, or a
-	// stale pending from an earlier month (PendingFromPriorMonth). nil when
-	// there is nothing to show.
-	Request *QuotaRequest `json:"request,omitempty"`
-	// ApprovalsPending counts requests waiting on THIS user as approver:
-	// routed to them as the requester's manager, plus (for super-admins) the
-	// manager-less backstop queue. Drives the manager-side pending banner.
-	ApprovalsPending int `json:"approvals_pending"`
 	// DenialsThisMonth: how many of this person's gateway requests were
-	// blocked this calendar month (all their logins, both quota gates).
+	// blocked this calendar month (across all their partner logins).
 	DenialsThisMonth int `json:"denials_this_month"`
-	// ManagerName: display name of the directory manager requests route to —
-	// the form shows it as a fixed routing line instead of asking "select
-	// your manager". "" when manager-less (requests go to the admin backstop).
-	ManagerName string `json:"manager_name,omitempty"`
 }
 
-// GetQuotaView assembles the decision plus the person's latest request for
-// the banner. Fresh (uncached) — this backs interactive pages, not the
-// gateway hot path.
+// GetQuotaView assembles the decision plus this month's denial count. Fresh
+// (uncached) — this backs interactive pages, not the gateway hot path.
 func (s *Store) GetQuotaView(ctx context.Context, username string, exempt bool) (QuotaView, error) {
 	d, err := s.quotaDecision(ctx, username, exempt)
 	if err != nil {
 		return QuotaView{}, err
 	}
 	v := QuotaView{Username: username, QuotaDecision: d}
-	if d.HasPerson {
-		if person, err := s.GetPersonByUsername(ctx, username); err == nil {
-			// One directory walk serves both: the person's login set (spend
-			// and denials aggregate across every identity) and the request/
-			// approver lookups below.
-			v.ManagerName = person.ManagerName
-			logins := []string{username}
-			if own, err := s.PersonUsernames(ctx, person.Slug); err == nil && len(own) > 0 {
-				logins = own
-			}
-			v.DenialsThisMonth = s.sumQuotaDenials(ctx, logins)
-			q, err := s.latestRequestForPerson(ctx, person.Slug)
-			if err != nil && err != sql.ErrNoRows {
-				return v, nil // a request lookup failure degrades the banner, not the whole view
-			}
-			if err == nil {
-				v.Request = &q
-			}
-			// Approver badge: what this person owes a decision on. Matches
-			// the manager inbox exactly (state=pending, any month — stale
-			// rows are shown in the inbox too, so they count here as well).
-			// Super-admins also see the manager-less backstop queue.
-			_ = s.db.QueryRowContext(ctx, `
-				SELECT count(*) FROM quota_requests
-				WHERE status = 'pending' AND (approver_slug = $1 OR ($2 AND approver_slug IS NULL))`,
-				person.Slug, exempt).Scan(&v.ApprovalsPending)
-		}
-	} else {
-		// No directory row: the bare ledger username is its own login set.
-		v.DenialsThisMonth = s.sumQuotaDenials(ctx, []string{username})
+	logins, err := s.PartnerLoginsForUsername(ctx, username)
+	if err != nil || len(logins) == 0 {
+		logins = []string{username}
 	}
+	v.DenialsThisMonth = s.sumQuotaDenials(ctx, logins)
 	return v, nil
 }
-
-// latestRequestForPerson: the newest current-month row, else the newest
-// stale pending (shown, not actionable, still blocking new requests).
-func (s *Store) latestRequestForPerson(ctx context.Context, slug string) (QuotaRequest, error) {
-	return scanQuotaRequest(s.db.QueryRowContext(ctx, quotaRequestSelect+`
-		WHERE q.person_slug = $1
-		  AND (q.month = to_char(date_trunc('month', NOW()), 'YYYY-MM') OR (q.status = 'pending'))
-		ORDER BY (q.status = 'pending' AND q.month <> to_char(date_trunc('month', NOW()), 'YYYY-MM')) ASC,
-		         q.created_at DESC
-		LIMIT 1`, slug))
-}
-
-// CancelPendingForPerson cancels a person's pending row addressed by their
-// login — the DELETE /me/quota/request path, so the client never needs the
-// row id. A stale pending from an earlier month still matches (status =
-// 'pending' regardless of month), which is also how the person frees the
-// one-pending slot to file a fresh request. admin=true is the super-admin
-// variant: actor is the real session identity in both cases.
-func (s *Store) CancelPendingForPerson(ctx context.Context, username string, actor string, admin bool) error {
-	person, err := s.GetPersonByUsername(ctx, username)
-	if err == sql.ErrNoRows {
-		return ErrQuotaNotInDirectory
-	}
-	if err != nil {
-		return err
-	}
-	res, err := s.db.ExecContext(ctx, `
-		UPDATE quota_requests SET status = 'cancelled', decided_by = $2, decided_at = NOW()
-		WHERE person_slug = $1 AND status = 'pending'`,
-		person.Slug, actor)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrQuotaNoPending
-	}
-	if err := s.Audit(ctx, actor, "quota.cancel", person.Slug, nil); err != nil {
-		return err
-	}
-	s.invalidateQuotaCache()
-	return nil
-}
-
-// --- Manager-page gauges: per-person quota columns on the org usage rollup ---
-
-// quotaLimitExpr resolves one person's effective monthly $ limit against
-// aliases: `st` = subtree slug column, `p` = people row. Splice with
-// fmt.Sprintf into GetOrgUsage.
-const quotaLimitExpr = `COALESCE(ou.monthly_usd, og.monthly_usd, (SELECT default_monthly_usd FROM quota_policy WHERE id = true), 0)
-	+ COALESCE(gr.grant, 0)`
-
-const quotaJoinExpr = `
-	LEFT JOIN quota_overrides ou ON ou.scope = 'user' AND ou.principal = st.slug
-	LEFT JOIN quota_overrides og ON og.scope = 'group' AND p.group_name <> '' AND og.principal = p.group_name
-	LEFT JOIN LATERAL (
-		SELECT COALESCE(SUM(extra_usd), 0) as grant
-		FROM quota_grants g WHERE g.person_slug = st.slug
-		  AND g.month = to_char(date_trunc('month', NOW()), 'YYYY-MM')
-	) gr ON true`

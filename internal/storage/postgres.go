@@ -314,10 +314,11 @@ const listCostUSDExpr = `GREATEST(e.prompt_tokens - COALESCE(e.cached_input_toke
 // wildcard percent is doubled.
 const hostedProviderCond = `COALESCE(p.provider,'') IN ('vllm','qwen') OR COALESCE(e.provider,'') LIKE 'qwen-%%'`
 
-// displayNameExpr resolves a user's "First Last" from user_profiles, or
-// NULL when the profile is missing or has no names — callers fall back to
-// the username. Requires usage_events aliased as `e` and the
-// `LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username` join.
+// displayNameExpr resolves a user's "First Last" from the partner directory
+// (first_name/last_name tags), or NULL when the login has no partner record
+// or no names — callers fall back to the username. Requires usage_events
+// aliased as `e` and the partner-login subquery joined as `up`:
+// `LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username`.
 const displayNameExpr = `NULLIF(TRIM(COALESCE(up.first_name, '') || ' ' || COALESCE(up.last_name, '')), '')`
 
 func (s *Store) GetTeamUsage(ctx context.Context, groupName string) ([]TeamUserUsage, error) {
@@ -489,7 +490,7 @@ type UserSummary struct {
 	Username string         `json:"username"`
 	UserID   string         `json:"user_id,omitempty"`
 	Tags     map[string]any `json:"tags,omitempty"`
-	// DisplayName is "First Last" from user_profiles; empty when unknown,
+	// DisplayName is "First Last" from the partner directory; empty when unknown,
 	// in which case the UI renders the username itself.
 	DisplayName      string  `json:"display_name,omitempty"`
 	GroupName        string  `json:"group_name"`
@@ -1040,7 +1041,7 @@ func (s *Store) GetDashboardTimeline(ctx context.Context, since, until time.Time
 type RecentEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 	Username  string    `json:"username"`
-	// DisplayName is "First Last" from user_profiles; empty when unknown.
+	// DisplayName is "First Last" from the partner directory; empty when unknown.
 	DisplayName         string  `json:"display_name,omitempty"`
 	Country             string  `json:"country,omitempty"`
 	GroupName           string  `json:"group_name"`
@@ -1135,53 +1136,6 @@ func (s *Store) GetUserProfile(ctx context.Context, username string) (UserProfil
 	return p, err
 }
 
-// UpsertUserProfiles inserts or overwrites the given profiles and returns
-// how many were written.
-func (s *Store) UpsertUserProfiles(ctx context.Context, profiles []UserProfile) (int, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck // committed or already rolled back
-
-	for _, p := range profiles {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO user_profiles (username, first_name, last_name, updated_at)
-			VALUES ($1, $2, $3, NOW())
-			ON CONFLICT (username) DO UPDATE SET
-				first_name = EXCLUDED.first_name,
-				last_name = EXCLUDED.last_name,
-				updated_at = NOW()`,
-			p.Username, p.FirstName, p.LastName); err != nil {
-			return 0, fmt.Errorf("upsert profile %s: %w", p.Username, err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
-	}
-	return len(profiles), nil
-}
-
-// ListUserProfiles returns every profile, username-ordered.
-func (s *Store) ListUserProfiles(ctx context.Context) ([]UserProfile, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT username, first_name, last_name FROM user_profiles ORDER BY username`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []UserProfile
-	for rows.Next() {
-		var p UserProfile
-		if err := rows.Scan(&p.Username, &p.FirstName, &p.LastName); err != nil {
-			return nil, err
-		}
-		result = append(result, p)
-	}
-	return result, rows.Err()
-}
-
 // migrationLockKey serialises migrate() across replicas that start together;
 // concurrent CREATE ... IF NOT EXISTS on the same catalog entry can still fail
 // with a duplicate-key error inside Postgres.
@@ -1208,7 +1162,6 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.migrateOrg(ctx); err != nil {
 		return err
 	}
-	// Last: the quota tables FK to people.
 	if err := s.migrateQuota(ctx); err != nil {
 		return err
 	}
@@ -1276,15 +1229,6 @@ var migrations = []string{
 	// price their historical usage_events, they just stop advertising
 	// themselves as bookable models.
 	`ALTER TABLE model_pricing ADD COLUMN IF NOT EXISTS deprecated BOOLEAN NOT NULL DEFAULT FALSE`,
-	// Human display names for dashboard users. Keyed by the same username
-	// string usage_events carries (the MaaS login identity). Empty names
-	// mean "unknown" — the UI falls back to the username.
-	`CREATE TABLE IF NOT EXISTS user_profiles (
-		username TEXT PRIMARY KEY,
-		first_name TEXT NOT NULL DEFAULT '',
-		last_name TEXT NOT NULL DEFAULT '',
-		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-	)`,
 	// Phase 3 (docs/dashboard-scaling-plan.md): cost frozen at insert.
 	// NULL = "not yet backfilled"; every NEW insert sets it in-statement
 	// from costUSDExpr, so insert-time and read-time cost agree by

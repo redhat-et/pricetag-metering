@@ -5,22 +5,26 @@ import (
 	"testing"
 )
 
-// Legacy username-keyed rows (written by the pre-UUID API) must still be
-// read and enforced across linked logins for users not in the partner
-// directory. The write path for these rows was removed with the UUID API.
+// Legacy username-keyed rows (written by the pre-UUID API) must still be read
+// and enforced for a login that has no partner record. Cross-login
+// aggregation now follows partner_user_logins rather than the retired
+// person_identities table, so a bare legacy login is enforced on its own.
 func TestUserModelAllowlistLegacyRowsStillEnforced(t *testing.T) {
 	s, ctx := openTestStore(t)
-	seedQuotaRoster(t, s, ctx)
-	quotaExec(t, s, ctx, `INSERT INTO person_identities (username, person_slug) VALUES ('alice_alt', 'alice')`)
-	quotaExec(t, s, ctx, `INSERT INTO user_model_allowlists (username, models, updated_by) VALUES ('alice', '{model-a,model-b}', 'legacy')`)
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_model_allowlists (username, models, updated_by) VALUES ('alice', '{model-a,model-b}', 'legacy')`); err != nil {
+		t.Fatalf("seed legacy allowlist: %v", err)
+	}
 
-	if decision, err := s.GetMonthlyUsage(ctx, "alice_alt", "model-a", false); err != nil || !decision.ModelAllowed || !decision.HasAccess {
-		t.Fatalf("allowed alias model decision = %#v, err %v", decision, err)
+	if decision, err := s.GetMonthlyUsage(ctx, "alice", "model-a", false); err != nil || !decision.ModelAllowed || !decision.HasAccess {
+		t.Fatalf("allowed model decision = %#v, err %v", decision, err)
 	}
-	if decision, err := s.GetMonthlyUsage(ctx, "alice_alt", "model-c", false); err != nil || decision.ModelAllowed || decision.HasAccess {
-		t.Fatalf("disallowed alias model decision = %#v, err %v", decision, err)
+	if decision, err := s.GetMonthlyUsage(ctx, "alice", "model-c", false); err != nil || decision.ModelAllowed || decision.HasAccess {
+		t.Fatalf("disallowed model decision = %#v, err %v", decision, err)
 	}
-	quotaExec(t, s, ctx, `DELETE FROM user_model_allowlists WHERE username = 'alice'`)
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM user_model_allowlists WHERE username = 'alice'`); err != nil {
+		t.Fatalf("clear allowlist: %v", err)
+	}
 	s.invalidateQuotaCache()
 	if decision, err := s.GetMonthlyUsage(ctx, "alice", "model-c", false); err != nil || !decision.ModelAllowed || !decision.HasAccess {
 		t.Fatalf("baseline access after clearing policy = %#v, err %v", decision, err)
