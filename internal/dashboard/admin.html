@@ -551,60 +551,12 @@ td .tag{white-space:nowrap}
 
 <!-- Console tabs -->
 <div class="vtabs">
-  <button class="vtab" id="vtab-users" onclick="showTab('users')">Users &amp; Groups<span class="tcount" id="badge-users" style="display:none"></span></button>
-  <button class="vtab" id="vtab-keys" onclick="showTab('keys')">Keys<span class="tcount" id="badge-keys" style="display:none"></span></button>
   <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button>
-  <button class="vtab" id="vtab-platform" onclick="showTab('platform')">Platform<span class="tcount" id="badge-platform" style="display:none"></span></button>
-  <button class="vtab quota-disabled" id="vtab-quotas" onclick="showTab('quotas')">Quotas<span class="tcount" id="badge-quotas" style="display:none"></span></button>
+  <button class="vtab" id="vtab-keys" onclick="showTab('keys')">Keys<span class="tcount" id="badge-keys" style="display:none"></span></button>
   <div class="vtab-tools">
     <span id="last-updated"></span>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="refreshTab(activeTab,true)">Refresh</button>
   </div>
-</div>
-
-<!-- ============ TAB: Users & Groups ============ -->
-<div class="tab-panel" id="tab-users">
-
-  <div class="card" id="pending-card" style="border-color:var(--org)">
-    <div class="card-hdr">
-      <div>
-        <span class="card-title" style="color:var(--org)">Pending Users</span>
-        <span class="card-count" id="pending-count"></span>
-      </div>
-      <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPendingUsers()">Refresh</button>
-    </div>
-    <div id="pending-body">
-      <div class="loading"><div class="spinner"></div>Checking for new users...</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-hdr">
-      <div>
-        <span class="card-title">Groups</span>
-        <span class="card-count" id="groups-count"></span>
-      </div>
-      <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadGroups()">Refresh</button>
-    </div>
-    <div id="groups-body">
-      <div class="loading"><div class="spinner"></div>Loading groups...</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-hdr">
-      <div>
-        <span class="card-title">Display Names</span>
-        <span class="card-count" id="profiles-count"></span>
-      </div>
-      <button class="btn btn-grn" onclick="saveProfiles()">Save</button>
-    </div>
-    <div class="ts" style="margin:0 16px 8px">Shown on the dashboards next to a user's traffic. Fill in a name and hit Save — users without a name fall back to their email. Clearing a name back to empty removes it.</div>
-    <div id="profiles-body">
-      <div class="loading"><div class="spinner"></div>Loading...</div>
-    </div>
-  </div>
-
 </div>
 
 <!-- ============ TAB: Keys ============ -->
@@ -654,45 +606,11 @@ td .tag{white-space:nowrap}
 
 </div>
 
-<!-- ============ TAB: People & Org ============ -->
+<!-- ============ TAB: Users ============ -->
 <div class="tab-panel" id="tab-people">
-  <div class="card">
-    <div class="card-hdr">
-      <div>
-        <span class="card-title">Users</span>
-        <span class="card-count" id="people-count"></span>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-grn" style="padding:5px 12px;font-size:10px" onclick="openAddUserModal()">Add user</button>
-        <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPeople()">Refresh</button>
-      </div>
-    </div>
-    <div class="chipbar">
-      <button class="chip on" data-pf="" onclick="setPeopleFilter(this)">All</button>
-      <button class="chip" data-pf="needs_attention" onclick="setPeopleFilter(this)">Needs attention</button>
-      <button class="chip" data-pf="managers" onclick="setPeopleFilter(this)">Managers</button>
-      <span class="ts" id="people-subtree-note" style="display:none"></span>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <select class="tbl-input" id="people-role-filter" style="max-width:150px" onchange="setPeopleRoleFilter(this)">
-          <option value="">All roles</option>
-          <option value="super">Super admin</option>
-          <option value="admin">Admin</option>
-          <option value="regular">Regular</option>
-        </select>
-        <select class="tbl-input" id="people-group-filter" style="max-width:160px" onchange="setPeopleGroupFilter(this)">
-          <option value="">All groups</option>
-        </select>
-        <input type="text" class="tbl-input" id="people-search" placeholder="Filter by name…" style="max-width:200px" oninput="renderPeople()">
-      </div>
-    </div>
-    <div class="ts" style="margin-bottom:10px">Org facts only — spend is never stored here, it is derived from usage. Edits mark the field manual so the next roster import won't overwrite them. Role (admin / super admin) is env-derived and read-only. Roster updates themselves are imported from the command line.</div>
-    <div id="people-list">
-      <div class="loading"><div class="spinner"></div>Loading users...</div>
-    </div>
-  </div>
-<div class="card" style="margin-top:16px">
+<div class="card">
   <div class="card-hdr"><div><span class="card-title">Partner / Atlas Users</span><span class="card-count" id="partner-users-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPartnerUsers()">Refresh</button></div>
-  <div class="ts" style="margin-bottom:10px">Partner identity records used by Atlas. Role changes are restricted to super-admins; profile metadata remains separate from the legacy roster projection.</div>
+  <div class="ts" style="margin-bottom:10px">Partner identity records — the single source of truth for user management. Role changes are restricted to super-admins.</div>
   <div id="partner-users-list"><div class="loading"><div class="spinner"></div>Loading partner users...</div></div>
   </div>
 </div>
@@ -704,95 +622,7 @@ td .tag{white-space:nowrap}
   </section>
 </div>
 
-<!-- ============ TAB: Platform ============ -->
-<div class="tab-panel" id="tab-platform">
-  <div class="panel-grid">
-    <div>
-      <div class="card">
-        <div class="card-hdr">
-          <div>
-            <span class="card-title">Auth Policies</span>
-            <span class="card-count" id="policies-count"></span>
-          </div>
-          <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPolicies()">Refresh</button>
-        </div>
-        <div id="policies-body">
-          <div class="loading"><div class="spinner"></div>Loading policies...</div>
-        </div>
-      </div>
-    </div>
-    <div>
-      <div class="card">
-        <div class="card-hdr">
-          <div>
-            <span class="card-title">Subscriptions</span>
-            <span class="card-count" id="subs-count"></span>
-          </div>
-          <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadSubscriptions()">Refresh</button>
-        </div>
-        <div id="subs-body">
-          <div class="loading"><div class="spinner"></div>Loading subscriptions...</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
-<!-- ============ TAB: Quotas ============ -->
-<div class="tab-panel quota-disabled" id="tab-quotas">
-
-  <div class="card">
-    <div class="card-hdr">
-      <div>
-        <span class="card-title">Monthly Budget Policy</span>
-        <span class="card-count" id="quota-policy-meta"></span>
-      </div>
-    </div>
-    <div id="quota-policy-body">
-      <div class="loading"><div class="spinner"></div>Loading policy...</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-hdr">
-      <div>
-        <span class="card-title">Models That Still Work Over the Cap</span>
-        <span class="card-count" id="quota-allowance-meta"></span>
-      </div>
-    </div>
-    <div class="ts" style="margin:0 16px 8px">When someone is over their monthly limit, requests to these models still go through. Exact model names only — no wildcards — because the name comes from the user's request. An empty list means over-cap users are fully blocked, as before.</div>
-    <div id="quota-allowance-body">
-      <div class="loading"><div class="spinner"></div>Loading allowance...</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-hdr">
-      <div>
-        <span class="card-title">Blocked Requests</span>
-        <span class="card-count" id="quota-denials-meta"></span>
-      </div>
-    </div>
-    <div class="ts" style="margin:0 16px 8px">Requests the gateway bounced with 429 this calendar month, counted at the moment the budget decision was made. Non-zero while enforcement is on is proof the gateway circuit is reaching this service.</div>
-    <div id="quota-denials-body">
-      <div class="loading"><div class="spinner"></div>Loading blocked requests...</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-hdr">
-      <div>
-        <span class="card-title">Overrides</span>
-        <span class="card-count" id="quota-overrides-count"></span>
-      </div>
-      <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadQuotaPolicy();loadQuotaOverrides()">Refresh</button>
-    </div>
-    <div class="ts" style="margin:0 16px 8px">Per-person limits key on the directory slug (covers every login of that person); per-group limits key on the group name. Resolution: person → group → default. Adding an existing scope+principal updates it; deleting one falls back to the next level, never to unlimited.</div>
-    <div id="quota-overrides-body">
-      <div class="loading"><div class="spinner"></div>Loading overrides...</div>
-    </div>
-  </div>
-</div>
 
 </div>
 
@@ -918,7 +748,7 @@ var confirmCallback = null;
 var cachedPolicies = [];
 var cachedSubscriptions = [];
 var profilesDirty = false;          // unsaved edits in the display-names table
-var activeTab = 'users';
+var activeTab = 'people';
 var tabLoadedOnce = {};
 var activeKeyCount = 0;             // Keys-tab badge = active keys + pending invites, combined
 var pendingInviteCount = 0;
@@ -970,7 +800,7 @@ function resolveModelName(crdName) {
 /* ================================================================
    Tabs — one panel visible, lazy load on first open, deep-linkable
    ================================================================ */
-var TABS = ['users', 'keys', 'people', 'platform', 'quotas'];
+var TABS = ['people', 'keys'];
 
 function showTab(name, pushHash) {
   if (TABS.indexOf(name) < 0) name = 'users';
@@ -988,32 +818,10 @@ function showTab(name, pushHash) {
 }
 
 function refreshTab(name, manual) {
-  if (name === 'users') {
-    loadPendingUsers();
-    loadGroups();
-    if (manual || !profilesDirty) loadProfiles();
+  if (name === 'people') {
+    loadPartnerUsers();
   } else if (name === 'keys') {
     loadKeys();
-    loadValidGroups();
-    // The person picker reads the people cache, which starts empty on a
-    // cold page that lands here directly — fill it first (also covers the
-    // invite-success box needing the person's name).
-    loadPeople(function() { populateInvitePickers(); });
-    loadInvites();
-  } else if (name === 'platform') {
-    loadPolicies();
-    loadSubscriptions();
-  } else if (name === 'people') {
-    loadPeople();
-    loadPartnerUsers();
-    loadValidGroups();
-    loadRoles();
-  } else if (name === 'quotas') {
-    loadQuotaPolicy();
-    loadQuotaOverrides();
-    // principal pickers read these caches; cold-page loads land here first
-    loadPeople(function() { fillQuotaPickers(); });
-    loadValidGroups();
   }
   if (manual) touchUpdated();
 }
@@ -1301,7 +1109,7 @@ fetchJSON('/api/v1/admin/models').then(function(models) {
   var h = (location.hash || '').replace('#', '');
   var start = TABS.indexOf(h) >= 0 ? h : null;
   if (!start) { try { start = localStorage.getItem('admin-tab'); } catch (e) {} }
-  showTab(start && TABS.indexOf(start) >= 0 ? start : 'users');
+  showTab(start && TABS.indexOf(start) >= 0 ? start : 'people');
   touchUpdated();
 })();
 
@@ -1312,7 +1120,7 @@ refreshTimer = setInterval(function() {
   if (document.querySelector('.modal-overlay.open, .confirm-overlay.open')) return;
   var ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
-  if (activeTab === 'people' || activeTab === 'quotas') return; // inline edits everywhere; manual Refresh there
+  if (activeTab === 'people') return; // inline edits on partner table; manual Refresh there
   refreshTab(activeTab, false);
 }, REFRESH_INTERVAL);
 

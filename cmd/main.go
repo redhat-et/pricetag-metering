@@ -300,10 +300,7 @@ func main() {
 	mux.HandleFunc("/api/v1/admin/models/provider/", auth(handler.RequireSuperAdmin(cfg, adminHandler.HandleUpdateProvider)))
 	mux.HandleFunc("/api/v1/admin/pricing/refresh", auth(handler.RequireSuperAdmin(cfg, handler.NewPricingRefreshHandler(store).HandleRefresh)))
 	// OpenShift users/entitlements management (redesigned admin page).
-	mux.HandleFunc("/api/v1/admin/openshift-users", auth(handler.RequireSuperAdmin(cfg, adminHandler.HandleUsers)))
-	mux.HandleFunc("/api/v1/admin/group-member", auth(handler.RequireSuperAdmin(cfg, adminHandler.HandleGroupMember)))
-	mux.HandleFunc("/api/v1/admin/auth-policies", auth(handler.RequireSuperAdmin(cfg, adminHandler.HandleAuthPolicies)))
-	mux.HandleFunc("/api/v1/admin/subscriptions", auth(handler.RequireSuperAdmin(cfg, adminHandler.HandleSubscriptions)))
+
 	// Key APIs are reachable by any signed-in user: the user dashboard manages
 	// the caller's own keys. The handlers scope non-admins to their own
 	// identity, so a regular user can only ever see or create their own keys.
@@ -312,6 +309,16 @@ func main() {
 	// Admin "view as user" — the handler checks admin against the real
 	// session identity, not the swapped header, so it also clears itself.
 	mux.HandleFunc("/admin/impersonate", auth(authHandler.HandleImpersonate))
+
+	// Manager view — session required; the page adapts to the caller's
+	// scope (plain user sees self, manager sees subtree, super-admin sees
+	// all). Backed entirely by partner_users.
+	orgHandler := handler.NewPartnerOrgHandler(store, cfg)
+	mux.HandleFunc("/manager", dashboardPage(orgHandler.ServeManager))
+	mux.HandleFunc("/api/v1/org/scope", dashboardAPI(orgHandler.HandleScope))
+	mux.HandleFunc("/api/v1/org/usage", dashboardAPI(orgHandler.HandleOrgUsage))
+	mux.HandleFunc("/api/v1/org/charts", dashboardAPI(orgHandler.HandleOrgCharts))
+	mux.HandleFunc("/api/v1/org/person", dashboardAPI(orgHandler.HandleOrgPerson))
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
