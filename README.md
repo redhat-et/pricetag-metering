@@ -54,6 +54,8 @@ kubectl apply -f deploy/
 | `QUOTA_ENFORCEMENT_ENABLED` | No | `false` | Controls dollar/token quota blocking. Usage accounting remains active; set `true` only after quota policy is ready. |
 | `M2M_AUTH_REQUIRED` | No | `false` | Require a bearer token on gateway-to-metering endpoints. Enable only with matching gateway header injection. |
 | `M2M_SHARED_SECRET` | No | — | Runtime secret compared against the M2M bearer token; never commit it. Required when `M2M_AUTH_REQUIRED=true`. |
+| `ADMIN_USERS` | No | — | Break-glass admin identities used only when the Partner identity store cannot be read. This does not grant access to an unprovisioned or demoted user while the store is healthy. |
+| `SUPERADMIN_USERS` | No | — | Break-glass operator identities used only when the Partner identity store cannot be read. Seed an active `super_admin` row in `partner_users` before first protected deployment. |
 
 ## CloudEvents Format
 
