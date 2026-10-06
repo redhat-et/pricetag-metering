@@ -36,6 +36,8 @@ the approval workflow are disabled in phase one.
 - [x] Remove dead org/quota/userprofiles handler files + integration tests.
 - [x] `storage/org.go` trimmed to audit log + SlugNorm only.
 - [x] Cycle-safe manager assignment guard (`UpdatePartnerUserAccess`).
+- [x] Remove ADMIN_USERS/SUPERADMIN_USERS env-allowlist; partner_users.role is
+      canonical for all admin/super-admin authorization.
 - [ ] Pre-drop guard: fail startup migration if any legacy reference remains (PR B).
 
 ## Tables to drop (PR B)
