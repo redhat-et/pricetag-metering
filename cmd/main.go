@@ -342,14 +342,15 @@ func main() {
 	// Monthly dollar quotas. The admin endpoints carry their own super-admin
 	// check that answers fetch() with a 403 instead of RequireSuperAdmin's
 	// redirect; /me and /org endpoints scope internally like the org APIs.
-	mux.HandleFunc("/api/v1/admin/quota/policy", auth(quotaHandler.HandleAdminPolicy))
-	mux.HandleFunc("/api/v1/admin/quota/denials", auth(quotaHandler.HandleAdminDenials))
-	mux.HandleFunc("/api/v1/admin/quota/overrides", auth(quotaHandler.HandleAdminOverrides))
-	mux.HandleFunc("/api/v1/admin/quota/models", auth(quotaHandler.HandleAdminQuotaModels))
-	mux.HandleFunc("/api/v1/me/quota", auth(quotaHandler.HandleMe))
-	mux.HandleFunc("/api/v1/me/quota/request", auth(quotaHandler.HandleMeRequest))
-	mux.HandleFunc("/api/v1/org/quota-requests", auth(quotaHandler.HandleOrgRequests))
-	mux.HandleFunc("/api/v1/org/quota-requests/", auth(quotaHandler.HandleOrgRequestAction))
+	quotaAPI := func(next http.HandlerFunc) http.HandlerFunc { return handler.RequireQuotaEnabled(cfg, next) }
+	mux.HandleFunc("/api/v1/admin/quota/policy", auth(quotaAPI(quotaHandler.HandleAdminPolicy)))
+	mux.HandleFunc("/api/v1/admin/quota/denials", auth(quotaAPI(quotaHandler.HandleAdminDenials)))
+	mux.HandleFunc("/api/v1/admin/quota/overrides", auth(quotaAPI(quotaHandler.HandleAdminOverrides)))
+	mux.HandleFunc("/api/v1/admin/quota/models", auth(quotaAPI(quotaHandler.HandleAdminQuotaModels)))
+	mux.HandleFunc("/api/v1/me/quota", auth(quotaAPI(quotaHandler.HandleMe)))
+	mux.HandleFunc("/api/v1/me/quota/request", auth(quotaAPI(quotaHandler.HandleMeRequest)))
+	mux.HandleFunc("/api/v1/org/quota-requests", auth(quotaAPI(quotaHandler.HandleOrgRequests)))
+	mux.HandleFunc("/api/v1/org/quota-requests/", auth(quotaAPI(quotaHandler.HandleOrgRequestAction)))
 
 	// Directory administration — super-admin only (backs the console's
 	// People & Org and Keys tabs).

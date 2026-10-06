@@ -405,14 +405,7 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 	}
 
 	stats := computeUsageStats(used, s.tokenQuota)
-	if !s.quotaEnforcement.Load() {
-		stats.HasAccess = true
-		return stats, nil
-	}
-	if !s.quotaEnforcement.Load() {
-		stats.HasAccess = true
-		return stats, nil
-	}
+	enforce := s.quotaEnforcement.Load()
 
 	decision, err := s.QuotaDecisionCached(ctx, username, exempt)
 	if err != nil {
@@ -422,14 +415,20 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 	stats.SpendUSD = decision.SpentUSD
 	stats.MonthEnds = decision.MonthEnds.UTC().Format(time.RFC3339)
 	stats.ModelAllowed = decision.ModelAllowed(model)
-	allowed := decision.Allowed()
-	if !allowed && decision.ModelAllowedOverLimit(model) {
+	allowed := true
+	if enforce {
+		allowed = decision.Allowed()
+	}
+	if enforce && !allowed && decision.ModelAllowedOverLimit(model) {
 		// Post-cap allowance (issue #22): an admin-listed model passes
 		// despite the dollar gate. It is therefore NOT a denial (the
 		// recorder below keys off the final HasAccess), and its spend
 		// still accrues normally through the ledger and the rollups.
 		allowed = true
 		stats.OverLimitModel = true
+	}
+	if !enforce {
+		stats.HasAccess = true
 	}
 	stats.HasAccess = stats.HasAccess && allowed && stats.ModelAllowed
 	return stats, nil
