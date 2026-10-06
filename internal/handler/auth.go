@@ -215,13 +215,8 @@ func (h *AuthHandler) loginDestination(r *http.Request, username string) string 
 			return "/dashboard"
 		}
 	}
-	// During the migration both sources decide manager routing: a manager in
-	// the partner hierarchy OR in the legacy directory lands on /manager, so
-	// users recognized only by the not-yet-migrated org APIs keep working.
+	// Manager routing is derived from the partner hierarchy only.
 	if _, isManager, err := h.orgStore.PartnerManagerScope(r.Context(), username); err == nil && isManager {
-		return "/manager"
-	}
-	if _, isManager, _, err := h.orgStore.ScopeUsernames(r.Context(), username); err == nil && isManager {
 		return "/manager"
 	}
 	return "/dashboard"

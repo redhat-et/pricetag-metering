@@ -1117,16 +1117,19 @@ func (p UserProfile) DisplayName() string {
 	return name
 }
 
-// GetUserProfile looks up one profile by username. sql.ErrNoRows becomes a
-// zero-valued profile with Username set, so callers can fall back to the
-// username without an extra branch.
+// GetUserProfile resolves a login's display name from the partner directory
+// (the canonical identity source). A login with no partner record returns a
+// zero-valued profile with Username set, so callers fall back to the username.
 func (s *Store) GetUserProfile(ctx context.Context, username string) (UserProfile, error) {
 	var p UserProfile
-	err := s.db.QueryRowContext(ctx,
-		`SELECT username, first_name, last_name FROM user_profiles WHERE username = $1`, username,
-	).Scan(&p.Username, &p.FirstName, &p.LastName)
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COALESCE(pu.tags->>'first_name', ''), COALESCE(pu.tags->>'last_name', '')
+		FROM partner_user_logins l
+		JOIN partner_users pu ON pu.user_id = l.user_id
+		WHERE l.username = $1`, username,
+	).Scan(&p.FirstName, &p.LastName)
+	p.Username = username
 	if err == sql.ErrNoRows {
-		p.Username = username
 		return p, nil
 	}
 	return p, err

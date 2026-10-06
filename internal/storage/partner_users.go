@@ -659,39 +659,6 @@ func partnerTagKeys(tags map[string]any) []string {
 	return keys
 }
 
-func syncPartnerUserProfiles(ctx context.Context, tx *sql.Tx, userID string, firstName, lastName string) error {
-	rows, err := tx.QueryContext(ctx, `SELECT username FROM partner_user_logins WHERE user_id = $1`, userID)
-	if err != nil {
-		return err
-	}
-	var usernames []string
-	for rows.Next() {
-		var username string
-		if err := rows.Scan(&username); err != nil {
-			rows.Close()
-			return err
-		}
-		usernames = append(usernames, username)
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	// Fill-only, like the roster import: a display name an admin already set
-	// in the dashboard is never overwritten by partner tag updates.
-	for _, username := range usernames {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO user_profiles (username, first_name, last_name, updated_at)
-			VALUES ($1,$2,$3,NOW())
-			ON CONFLICT (username) DO UPDATE SET
-				first_name=EXCLUDED.first_name, last_name=EXCLUDED.last_name, updated_at=NOW()
-			WHERE user_profiles.first_name = '' AND user_profiles.last_name = ''`,
-			username, firstName, lastName); err != nil {
-			return fmt.Errorf("sync dashboard profile for %s: %w", username, err)
-		}
-	}
-	return nil
-}
-
 func (s *Store) CreatePartnerUser(ctx context.Context, actor, userID string, tags map[string]any) (PartnerUser, error) {
 	id, err := normalizePartnerUserID(userID)
 	if err != nil {
@@ -722,9 +689,6 @@ func (s *Store) CreatePartnerUser(ctx context.Context, actor, userID string, tag
 			return PartnerUser{}, ErrPartnerUserConflict
 		}
 		return PartnerUser{}, fmt.Errorf("link partner MaaS username: %w", err)
-	}
-	if err := syncPartnerUserProfiles(ctx, tx, id, cleanTags["first_name"].(string), cleanTags["last_name"].(string)); err != nil {
-		return PartnerUser{}, err
 	}
 	if err := s.auditTx(ctx, tx, actor, "partner_user.create", id, map[string]any{"tag_keys": partnerTagKeys(cleanTags)}); err != nil {
 		return PartnerUser{}, err
@@ -835,9 +799,6 @@ func (s *Store) updatePartnerUser(ctx context.Context, actor, userID string, tag
 		if isUniqueViolation(err) {
 			return PartnerUser{}, ErrPartnerUserConflict
 		}
-		return PartnerUser{}, err
-	}
-	if err := syncPartnerUserProfiles(ctx, tx, id, cleanTags["first_name"].(string), cleanTags["last_name"].(string)); err != nil {
 		return PartnerUser{}, err
 	}
 	action := "partner_user.update"
