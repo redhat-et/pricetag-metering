@@ -381,6 +381,14 @@ func TestResolveScopeHonoursPreResolution(t *testing.T) {
 		t.Fatalf("got (%q,%v), want (pre@resolved,true) without touching the store", got, ok)
 	}
 
+	// Cache OFF path: admin branch runs ApplyScope DB-free.
+	cfg := config.Config{UserHeader: "X-Forwarded-User", AdminUsers: []string{"boss"}}
+	req := httptest.NewRequest("GET", "/api/v1/dashboard/overview", nil)
+	req.Header.Set("X-Forwarded-User", "boss")
+	got, ok = resolveScope(httptest.NewRecorder(), req, nil, cfg, "someone")
+	if !ok || got != "someone" {
+		t.Fatalf("admin passthrough = (%q,%v), want (someone,true)", got, ok)
+	}
 }
 
 func TestStatsNilSafe(t *testing.T) {

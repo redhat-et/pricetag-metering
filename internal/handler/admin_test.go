@@ -14,7 +14,7 @@ import (
 // the client's guard then rejects the call with a message about groups that
 // would point at the wrong layer during an incident.
 func TestPlatformGroupsNoKubernetes(t *testing.T) {
-	h := NewAdminHandler(nil, nil, config.Config{}, nil)
+	h := NewAdminHandler(nil, nil, config.Config{})
 	_, err := h.platformGroups(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "kubernetes") {
 		t.Fatalf("want kubernetes-not-configured error, got %v", err)

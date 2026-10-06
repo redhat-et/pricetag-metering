@@ -701,9 +701,9 @@ async function boot(){
   else loadSelf();
 }
 
-// ── Approval inbox (one hop: requests filed by your direct reports) ──────
+// ── Approval inbox (disabled: quota request/approval removed in phase one) ──
 let inboxById={};
-async function loadInbox(){
+async function loadInbox(){ return; /* quota requests removed */
   try{
     const list=await (await fetch('/api/v1/org/quota-requests?state=pending')).json();
     if(!Array.isArray(list))return;

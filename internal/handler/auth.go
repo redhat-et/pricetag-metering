@@ -43,13 +43,17 @@ type AuthHandler struct {
 	cfg        config.Config
 	secret     []byte
 	httpClient *http.Client
-	store      *storage.Store
+	// orgStore backs the post-login manager redirect: people whose directory
+	// record has reports land on /manager, the view they actually came for.
+	// Optional — a nil store (or a lookup failure) keeps the old behaviour
+	// and lands everyone on /dashboard.
+	orgStore *storage.Store
 }
 
-// SetStore wires the database store used by the login redirect and
-// impersonation checks. Kept a setter so login stays constructible
-// without a database (tests, lite deployments).
-func (h *AuthHandler) SetStore(s *storage.Store) { h.store = s }
+// SetOrgStore wires the directory lookup used by the login redirect. Kept a
+// setter so login stays constructible without a database (tests, lite
+// deployments).
+func (h *AuthHandler) SetOrgStore(s *storage.Store) { h.orgStore = s }
 
 func NewAuthHandler(cfg config.Config) *AuthHandler {
 	secret := []byte(os.Getenv("SESSION_SECRET"))
@@ -193,18 +197,27 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.loginDestination(r, result.Username), http.StatusFound)
 }
 
-// loginDestination is where a successful login lands. Admins and everyone
-// without a directory tree keep the Usage page; a manager — someone the
-// partner role says is an admin stays on Usage; a manager goes to /manager.
-// Fails closed to /dashboard on any lookup error.
+// loginDestination is where a successful login lands. Admins keep the Usage
+// page; a manager (someone with direct reports in partner_users) goes straight
+// to their team view. The legacy org directory is intentionally not consulted:
+// partner_users is the single identity source. Users only in the legacy
+// directory land on /dashboard (their own usage). Fails closed to /dashboard.
 func (h *AuthHandler) loginDestination(r *http.Request, username string) string {
-	if h.store == nil {
+	if h.orgStore == nil {
 		return "/dashboard"
 	}
-	if IsAdmin(r.Context(), h.cfg, h.store, r) {
-		return "/dashboard"
+	for _, admin := range h.cfg.AdminUsers {
+		if username == admin {
+			return "/dashboard"
+		}
 	}
-	if _, isManager, err := h.store.PartnerManagerScope(r.Context(), username); err == nil && isManager {
+	for _, admin := range h.cfg.SuperAdminUsers {
+		if username == admin {
+			return "/dashboard"
+		}
+	}
+	// Manager routing is derived from the partner hierarchy only.
+	if _, isManager, err := h.orgStore.PartnerManagerScope(r.Context(), username); err == nil && isManager {
 		return "/manager"
 	}
 	return "/dashboard"
@@ -223,7 +236,14 @@ func (h *AuthHandler) HandleImpersonate(w http.ResponseWriter, r *http.Request) 
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
-	if !IsSuperAdmin(r.Context(), h.cfg, h.store, r) {
+	isSuperAdmin := false
+	for _, admin := range h.cfg.SuperAdminUsers {
+		if session.Username == admin {
+			isSuperAdmin = true
+			break
+		}
+	}
+	if !isSuperAdmin {
 		http.Redirect(w, r, "/dashboard", http.StatusFound)
 		return
 	}
@@ -283,7 +303,7 @@ func (h *AuthHandler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		// endpoint. Only super-admins can hold or activate this claim —
 		// HandleImpersonate writes it for super-admins only, and the cookie
 		// is HMAC-signed, so a signed-out admin cannot forge one.
-		if session.As != "" && IsSuperAdmin(r.Context(), h.cfg, h.store, r) {
+		if session.As != "" && IsSuperAdmin(h.cfg, r) {
 			r.Header.Set(realUserHeader, session.Username)
 			r.Header.Set(h.cfg.UserHeader, session.As)
 		}

@@ -59,7 +59,7 @@ func (h *PartnerOrgHandler) HandleScope(w http.ResponseWriter, r *http.Request) 
 		Roots:    []string{},
 	}
 
-	if IsSuperAdmin(r.Context(), h.cfg, h.store, r) {
+	if IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r) {
 		resp.Scope = "admin"
 		resp.IsAdmin = true
 		resp.IsSuperAdmin = true
@@ -73,7 +73,7 @@ func (h *PartnerOrgHandler) HandleScope(w http.ResponseWriter, r *http.Request) 
 		slog.Error("partner manager scope failed", "user", me, "error", mgrErr)
 	}
 
-	resp.IsAdmin = IsAdmin(r.Context(), h.cfg, h.store, r)
+	resp.IsAdmin = IsPartnerAdmin(r.Context(), h.cfg, h.store, r)
 
 	if isMgr {
 		resp.Scope = "manager"
@@ -109,7 +109,7 @@ func (h *PartnerOrgHandler) scopeRoot(w http.ResponseWriter, r *http.Request) (s
 
 	root := strings.TrimSpace(r.URL.Query().Get("root"))
 
-	if IsSuperAdmin(r.Context(), h.cfg, h.store, r) {
+	if IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r) {
 		return root, true
 	}
 
