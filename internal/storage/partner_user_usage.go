@@ -58,7 +58,7 @@ func (s *Store) GetPartnerUsersUsageReport(ctx context.Context, userIDs []string
 		Users: []PartnerUserUsage{}, MissingUserIDs: []string{},
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT user_id::text,tags,active,key_revocation_pending,created_at,updated_at
+		SELECT user_id::text,tags,role,manager_user_id::text,active,key_revocation_pending,created_at,updated_at
 		FROM partner_users WHERE user_id = ANY($1::uuid[]) ORDER BY user_id`, pq.Array(ids))
 	if err != nil {
 		return PartnerUsersUsageReport{}, fmt.Errorf("load partner users: %w", err)
