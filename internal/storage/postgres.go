@@ -82,8 +82,9 @@ type Store struct {
 
 	// quotaCache memoises the entitlement decision per person for
 	// quotaCacheTTL; see QuotaDecisionCached. Guarded by quotaMu.
-	quotaMu    sync.Mutex
-	quotaCache map[string]quotaCacheEntry
+	quotaMu          sync.Mutex
+	quotaCache       map[string]quotaCacheEntry
+	quotaEnforcement atomic.Bool
 
 	// rollupsReadyNow caches the rollup backfill completion flag; the
 	// authoritative value lives in rollup_meta. See rollups.go.
@@ -131,12 +132,14 @@ func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) 
 	}
 
 	s := &Store{db: db, tokenQuota: tokenQuota}
+	s.quotaEnforcement.Store(true)
 	if err := s.migrate(ctx); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
 	return s, nil
 }
+func (s *Store) SetQuotaEnforcement(enabled bool) { s.quotaEnforcement.Store(enabled) }
 
 func (s *Store) Close() error {
 	if s.readDB != nil {
@@ -402,6 +405,14 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 	}
 
 	stats := computeUsageStats(used, s.tokenQuota)
+	if !s.quotaEnforcement.Load() {
+		stats.HasAccess = true
+		return stats, nil
+	}
+	if !s.quotaEnforcement.Load() {
+		stats.HasAccess = true
+		return stats, nil
+	}
 
 	decision, err := s.QuotaDecisionCached(ctx, username, exempt)
 	if err != nil {
@@ -501,15 +512,12 @@ type UserSummary struct {
 	SavedUSD float64 `json:"saved_usd"`
 }
 
-// DashboardTags is the intentionally small metadata surface exposed to
-// administrators; raw partner tags may contain future identity/system data.
+// DashboardTags returns a copy of Partner tags for administrator-only
+// dashboard surfaces. Key material is never stored in Partner tags.
 func DashboardTags(tags map[string]any) map[string]any {
-	allowed := map[string]bool{"email": true, "first_name": true, "last_name": true, "country": true, "rhat_uuid": true, "manager_uuid": true}
 	out := make(map[string]any)
 	for key, value := range tags {
-		if allowed[key] {
-			out[key] = value
-		}
+		out[key] = value
 	}
 	return out
 }

@@ -28,6 +28,9 @@ type Config struct {
 	// MonthlyTokenQuota caps per-user monthly token usage. Balance checks
 	// report no access once a user exceeds it.
 	MonthlyTokenQuota float64
+	// QuotaEnforcementEnabled controls whether entitlement decisions can block
+	// inference. Usage accounting remains active when this is false.
+	QuotaEnforcementEnabled bool
 
 	// DBMaxOpenConns caps open connections in each database pool
 	// (primary and read replica). Raised from the previous hardcoded value
@@ -230,6 +233,7 @@ func Load() Config {
 		DatabaseURL:              os.Getenv("DATABASE_URL"),
 		Port:                     envDefault("PORT", "8080"),
 		MonthlyTokenQuota:        envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
+		QuotaEnforcementEnabled:  envBool("QUOTA_ENFORCEMENT_ENABLED", true),
 		DBMaxOpenConns:           envInt("DB_MAX_OPEN_CONNS", 50),
 		DBMaxIdleConns:           envInt("DB_MAX_IDLE_CONNS", 10),
 		DBConnMaxLifetimeSeconds: envInt("DB_CONN_MAX_LIFETIME_SECONDS", 14400),

@@ -22,7 +22,11 @@
   --cyn:#38d4c2;
 }
 body{background:var(--bg);color:var(--t);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;line-height:1.5}
+.quota-disabled{display:none!important}
 .country-flag{display:inline-block;margin-right:6px;font-size:15px;vertical-align:-1px}
+.partner-detail-ov{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:180;align-items:center;justify-content:center;padding:20px}
+.partner-detail-ov.show{display:flex}.partner-detail-card{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;width:100%;max-width:650px;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.partner-detail-head{display:flex;align-items:center;padding:16px 18px;border-bottom:1px solid var(--bdr)}.partner-detail-head h2{flex:1;font-size:16px}.partner-detail-close{background:var(--c2);color:var(--t2);border:1px solid var(--bdr);width:28px;height:28px;border-radius:6px;cursor:pointer}.partner-detail-body{padding:18px}.partner-detail-grid{display:grid;grid-template-columns:170px 1fr;gap:8px 14px;font-size:12px}.partner-detail-key{color:var(--t2);font-weight:600}.partner-detail-value{word-break:break-word}
 .pg{max-width:1800px;margin:0 auto;padding:20px 40px}
 
 /* Header */
@@ -551,7 +555,7 @@ td .tag{white-space:nowrap}
   <button class="vtab" id="vtab-keys" onclick="showTab('keys')">Keys<span class="tcount" id="badge-keys" style="display:none"></span></button>
   <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button>
   <button class="vtab" id="vtab-platform" onclick="showTab('platform')">Platform<span class="tcount" id="badge-platform" style="display:none"></span></button>
-  <button class="vtab" id="vtab-quotas" onclick="showTab('quotas')">Quotas<span class="tcount" id="badge-quotas" style="display:none"></span></button>
+  <button class="vtab quota-disabled" id="vtab-quotas" onclick="showTab('quotas')">Quotas<span class="tcount" id="badge-quotas" style="display:none"></span></button>
   <div class="vtab-tools">
     <span id="last-updated"></span>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="refreshTab(activeTab,true)">Refresh</button>
@@ -686,11 +690,18 @@ td .tag{white-space:nowrap}
       <div class="loading"><div class="spinner"></div>Loading users...</div>
     </div>
   </div>
-  <div class="card" style="margin-top:16px">
+<div class="card" style="margin-top:16px">
   <div class="card-hdr"><div><span class="card-title">Partner / Atlas Users</span><span class="card-count" id="partner-users-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPartnerUsers()">Refresh</button></div>
   <div class="ts" style="margin-bottom:10px">Partner identity records used by Atlas. Role changes are restricted to super-admins; profile metadata remains separate from the legacy roster projection.</div>
   <div id="partner-users-list"><div class="loading"><div class="spinner"></div>Loading partner users...</div></div>
   </div>
+</div>
+
+<div class="partner-detail-ov" id="partner-detail-ov" onclick="if(event.target===this)closePartnerDetails()">
+  <section class="partner-detail-card" role="dialog" aria-modal="true" aria-labelledby="partner-detail-title">
+    <div class="partner-detail-head"><h2 id="partner-detail-title">Partner user</h2><button class="partner-detail-close" onclick="closePartnerDetails()">×</button></div>
+    <div class="partner-detail-body" id="partner-detail-body"></div>
+  </section>
 </div>
 
 <!-- ============ TAB: Platform ============ -->
@@ -728,7 +739,7 @@ td .tag{white-space:nowrap}
 </div>
 
 <!-- ============ TAB: Quotas ============ -->
-<div class="tab-panel" id="tab-quotas">
+<div class="tab-panel quota-disabled" id="tab-quotas">
 
   <div class="card">
     <div class="card-hdr">
@@ -2113,7 +2124,7 @@ function renderPartnerUsers() {
       var mt = m.tags || {}, mn = ((mt.first_name || '') + ' ' + (mt.last_name || '')).trim() || mt.email || m.user_id;
       return '<option value="' + esc(m.user_id) + '"' + (u.manager_user_id === m.user_id ? ' selected' : '') + '>' + esc(mn) + '</option>';
     }).join('');
-    html += '<tr data-user-id="' + esc(u.user_id) + '"><td><b>' + esc(name) + '</b><div class="ts">' + esc(t.email || '') + '<br>' + esc(u.user_id) + '</div></td>' +
+    html += '<tr data-user-id="' + esc(u.user_id) + '" tabindex="0" onclick="openPartnerDetails(' + partnerUsersAll.indexOf(u) + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openPartnerDetails(' + partnerUsersAll.indexOf(u) + ')}"><td><b>' + esc(name) + '</b><div class="ts">' + esc(t.email || '') + '<br>' + esc(u.user_id) + '</div></td>' +
       '<td>' + countryFlag(t.country) + esc(t.country || '—') + '</td>' +
       '<td><select class="tbl-input partner-manager" onchange="updatePartnerAccess(this)">' + managers + '</select></td>' +
       '<td><select class="tbl-input partner-role" onchange="updatePartnerAccess(this)">' +
@@ -2123,6 +2134,16 @@ function renderPartnerUsers() {
   html += '</tbody></table>';
   document.getElementById('partner-users-list').innerHTML = html;
 }
+function openPartnerDetails(index) {
+  var u=partnerUsersAll[index]; if(!u)return;
+  var t=u.tags||{}, name=((t.first_name||'')+' '+(t.last_name||'')).trim()||t.email||u.user_id;
+  var rows=[['role',u.role||'user'],['active',String(u.active)],['manager_user_id',u.manager_user_id||'']];
+  Object.keys(t).sort().forEach(function(k){rows.push([k,typeof t[k]==='object'?JSON.stringify(t[k]):t[k]);});
+  document.getElementById('partner-detail-title').innerHTML=countryFlag(t.country)+esc(name);
+  document.getElementById('partner-detail-body').innerHTML='<div class="partner-detail-grid">'+rows.map(function(r){return '<div class="partner-detail-key">'+esc(r[0])+'</div><div class="partner-detail-value">'+esc(r[1])+'</div>';}).join('')+'</div>';
+  document.getElementById('partner-detail-ov').classList.add('show');
+}
+function closePartnerDetails(){document.getElementById('partner-detail-ov').classList.remove('show')}
 function updatePartnerAccess(select) {
   var row = select.closest('tr');
   var userID = row.getAttribute('data-user-id');

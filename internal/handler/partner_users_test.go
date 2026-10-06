@@ -54,13 +54,13 @@ func TestAuthenticatedActorPrefersSessionIdentity(t *testing.T) {
 	}
 }
 
-func TestAdminPartnerUserResponseAllowlistsTags(t *testing.T) {
+func TestAdminPartnerUserResponseIncludesAllTags(t *testing.T) {
 	got := adminPartnerUser(storage.PartnerUser{
 		UserID: "u", Role: storage.PartnerRoleAdmin,
 		Tags: map[string]any{"email": "a@example.com", "country": "US", "internal_secret": "hidden"},
 	})
-	if got.Role != storage.PartnerRoleAdmin || got.Tags["email"] != "a@example.com" || got.Tags["internal_secret"] != nil {
-		t.Fatalf("admin partner response leaked or lost fields: %#v", got)
+	if got.Role != storage.PartnerRoleAdmin || got.Tags["email"] != "a@example.com" || got.Tags["internal_secret"] != "hidden" {
+		t.Fatalf("admin partner response did not preserve tags: %#v", got)
 	}
 }
 

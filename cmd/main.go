@@ -41,7 +41,9 @@ func main() {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
+	store.SetQuotaEnforcement(cfg.QuotaEnforcementEnabled)
 	defer store.Close()
+	store.SetQuotaEnforcement(cfg.QuotaEnforcementEnabled)
 
 	// Read replica (Phase 2 scaling plan): dashboard/report reads only,
 	// enforcement paths ignore this pool. A replica that can't be pinged
