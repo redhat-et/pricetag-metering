@@ -619,8 +619,9 @@ func (s *Store) GetDashboardGroups(ctx context.Context, since, until time.Time, 
 
 // GetDashboardUsers returns per-user usage stats. refModel selects the
 // reference model for the SavedUSD counterfactual (empty = claude-opus-4-8);
-// keep it in sync with the dashboard's savings reference selector.
-func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, group, user, model, sortCol, sortOrder string, limit int, refModel string) ([]UserSummary, error) {
+// keep it in sync with the dashboard's savings reference selector. offset
+// supports server-side pagination for large user tables.
+func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, group, user, model, sortCol, sortOrder string, limit, offset int, refModel string) ([]UserSummary, error) {
 	if refModel == "" {
 		refModel = "claude-opus-4-8"
 	}
@@ -643,9 +644,12 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 	if limit <= 0 || limit > 200 {
 		limit = 100
 	}
+	if offset < 0 {
+		offset = 0
+	}
 
 	rollup := s.rollupsLive()
-	query := hostedSavingsWithSQL(7, rollup)
+	query := hostedSavingsWithSQL(8, rollup)
 	if rollup {
 		query += fmt.Sprintf(rollupUsersSelect, displayNameExpr, displayNameExpr, sortExpr, direction)
 	} else {
@@ -665,11 +669,11 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 		LEFT JOIN sv ON sv.username = e.username
 		WHERE e.timestamp >= $1 AND e.timestamp < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
 		GROUP BY e.username, %s, COALESCE(e.group_name, '')
-		ORDER BY %s %s
-		LIMIT $6`, displayNameExpr, costUSDExpr, displayNameExpr, sortExpr, direction)
+		ORDER BY %s %s, e.username ASC, COALESCE(e.group_name, '') ASC
+			LIMIT $6 OFFSET $7`, displayNameExpr, costUSDExpr, displayNameExpr, sortExpr, direction)
 	}
 
-	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model, limit, refModel)
+	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model, limit, offset, refModel)
 	if err != nil {
 		return nil, err
 	}
@@ -841,8 +845,8 @@ func (s *Store) ListDashboardDirectoryUsers(ctx context.Context) ([]UserSummary,
 //	             matter what that row's own literal cached count reads.
 //
 // Positional params: $1 since, $2 until, $3 group, $4 user, $5 model,
-// refParamNum reference model — $7 for GetDashboardUsers (whose $6 is the
-// user-table LIMIT), $6 for GetHostedSavings (which has no LIMIT). A
+// refParamNum reference model — $8 for GetDashboardUsers (whose $6 is the
+// user-table LIMIT and $7 is the OFFSET), $6 for GetHostedSavings (which has no LIMIT). A
 // placeholder number that never appears in the query text at all makes
 // Postgres refuse the query outright ("could not determine data type of
 // parameter"), which is why this can't just always say $7.

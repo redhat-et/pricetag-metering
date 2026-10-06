@@ -23,6 +23,7 @@
 }
 body{background:var(--bg);color:var(--t);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;line-height:1.5}
 .quota-disabled{display:none!important}
+#vtab-keys,#tab-keys,#createKeyModal{display:none!important}
 .country-flag{display:inline-block;margin-right:6px;font-size:15px;vertical-align:-1px}
 .partner-detail-ov{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:180;align-items:center;justify-content:center;padding:20px}
 .partner-detail-ov.show{display:flex}.partner-detail-card{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;width:100%;max-width:650px;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.5)}
@@ -86,6 +87,9 @@ body{background:var(--bg);color:var(--t);font-family:Inter,-apple-system,BlinkMa
 }
 .card-title{font-size:15px;font-weight:700;color:var(--t)}
 .card-count{font-size:11px;color:var(--t2);margin-left:8px;font-weight:400}
+.partner-users-pager{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:12px;color:var(--t2);font-size:11px}
+.partner-users-pager button{background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:5px;padding:5px 10px;cursor:pointer;font:inherit}
+.partner-users-pager button:disabled{opacity:.4;cursor:not-allowed}
 
 /* Groups bar */
 .groups-row{
@@ -552,7 +556,6 @@ td .tag{white-space:nowrap}
 <!-- Console tabs -->
 <div class="vtabs">
   <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button>
-  <button class="vtab" id="vtab-keys" onclick="showTab('keys')">Keys<span class="tcount" id="badge-keys" style="display:none"></span></button>
   <div class="vtab-tools">
     <span id="last-updated"></span>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="refreshTab(activeTab,true)">Refresh</button>
@@ -612,6 +615,7 @@ td .tag{white-space:nowrap}
   <div class="card-hdr"><div><span class="card-title">Partner / Atlas Users</span><span class="card-count" id="partner-users-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPartnerUsers()">Refresh</button></div>
   <div class="ts" style="margin-bottom:10px">Partner identity records — the single source of truth for user management. Role changes are restricted to super-admins.</div>
   <div id="partner-users-list"><div class="loading"><div class="spinner"></div>Loading partner users...</div></div>
+  <div class="partner-users-pager"><button id="partner-users-prev" onclick="changePartnerUsersPage(-1)">Previous</button><span id="partner-users-page-label">Page 1</span><button id="partner-users-next" onclick="changePartnerUsersPage(1)">Next</button></div>
   </div>
 </div>
 
@@ -800,7 +804,7 @@ function resolveModelName(crdName) {
 /* ================================================================
    Tabs — one panel visible, lazy load on first open, deep-linkable
    ================================================================ */
-var TABS = ['people', 'keys'];
+var TABS = ['people'];
 
 function showTab(name, pushHash) {
   if (TABS.indexOf(name) < 0) name = 'people';
@@ -822,8 +826,6 @@ function showTab(name, pushHash) {
 function refreshTab(name, manual) {
   if (name === 'people') {
     loadPartnerUsers();
-  } else if (name === 'keys') {
-    loadKeys();
   }
   if (manual) touchUpdated();
 }
@@ -1429,9 +1431,9 @@ function setPeopleRoleFilter(sel) {
 }
 /* Platform roles come from the active Partner identity rows. The Partner
    Users table and the People table therefore show the same role source. */
-function loadRoles() {
+function loadRoles(users) {
   roleData = { admins: [], superAdmins: [] };
-  (Array.isArray(partnerUsersAll) ? partnerUsersAll : []).forEach(function(u) {
+  (Array.isArray(users) ? users : (Array.isArray(partnerUsersAll) ? partnerUsersAll : [])).forEach(function(u) {
     if (!u || !u.active) return;
     var email = u.tags && u.tags.email;
     if (!email) return;
@@ -1919,16 +1921,34 @@ function loadPeople(cb) {
     if (cb) cb();
   });
 }
-var partnerUsersAll = [];
-function loadPartnerUsers() {
-  fetchJSON('/api/v1/admin/partner-users').then(function(users) {
-    partnerUsersAll = Array.isArray(users) ? users : [];
-    document.getElementById('partner-users-count').textContent = '(' + partnerUsersAll.length + ')';
-    loadRoles();
+var partnerUsersAll = [], partnerManagersAll = [], partnerUsersPage = 0, partnerUsersPageSize = 50, partnerUsersHasMore = false;
+function loadPartnerUsers(page) {
+  if (typeof page === 'number') partnerUsersPage = page;
+  var offset = partnerUsersPage * partnerUsersPageSize;
+  fetchJSON('/api/v1/admin/partner-users?limit=' + partnerUsersPageSize + '&offset=' + offset).then(function(payload) {
+    var pageData = Array.isArray(payload) ? {users: payload, managers: payload, total: payload.length, has_more: false} : payload;
+    partnerUsersAll = Array.isArray(pageData.users) ? pageData.users : [];
+    partnerManagersAll = Array.isArray(pageData.managers) ? pageData.managers : partnerUsersAll;
+    partnerUsersHasMore = !!pageData.has_more;
+    document.getElementById('partner-users-count').textContent = '(' + (pageData.total || partnerUsersAll.length) + ')';
+    loadRoles(partnerManagersAll);
     renderPartnerUsers();
   }).catch(function(e) {
     document.getElementById('partner-users-list').innerHTML = '<div class="err-msg">' + esc(e.message) + '</div>';
   });
+}
+function renderPartnerUsersPager() {
+  var prev = document.getElementById('partner-users-prev');
+  var next = document.getElementById('partner-users-next');
+  if (!prev || !next) return;
+  prev.disabled = partnerUsersPage === 0;
+  next.disabled = !partnerUsersHasMore;
+  document.getElementById('partner-users-page-label').textContent = 'Page ' + (partnerUsersPage + 1);
+}
+function changePartnerUsersPage(delta) {
+  var next = partnerUsersPage + delta;
+  if (next < 0 || (delta > 0 && !partnerUsersHasMore)) return;
+  loadPartnerUsers(next);
 }
 function renderPartnerUsers() {
   var byId = {};
@@ -1937,7 +1957,7 @@ function renderPartnerUsers() {
   partnerUsersAll.forEach(function(u) {
     var t = u.tags || {};
     var name = ((t.first_name || '') + ' ' + (t.last_name || '')).trim() || t.email || u.user_id;
-    var managers = '<option value="">— none —</option>' + partnerUsersAll.filter(function(m) { return m.user_id !== u.user_id; }).map(function(m) {
+    var managers = '<option value="">— none —</option>' + partnerManagersAll.filter(function(m) { return m.user_id !== u.user_id; }).map(function(m) {
       var mt = m.tags || {}, mn = ((mt.first_name || '') + ' ' + (mt.last_name || '')).trim() || mt.email || m.user_id;
       return '<option value="' + esc(m.user_id) + '"' + (u.manager_user_id === m.user_id ? ' selected' : '') + '>' + esc(mn) + '</option>';
     }).join('');
@@ -1950,6 +1970,7 @@ function renderPartnerUsers() {
   });
   html += '</tbody></table>';
   document.getElementById('partner-users-list').innerHTML = html;
+  renderPartnerUsersPager();
 }
 function openPartnerDetails(index) {
   var u=partnerUsersAll[index]; if(!u)return;

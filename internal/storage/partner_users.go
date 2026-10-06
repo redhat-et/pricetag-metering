@@ -262,6 +262,40 @@ func (s *Store) ListAllPartnerUsers(ctx context.Context) ([]PartnerUser, error) 
 	return users, rows.Err()
 }
 
+// ListPartnerUsersPage returns one active Partner-user page and whether a
+// later page exists. The offset is used only by the admin table; the full list
+// method remains available for internal manager and role lookups.
+func (s *Store) ListPartnerUsersPage(ctx context.Context, limit, offset int) ([]PartnerUser, bool, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := s.db.QueryContext(ctx, partnerUserSelect+`
+		WHERE p.active ORDER BY p.created_at, p.user_id LIMIT $1 OFFSET $2`, limit+1, offset)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	users := make([]PartnerUser, 0, limit+1)
+	for rows.Next() {
+		user, err := scanPartnerUser(rows)
+		if err != nil {
+			return nil, false, err
+		}
+		users = append(users, user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	hasMore := len(users) > limit
+	if hasMore {
+		users = users[:limit]
+	}
+	return users, hasMore, nil
+}
+
 // PartnerManagerScope returns the set of MaaS login usernames a caller may
 // see: themselves plus every descendant in the partner_users manager tree.
 // The hierarchy is derived dynamically from partner_users.manager_user_id, so

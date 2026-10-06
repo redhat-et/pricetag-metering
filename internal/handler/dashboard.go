@@ -102,10 +102,18 @@ func (h *DashboardHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
 		limit = l
 	}
+	offset := 0
+	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
+		offset = o
+	}
 	// ref selects the reference model for the SavedUSD counterfactual; the
 	// dashboard passes its savings-ref selection so the user-table column
 	// and the Saved · Hosted Models KPI stay in lockstep.
-	result, err := h.store.GetDashboardUsers(r.Context(), since, until, group, user, model, sortCol, sortOrder, limit, r.URL.Query().Get("ref"))
+	queryLimit := limit
+	if r.URL.Query().Get("paginate") == "true" {
+		queryLimit = limit + 1 // one extra row tells us whether a next page exists
+	}
+	result, err := h.store.GetDashboardUsers(r.Context(), since, until, group, user, model, sortCol, sortOrder, queryLimit, offset, r.URL.Query().Get("ref"))
 	if err != nil {
 		slog.Error("dashboard query failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -113,6 +121,17 @@ func (h *DashboardHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	if result == nil {
 		result = []storage.UserSummary{}
+	}
+	if r.URL.Query().Get("paginate") == "true" {
+		hasMore := len(result) > limit
+		if hasMore {
+			result = result[:limit]
+		}
+		writeJSON(w, struct {
+			Users   []storage.UserSummary `json:"users"`
+			HasMore bool                  `json:"has_more"`
+		}{Users: result, HasMore: hasMore})
+		return
 	}
 	writeJSON(w, result)
 }

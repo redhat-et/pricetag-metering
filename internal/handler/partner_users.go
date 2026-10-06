@@ -43,6 +43,13 @@ type adminPartnerUserResponse struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
+type adminPartnerUsersPageResponse struct {
+	Users    []adminPartnerUserResponse `json:"users"`
+	Managers []adminPartnerUserResponse `json:"managers"`
+	Total    int                        `json:"total"`
+	HasMore  bool                       `json:"has_more"`
+}
+
 func adminPartnerUser(user storage.PartnerUser) adminPartnerUserResponse {
 	return adminPartnerUserResponse{UserID: user.UserID, Tags: storage.DashboardTags(user.Tags), Role: user.Role, ManagerUserID: user.ManagerUserID, Active: user.Active, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt}
 }
@@ -237,16 +244,61 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	users, err := h.store.ListAllPartnerUsers(r.Context())
-	if err != nil {
-		http.Error(w, "partner user list failed", http.StatusInternalServerError)
+	limitText, offsetText := r.URL.Query().Get("limit"), r.URL.Query().Get("offset")
+	if limitText == "" && offsetText == "" {
+		users, err := h.store.ListAllPartnerUsers(r.Context())
+		if err != nil {
+			http.Error(w, "partner user list failed", http.StatusInternalServerError)
+			return
+		}
+		result := make([]adminPartnerUserResponse, 0, len(users))
+		for _, user := range users {
+			result = append(result, adminPartnerUser(user))
+		}
+		writeJSON(w, result)
 		return
 	}
-	result := make([]adminPartnerUserResponse, 0, len(users))
-	for _, user := range users {
-		result = append(result, adminPartnerUser(user))
+
+	limit, offset := 50, 0
+	if limitText != "" {
+		parsed, err := strconv.Atoi(limitText)
+		if err != nil || parsed <= 0 {
+			http.Error(w, "invalid limit", http.StatusBadRequest)
+			return
+		}
+		limit = parsed
 	}
-	writeJSON(w, result)
+	if offsetText != "" {
+		parsed, err := strconv.Atoi(offsetText)
+		if err != nil || parsed < 0 {
+			http.Error(w, "invalid offset", http.StatusBadRequest)
+			return
+		}
+		offset = parsed
+	}
+	users, hasMore, err := h.store.ListPartnerUsersPage(r.Context(), limit, offset)
+	if err != nil {
+		http.Error(w, "partner user page failed", http.StatusInternalServerError)
+		return
+	}
+	managers, err := h.store.ListAllPartnerUsers(r.Context())
+	if err != nil {
+		http.Error(w, "partner manager list failed", http.StatusInternalServerError)
+		return
+	}
+	page := adminPartnerUsersPageResponse{
+		Users:    make([]adminPartnerUserResponse, 0, len(users)),
+		Managers: make([]adminPartnerUserResponse, 0, len(managers)),
+		Total:    len(managers),
+		HasMore:  hasMore,
+	}
+	for _, user := range users {
+		page.Users = append(page.Users, adminPartnerUser(user))
+	}
+	for _, user := range managers {
+		page.Managers = append(page.Managers, adminPartnerUser(user))
+	}
+	writeJSON(w, page)
 }
 
 func (h *PartnerUsersHandler) handleCollection(w http.ResponseWriter, r *http.Request) {
