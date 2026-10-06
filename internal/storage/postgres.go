@@ -317,7 +317,7 @@ const hostedProviderCond = `COALESCE(p.provider,'') IN ('vllm','qwen') OR COALES
 // displayNameExpr resolves a user's "First Last" from user_profiles, or
 // NULL when the profile is missing or has no names — callers fall back to
 // the username. Requires usage_events aliased as `e` and the
-// `LEFT JOIN user_profiles up ON up.username = e.username` join.
+// `LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username` join.
 const displayNameExpr = `NULLIF(TRIM(COALESCE(up.first_name, '') || ' ' || COALESCE(up.last_name, '')), '')`
 
 func (s *Store) GetTeamUsage(ctx context.Context, groupName string) ([]TeamUserUsage, error) {
@@ -660,7 +660,7 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 			COALESCE(ROUND(MAX(sv.saved)::numeric, 2), 0) as saved_usd
 		FROM usage_events e
 		LEFT JOIN model_pricing p ON e.model = p.model
-		LEFT JOIN user_profiles up ON up.username = e.username
+		LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
 		LEFT JOIN sv ON sv.username = e.username
 		WHERE e.timestamp >= $1 AND e.timestamp < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
 		GROUP BY e.username, %s, COALESCE(e.group_name, '')
@@ -1073,7 +1073,7 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 			e.status_code
 		FROM usage_events e
 		LEFT JOIN model_pricing p ON e.model = p.model
-		LEFT JOIN user_profiles up ON up.username = e.username
+		LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
 		LEFT JOIN partner_user_logins pul ON pul.username = e.username AND pul.is_current
 		LEFT JOIN partner_users pu ON pu.user_id = pul.user_id
 		WHERE ($2 = '' OR e.group_name = $2) AND ($3 = '' OR e.username = ANY(string_to_array($3, ','))) AND ($4 = '' OR e.model = $4)

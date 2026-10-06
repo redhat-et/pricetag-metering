@@ -716,7 +716,7 @@ var rollupUsersSelect = `
 			COALESCE(ROUND(SUM(e.cost_usd)::numeric, 2), 0) as cost_usd,
 			COALESCE(ROUND(MAX(sv.saved)::numeric, 2), 0) as saved_usd
 		FROM usage_hourly e
-		LEFT JOIN user_profiles up ON up.username = e.username
+		LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
 		LEFT JOIN sv ON sv.username = e.username
 		WHERE e.hour >= $1 AND e.hour < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
 		GROUP BY e.username, %s, COALESCE(e.group_name, '')
