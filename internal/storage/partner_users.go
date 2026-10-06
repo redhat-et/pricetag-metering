@@ -282,15 +282,19 @@ func (s *Store) PartnerManagerScope(ctx context.Context, username string) (usern
 	if err != nil {
 		return nil, false, err
 	}
+	// depth is capped and the path is tracked so cyclic or corrupt manager
+	// data (a user who transitively reports to themselves) can never cause
+	// unbounded recursion. A node already on the path is not re-expanded.
 	rows, err := s.db.QueryContext(ctx, `
-		WITH RECURSIVE subtree(user_id) AS (
-			SELECT $1::uuid
+		WITH RECURSIVE subtree(user_id, depth, path) AS (
+			SELECT $1::uuid, 0, ARRAY[$1::uuid]
 			UNION ALL
-			SELECT p.user_id FROM partner_users p
+			SELECT p.user_id, st.depth + 1, st.path || p.user_id
+			FROM partner_users p
 			JOIN subtree st ON p.manager_user_id = st.user_id
-			WHERE p.active
+			WHERE p.active AND st.depth < 1000 AND NOT p.user_id = ANY(st.path)
 		)
-		SELECT l.username
+		SELECT DISTINCT l.username
 		FROM subtree st
 		JOIN partner_user_logins l ON l.user_id = st.user_id
 		ORDER BY l.username`, rootID)
@@ -360,6 +364,24 @@ func (s *Store) UpdatePartnerUserAccess(ctx context.Context, actor, userID, role
 		}
 		if !exists {
 			return PartnerUser{}, ErrPartnerUserNotFound
+		}
+		// Reject cycles: the proposed manager must not already report (directly
+		// or transitively) to this user, which would make the hierarchy loop.
+		var cycle bool
+		if err := tx.QueryRowContext(ctx, `
+			WITH RECURSIVE up(user_id, depth, path) AS (
+				SELECT $1::uuid, 0, ARRAY[$1::uuid]
+				UNION ALL
+				SELECT p.manager_user_id, u.depth + 1, u.path || p.manager_user_id
+				FROM partner_users p
+				JOIN up u ON p.user_id = u.user_id
+				WHERE p.manager_user_id IS NOT NULL AND u.depth < 1000 AND NOT p.manager_user_id = ANY(u.path)
+			)
+			SELECT EXISTS(SELECT 1 FROM up WHERE user_id = $2::uuid)`, *manager, id).Scan(&cycle); err != nil {
+			return PartnerUser{}, err
+		}
+		if cycle {
+			return PartnerUser{}, fmt.Errorf("%w: manager assignment would create a cycle", ErrInvalidPartnerUser)
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `
