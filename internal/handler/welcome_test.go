@@ -50,6 +50,9 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 	if strings.Contains(body, "{{") {
 		t.Errorf("page contains unsubstituted placeholder")
 	}
+	if strings.Contains(body, "Current status") {
+		t.Errorf("page still contains removed Current status section")
+	}
 }
 
 var anyPlaceholder = regexp.MustCompile(`\{\{[A-Z_]+\}\}`)
