@@ -262,6 +262,65 @@ func (s *Store) ListAllPartnerUsers(ctx context.Context) ([]PartnerUser, error) 
 	return users, rows.Err()
 }
 
+// PartnerManagerScope returns the set of MaaS login usernames a caller may
+// see: themselves plus every descendant in the partner_users manager tree.
+// The hierarchy is derived dynamically from partner_users.manager_user_id, so
+// a user created before their manager appears as a root until the manager
+// joins, after which the tree resolves automatically. isManager is true when
+// the caller has at least one direct report. A username with no partner record
+// resolves to just itself.
+func (s *Store) PartnerManagerScope(ctx context.Context, username string) (usernames []string, isManager bool, err error) {
+	var rootID string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT p.user_id::text
+		FROM partner_user_logins l
+		JOIN partner_users p ON p.user_id = l.user_id
+		WHERE l.username = $1 AND p.active`, username).Scan(&rootID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return []string{username}, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		WITH RECURSIVE subtree(user_id) AS (
+			SELECT $1::uuid
+			UNION ALL
+			SELECT p.user_id FROM partner_users p
+			JOIN subtree st ON p.manager_user_id = st.user_id
+			WHERE p.active
+		)
+		SELECT l.username
+		FROM subtree st
+		JOIN partner_user_logins l ON l.user_id = st.user_id
+		ORDER BY l.username`, rootID)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	seen := map[string]bool{username: true}
+	out := []string{username}
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			return nil, false, err
+		}
+		if !seen[u] {
+			out = append(out, u)
+			seen[u] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	var reports int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM partner_users WHERE active AND manager_user_id = $1::uuid`, rootID).Scan(&reports); err != nil {
+		return nil, false, err
+	}
+	return out, reports > 0, nil
+}
+
 // UpdatePartnerUserAccess changes operator-controlled authorization fields.
 // It is intentionally separate from Atlas profile PATCH so external callers
 // cannot grant themselves dashboard roles.

@@ -215,7 +215,7 @@ func (h *AuthHandler) loginDestination(r *http.Request, username string) string 
 			return "/dashboard"
 		}
 	}
-	if _, isManager, _, err := h.orgStore.ScopeUsernames(r.Context(), username); err == nil && isManager {
+	if _, isManager, err := h.orgStore.PartnerManagerScope(r.Context(), username); err == nil && isManager {
 		return "/manager"
 	}
 	return "/dashboard"
