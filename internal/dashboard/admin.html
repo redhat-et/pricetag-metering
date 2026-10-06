@@ -743,7 +743,7 @@ var validGroups = []; // canonical org groups, from the live MaaSSubscription CR
 var peopleSort = { key: '', dir: 1 };
 var peopleGroupFilter = '';
 var peopleRoleFilter = '';
-var roleData = { admins: [], superAdmins: [] }; // env-derived platform roles, read-only
+var roleData = { admins: [], superAdmins: [] }; // active partner_users roles, read-only
 var confirmCallback = null;
 var cachedPolicies = [];
 var cachedSubscriptions = [];
@@ -1427,19 +1427,22 @@ function setPeopleRoleFilter(sel) {
   peopleRoleFilter = sel.value;
   renderPeople();
 }
-/* Platform roles (admin / super-admin), env-derived and read-only. Loaded
-   once with the tab so the Users table can badge + filter each person. */
+/* Platform roles come from the active Partner identity rows. The Partner
+   Users table and the People table therefore show the same role source. */
 function loadRoles() {
-  fetchJSON('/api/v1/admin/org/roles').then(function(r) {
-    roleData = {
-      admins: (r && Array.isArray(r.admins)) ? r.admins.map(function(s){return s.toLowerCase();}) : [],
-      superAdmins: (r && Array.isArray(r.superAdmins)) ? r.superAdmins.map(function(s){return s.toLowerCase();}) : []
-    };
-    renderPeople();
-  }).catch(function() { /* table falls back to "regular" for everyone */ });
+  roleData = { admins: [], superAdmins: [] };
+  (Array.isArray(partnerUsersAll) ? partnerUsersAll : []).forEach(function(u) {
+    if (!u || !u.active) return;
+    var email = u.tags && u.tags.email;
+    if (!email) return;
+    email = email.toLowerCase();
+    if (u.role === 'super_admin') roleData.superAdmins.push(email);
+    else if (u.role === 'admin') roleData.admins.push(email);
+  });
+  renderPeople();
 }
 /* A person's platform role: match their login or email (case-insensitive)
-   against the configured lists. Super-admin wins; super-admin implies admin. */
+   against active Partner identities. Super-admin wins; super-admin implies admin. */
 function personRole(p) {
   var ids = [p.username, p.email].filter(Boolean).map(function(s){return s.toLowerCase();});
   var hit = function(list){ return ids.some(function(id){ return list.indexOf(id) >= 0; }); };
@@ -1918,6 +1921,7 @@ function loadPartnerUsers() {
   fetchJSON('/api/v1/admin/partner-users').then(function(users) {
     partnerUsersAll = Array.isArray(users) ? users : [];
     document.getElementById('partner-users-count').textContent = '(' + partnerUsersAll.length + ')';
+    loadRoles();
     renderPartnerUsers();
   }).catch(function(e) {
     document.getElementById('partner-users-list').innerHTML = '<div class="err-msg">' + esc(e.message) + '</div>';

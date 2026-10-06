@@ -180,6 +180,7 @@ func main() {
 	maasClient := maasapi.NewClient(maasAPIURL, maasTenant)
 
 	adminHandler := handler.NewAdminHandler(k8sClient, maasClient, cfg)
+	adminHandler.SetStore(store)
 	authHandler := handler.NewAuthHandler(cfg)
 	authHandler.SetOrgStore(store) // managers land on /manager after login
 	keysHandler := handler.NewKeysHandler(k8sClient, cfg, store)
@@ -282,23 +283,23 @@ func main() {
 	// nothing else — most of them only ever want to look at usage, and the
 	// pages below mutate platform state. Gated server-side, not just in the
 	// nav, so deep links and direct API calls are refused too.
-	mux.HandleFunc("/admin", auth(handler.RequireSuperAdmin(cfg, adminHandler.ServeAdmin)))
-	mux.HandleFunc("/routing", auth(handler.RequireSuperAdmin(cfg, adminHandler.ServeRouting)))
-	mux.HandleFunc("/admin2", auth(handler.RequireSuperAdmin(cfg, adminHandler.ServeRouting)))
-	// Admin APIs are gated by RequireSuperAdmin (auth() alone is not enough —
+	mux.HandleFunc("/admin", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeAdmin)))
+	mux.HandleFunc("/routing", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeRouting)))
+	mux.HandleFunc("/admin2", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeRouting)))
+	// Admin APIs are gated by RequirePartnerSuperAdmin (auth() alone is not enough —
 	// otherwise any signed-in user could change weights/config).
 	// Cache hit/miss counters — the Phase 1 verify step: hit ratio should
 	// approach (polls − filter-combos-per-TTL) / polls once the fleet
 	// settles. Read-only, super-admin page material.
-	mux.HandleFunc("/api/v1/admin/cache-stats", auth(handler.RequireSuperAdmin(cfg, dashCache.ServeStats)))
+	mux.HandleFunc("/api/v1/admin/cache-stats", auth(handler.RequirePartnerSuperAdmin(cfg, store, dashCache.ServeStats)))
 	rollupHandler := handler.NewRollupHandler(store)
-	mux.HandleFunc("/api/v1/admin/rollups", auth(handler.RequireSuperAdmin(cfg, rollupHandler.HandleStatus)))
-	mux.HandleFunc("/api/v1/admin/providers", auth(handler.RequireSuperAdmin(cfg, adminHandler.HandleProviders)))
-	mux.HandleFunc("/api/v1/admin/models", auth(handler.RequireSuperAdmin(cfg, adminHandler.HandleModels)))
-	mux.HandleFunc("/api/v1/admin/models/", auth(handler.RequireSuperAdmin(cfg, adminHandler.HandleUpdateWeights)))
-	mux.HandleFunc("/api/v1/admin/config", auth(handler.RequireSuperAdmin(cfg, adminHandler.HandleConfig)))
-	mux.HandleFunc("/api/v1/admin/models/provider/", auth(handler.RequireSuperAdmin(cfg, adminHandler.HandleUpdateProvider)))
-	mux.HandleFunc("/api/v1/admin/pricing/refresh", auth(handler.RequireSuperAdmin(cfg, handler.NewPricingRefreshHandler(store).HandleRefresh)))
+	mux.HandleFunc("/api/v1/admin/rollups", auth(handler.RequirePartnerSuperAdmin(cfg, store, rollupHandler.HandleStatus)))
+	mux.HandleFunc("/api/v1/admin/providers", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleProviders)))
+	mux.HandleFunc("/api/v1/admin/models", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleModels)))
+	mux.HandleFunc("/api/v1/admin/models/", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleUpdateWeights)))
+	mux.HandleFunc("/api/v1/admin/config", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleConfig)))
+	mux.HandleFunc("/api/v1/admin/models/provider/", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleUpdateProvider)))
+	mux.HandleFunc("/api/v1/admin/pricing/refresh", auth(handler.RequirePartnerSuperAdmin(cfg, store, handler.NewPricingRefreshHandler(store).HandleRefresh)))
 	// OpenShift users/entitlements management (redesigned admin page).
 
 	// Key APIs are reachable by any signed-in user: the user dashboard manages

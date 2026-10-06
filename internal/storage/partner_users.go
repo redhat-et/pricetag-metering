@@ -238,7 +238,7 @@ func (s *Store) GetPartnerRoleByUsername(ctx context.Context, username string) (
 		SELECT p.role
 		FROM partner_user_logins l
 		JOIN partner_users p ON p.user_id = l.user_id
-		WHERE l.username = $1 AND l.is_current AND p.active`, username).Scan(&role)
+		WHERE LOWER(l.username) = LOWER($1) AND l.is_current AND p.active`, strings.TrimSpace(username)).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PartnerRoleUser, nil
 	}

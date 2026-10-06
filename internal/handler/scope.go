@@ -26,7 +26,7 @@ func caller(r *http.Request, cfg config.Config) string {
 // Package-level so every dashboard handler can reach it without constructing a
 // handler first.
 func ApplyScope(w http.ResponseWriter, r *http.Request, store *storage.Store, cfg config.Config, requestedUser string) (string, bool) {
-	if IsAdmin(cfg, r) {
+	if IsPartnerAdmin(r.Context(), cfg, store, r) {
 		return requestedUser, true
 	}
 	me := caller(r, cfg)

@@ -21,71 +21,67 @@ type AdminHandler struct {
 	k8sClient  *k8s.Client
 	maasClient *maasapi.Client
 	cfg        config.Config
+	store      *storage.Store
 }
 
 func NewAdminHandler(k8sClient *k8s.Client, maasClient *maasapi.Client, cfg config.Config) *AdminHandler {
 	return &AdminHandler{k8sClient: k8sClient, maasClient: maasClient, cfg: cfg}
 }
 
-// IsAdmin reports whether the caller may see the org-wide Usage view — the
-// full user table and user filter on the dashboard. Identity comes from the
-// header an authenticating proxy sets in front of this service; the service
-// performs no authentication of its own. Admins do NOT get the admin console
-// or the Routing/Compression pages — see IsSuperAdmin for those.
+// SetStore wires the Partner identity store used by the admin handler. A nil
+// store keeps the handler constructible in tests and leaves only break-glass
+// authorization available.
+func (h *AdminHandler) SetStore(store *storage.Store) { h.store = store }
+
+// IsAdmin is retained for compatibility with small, database-free handlers and
+// tests. Runtime authorization should use IsPartnerAdmin instead.
 func IsAdmin(cfg config.Config, r *http.Request) bool {
-	user := r.Header.Get(cfg.UserHeader)
-	if user == "" {
-		return cfg.AllowUnauthenticatedAdmin
-	}
-	for _, admin := range cfg.AdminUsers {
-		if user == admin {
-			return true
-		}
-	}
-	// Super-adminship implies admin: whoever can administer the platform
-	// can obviously see the usage page the console links to.
-	for _, admin := range cfg.SuperAdminUsers {
-		if user == admin {
-			return true
-		}
-	}
-	return false
+	return isBreakGlassAdminUsername(cfg, r.Header.Get(cfg.UserHeader))
 }
 
-// IsSuperAdmin reports whether the caller may reach the admin console,
-// Routing, Compression, and every admin-gated API. Most "admins" only ever
-// want the usage page; mutating platform state stays with the operators.
+// IsSuperAdmin is retained for compatibility with database-free handlers and
+// tests. Runtime authorization should use IsPartnerSuperAdmin instead.
 func IsSuperAdmin(cfg config.Config, r *http.Request) bool {
-	user := r.Header.Get(cfg.UserHeader)
-	if user == "" {
+	return isBreakGlassSuperAdminUsername(cfg, r.Header.Get(cfg.UserHeader))
+}
+
+func isBreakGlassAdminUsername(cfg config.Config, username string) bool {
+	username = strings.TrimSpace(username)
+	if username == "" {
 		return cfg.AllowUnauthenticatedAdmin
 	}
+	return configuredIdentity(cfg.AdminUsers, username) || configuredIdentity(cfg.SuperAdminUsers, username)
+}
+
+func isBreakGlassSuperAdminUsername(cfg config.Config, username string) bool {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return cfg.AllowUnauthenticatedAdmin
+	}
+	if configuredIdentity(cfg.SuperAdminUsers, username) {
+		return true
+	}
 	for _, admin := range cfg.SuperAdminUsers {
-		if user == admin {
+		if i := strings.IndexByte(admin, '@'); i > 0 && strings.EqualFold(username, strings.TrimSpace(admin[:i])) {
 			return true
 		}
 	}
 	return false
 }
 
-// IsSuperAdminUsername is IsSuperAdmin for callers that carry no session
-// header — the gateway's M2M entitlement lookup, where the only identity is
-// the customer username in the path. SUPERADMIN_USERS entries are OAuth
-// identities (email form); gateway logins are the local part, so both forms
-// match.
-func IsSuperAdminUsername(cfg config.Config, username string) bool {
-	if username == "" {
-		return false
-	}
-	for _, admin := range cfg.SuperAdminUsers {
-		if strings.EqualFold(username, admin) {
-			return true
-		}
-		if i := strings.IndexByte(admin, '@'); i > 0 && strings.EqualFold(username, admin[:i]) {
+func configuredIdentity(identities []string, username string) bool {
+	for _, identity := range identities {
+		if strings.EqualFold(username, strings.TrimSpace(identity)) {
 			return true
 		}
 	}
 	return false
+}
+
+// IsSuperAdminUsername is the break-glass-only compatibility helper. New
+// callers with a Partner store must use IsPartnerSuperAdminUsername.
+func IsSuperAdminUsername(cfg config.Config, username string) bool {
+	return isBreakGlassSuperAdminUsername(cfg, username)
 }
 
 // RequireAdmin gates a handler behind IsAdmin, sending everyone else to
@@ -126,17 +122,25 @@ func RequireAdminAPI(cfg config.Config, next http.HandlerFunc) http.HandlerFunc 
 	}
 }
 
-// IsPartnerAdmin keeps the deployment allowlist as a break-glass path while
-// making partner_users.role the normal dashboard authorization source.
+// IsPartnerAdmin makes partner_users.role the normal authorization source. The
+// configured lists are used only when the Partner store is unavailable, so a
+// role change in partner_users can demote a previously listed identity.
 func IsPartnerAdmin(ctx context.Context, cfg config.Config, store *storage.Store, r *http.Request) bool {
-	if IsAdmin(cfg, r) {
+	return IsPartnerAdminUsername(ctx, cfg, store, r.Header.Get(cfg.UserHeader))
+}
+
+func IsPartnerAdminUsername(ctx context.Context, cfg config.Config, store *storage.Store, username string) bool {
+	if strings.TrimSpace(username) == "" && cfg.AllowUnauthenticatedAdmin {
 		return true
 	}
-	if store == nil {
-		return false
+	if store != nil {
+		role, err := store.GetPartnerRoleByUsername(ctx, username)
+		if err == nil {
+			return role == storage.PartnerRoleAdmin || role == storage.PartnerRoleSuperAdmin
+		}
+		slog.Warn("Partner role lookup failed; using break-glass authorization", "error", err)
 	}
-	role, err := store.GetPartnerRoleByUsername(ctx, r.Header.Get(cfg.UserHeader))
-	return err == nil && (role == storage.PartnerRoleAdmin || role == storage.PartnerRoleSuperAdmin)
+	return isBreakGlassAdminUsername(cfg, username)
 }
 
 func RequirePartnerAdminPage(cfg config.Config, store *storage.Store, next, comingSoon http.HandlerFunc) http.HandlerFunc {
@@ -160,14 +164,21 @@ func RequirePartnerAdminAPI(cfg config.Config, store *storage.Store, next http.H
 }
 
 func IsPartnerSuperAdmin(ctx context.Context, cfg config.Config, store *storage.Store, r *http.Request) bool {
-	if IsSuperAdmin(cfg, r) {
+	return IsPartnerSuperAdminUsername(ctx, cfg, store, r.Header.Get(cfg.UserHeader))
+}
+
+func IsPartnerSuperAdminUsername(ctx context.Context, cfg config.Config, store *storage.Store, username string) bool {
+	if strings.TrimSpace(username) == "" && cfg.AllowUnauthenticatedAdmin {
 		return true
 	}
-	if store == nil {
-		return false
+	if store != nil {
+		role, err := store.GetPartnerRoleByUsername(ctx, username)
+		if err == nil {
+			return role == storage.PartnerRoleSuperAdmin
+		}
+		slog.Warn("Partner super-admin role lookup failed; using break-glass authorization", "error", err)
 	}
-	role, err := store.GetPartnerRoleByUsername(ctx, r.Header.Get(cfg.UserHeader))
-	return err == nil && role == storage.PartnerRoleSuperAdmin
+	return isBreakGlassSuperAdminUsername(cfg, username)
 }
 
 func RequirePartnerSuperAdmin(cfg config.Config, store *storage.Store, next http.HandlerFunc) http.HandlerFunc {
@@ -462,16 +473,39 @@ func (h *AdminHandler) HandleValidGroups(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, map[string][]string{"groups": groups})
 }
 
-// HandleRoles returns the configured admin and super-admin identities so the
-// People & Org table can badge each person's platform role. Read-only: both
-// lists are env-derived (ADMIN_USERS / SUPERADMIN_USERS) and cannot be edited
-// from the console — the operators own that surface deliberately.
+// HandleRoles returns active Partner identities grouped by their Partner role.
+// This endpoint is read-only and exists for the legacy People & Org table.
 func (h *AdminHandler) HandleRoles(w http.ResponseWriter, r *http.Request) {
-	admins := append([]string{}, h.cfg.AdminUsers...)
-	supers := append([]string{}, h.cfg.SuperAdminUsers...)
+	if h.store == nil {
+		http.Error(w, "partner identity store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	users, err := h.store.ListAllPartnerUsers(r.Context())
+	if err != nil {
+		http.Error(w, "partner role lookup failed", http.StatusInternalServerError)
+		return
+	}
+	admins, supers := partnerRoleLists(users)
+	writeJSON(w, map[string][]string{"admins": admins, "superAdmins": supers})
+}
+
+func partnerRoleLists(users []storage.PartnerUser) (admins, supers []string) {
+	for _, user := range users {
+		email, _ := user.Tags["email"].(string)
+		email = strings.TrimSpace(email)
+		if email == "" {
+			continue
+		}
+		switch user.Role {
+		case storage.PartnerRoleSuperAdmin:
+			supers = append(supers, email)
+		case storage.PartnerRoleAdmin:
+			admins = append(admins, email)
+		}
+	}
 	sort.Strings(admins)
 	sort.Strings(supers)
-	writeJSON(w, map[string][]string{"admins": admins, "superAdmins": supers})
+	return admins, supers
 }
 
 // platformGroups returns the group set to scope maas-api v1 calls with: the
@@ -514,7 +548,7 @@ func (h *AdminHandler) listKeys(w http.ResponseWriter, r *http.Request) {
 	}
 	username := r.URL.Query().Get("username")
 	// Non-admins are pinned to their own keys regardless of the query.
-	if !IsAdmin(h.cfg, r) {
+	if !IsPartnerAdmin(r.Context(), h.cfg, h.store, r) {
 		username = r.Header.Get(h.cfg.UserHeader)
 	}
 	groups, err := h.platformGroups(r.Context())
@@ -548,7 +582,7 @@ func (h *AdminHandler) createKey(w http.ResponseWriter, r *http.Request) {
 	}
 	// Self-service: a regular user may only create a key for themselves, in
 	// one of their own groups (the redesigned user dashboard's create form).
-	if !IsAdmin(h.cfg, r) {
+	if !IsPartnerAdmin(r.Context(), h.cfg, h.store, r) {
 		body.Username = r.Header.Get(h.cfg.UserHeader)
 		groups := sessionGroups(r, h.cfg)
 		ok := body.Group == ""
@@ -600,7 +634,7 @@ func (h *AdminHandler) revokeKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Non-admins may only revoke a key that belongs to them.
-	if !IsAdmin(h.cfg, r) {
+	if !IsPartnerAdmin(r.Context(), h.cfg, h.store, r) {
 		caller := r.Header.Get(h.cfg.UserHeader)
 		own, err := h.maasClient.SearchAPIKeys(r.Context(), caller, groups)
 		if err != nil {

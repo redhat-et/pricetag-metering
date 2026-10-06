@@ -198,7 +198,7 @@ func (h *PartnerUsersHandler) HandleUsers(w http.ResponseWriter, r *http.Request
 }
 
 // HandleAdminAccess updates operator-controlled role and manager fields. The
-// route is mounted behind RequireSuperAdmin; Atlas never reaches it.
+// route is mounted behind RequirePartnerSuperAdmin; Atlas never reaches it.
 func (h *PartnerUsersHandler) HandleAdminAccess(w http.ResponseWriter, r *http.Request) {
 	const prefix = "/api/v1/admin/partner-users/"
 	userID := strings.TrimPrefix(r.URL.Path, prefix)

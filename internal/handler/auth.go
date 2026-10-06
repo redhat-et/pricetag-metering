@@ -206,15 +206,8 @@ func (h *AuthHandler) loginDestination(r *http.Request, username string) string 
 	if h.orgStore == nil {
 		return "/dashboard"
 	}
-	for _, admin := range h.cfg.AdminUsers {
-		if username == admin {
-			return "/dashboard"
-		}
-	}
-	for _, admin := range h.cfg.SuperAdminUsers {
-		if username == admin {
-			return "/dashboard"
-		}
+	if IsPartnerAdminUsername(r.Context(), h.cfg, h.orgStore, username) {
+		return "/dashboard"
 	}
 	// Manager routing is derived from the partner hierarchy only.
 	if _, isManager, err := h.orgStore.PartnerManagerScope(r.Context(), username); err == nil && isManager {
@@ -236,13 +229,7 @@ func (h *AuthHandler) HandleImpersonate(w http.ResponseWriter, r *http.Request) 
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
-	isSuperAdmin := false
-	for _, admin := range h.cfg.SuperAdminUsers {
-		if session.Username == admin {
-			isSuperAdmin = true
-			break
-		}
-	}
+	isSuperAdmin := IsPartnerSuperAdminUsername(r.Context(), h.cfg, h.orgStore, session.Username)
 	if !isSuperAdmin {
 		http.Redirect(w, r, "/dashboard", http.StatusFound)
 		return
@@ -283,7 +270,8 @@ func (h *AuthHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 // RequireAuth gates a handler behind a valid session cookie. On success it
-// sets the identity headers so downstream handlers (IsAdmin, whoami, etc.)
+// sets the identity headers so downstream handlers (Partner role checks,
+// whoami, etc.)
 // work unchanged.
 func (h *AuthHandler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -297,13 +285,13 @@ func (h *AuthHandler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 			r.Header.Set(h.cfg.GroupsHeader, fmt.Sprintf(`["%s"]`, strings.Join(session.Groups, `","`)))
 		}
 		// Admin "view as" mode: swap the identity header to the target user
-		// so every downstream handler (per-user scoping, IsAdmin) behaves
+		// so every downstream handler (per-user scoping, Partner role checks) behaves
 		// exactly as it would for that user. The real identity is preserved
 		// in realUserHeader for the UI banner and the impersonate-clear
 		// endpoint. Only super-admins can hold or activate this claim —
 		// HandleImpersonate writes it for super-admins only, and the cookie
 		// is HMAC-signed, so a signed-out admin cannot forge one.
-		if session.As != "" && IsSuperAdmin(h.cfg, r) {
+		if session.As != "" && IsPartnerSuperAdminUsername(r.Context(), h.cfg, h.orgStore, session.Username) {
 			r.Header.Set(realUserHeader, session.Username)
 			r.Header.Set(h.cfg.UserHeader, session.As)
 		}
