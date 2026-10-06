@@ -233,7 +233,7 @@ func Load() Config {
 		DatabaseURL:              os.Getenv("DATABASE_URL"),
 		Port:                     envDefault("PORT", "8080"),
 		MonthlyTokenQuota:        envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
-		QuotaEnforcementEnabled:  envBool("QUOTA_ENFORCEMENT_ENABLED", true),
+		QuotaEnforcementEnabled:  envBool("QUOTA_ENFORCEMENT_ENABLED", false),
 		DBMaxOpenConns:           envInt("DB_MAX_OPEN_CONNS", 50),
 		DBMaxIdleConns:           envInt("DB_MAX_IDLE_CONNS", 10),
 		DBConnMaxLifetimeSeconds: envInt("DB_CONN_MAX_LIFETIME_SECONDS", 14400),
