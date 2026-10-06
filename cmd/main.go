@@ -43,6 +43,21 @@ func main() {
 	}
 	defer store.Close()
 	store.SetQuotaEnforcement(cfg.QuotaEnforcementEnabled)
+	// Repair manager links imported before the manager's Partner identity was
+	// provisioned. This is a bounded, idempotent startup repair; normal writes
+	// reconcile only the manager affected by that write.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		updated, err := store.ReconcilePartnerManagerLinks(ctx)
+		if err != nil {
+			slog.Error("partner manager-link reconciliation failed", "error", err)
+			return
+		}
+		if updated > 0 {
+			slog.Info("partner manager links reconciled", "updated", updated)
+		}
+	}()
 
 	// Read replica (Phase 2 scaling plan): dashboard/report reads only,
 	// enforcement paths ignore this pool. A replica that can't be pinged
