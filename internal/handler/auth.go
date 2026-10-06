@@ -197,10 +197,11 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.loginDestination(r, result.Username), http.StatusFound)
 }
 
-// loginDestination is where a successful login lands. Admins and everyone
-// without a directory tree keep the Usage page; a manager — someone the
-// directory says has reports — goes straight to their team view, which is
-// what they came for. Fails closed to /dashboard on any lookup error.
+// loginDestination is where a successful login lands. Admins keep the Usage
+// page; a manager (someone with direct reports in partner_users) goes straight
+// to their team view. The legacy org directory is intentionally not consulted:
+// partner_users is the single identity source. Users only in the legacy
+// directory land on /dashboard (their own usage). Fails closed to /dashboard.
 func (h *AuthHandler) loginDestination(r *http.Request, username string) string {
 	if h.orgStore == nil {
 		return "/dashboard"
@@ -215,7 +216,8 @@ func (h *AuthHandler) loginDestination(r *http.Request, username string) string 
 			return "/dashboard"
 		}
 	}
-	if _, isManager, _, err := h.orgStore.ScopeUsernames(r.Context(), username); err == nil && isManager {
+	// Manager routing is derived from the partner hierarchy only.
+	if _, isManager, err := h.orgStore.PartnerManagerScope(r.Context(), username); err == nil && isManager {
 		return "/manager"
 	}
 	return "/dashboard"

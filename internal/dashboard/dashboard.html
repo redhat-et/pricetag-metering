@@ -262,13 +262,6 @@ tr.clickable{cursor:pointer}
   <div style="height:20px;border-left:1px solid var(--border)"></div>
 
   <div style="display:flex;align-items:center;gap:6px">
-    <span style="font-size:11px;color:var(--text2)">Group:</span>
-    <select id="group-filter-select" onchange="groupFilter=this.value;refresh()" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:5px;font-size:12px;cursor:pointer">
-      <option value="">All</option>
-    </select>
-  </div>
-
-  <div style="display:flex;align-items:center;gap:6px">
     <span style="font-size:11px;color:var(--text2)">Model:</span>
     <select id="model-filter-select" onchange="setModelFilter(this.value)" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:5px;font-size:12px;cursor:pointer">
       <option value="">All</option>
@@ -341,7 +334,6 @@ tr.clickable{cursor:pointer}
       <thead><tr>
         <th style="cursor:default">Time</th>
         <th style="cursor:default">User</th>
-        <th style="cursor:default">Group</th>
         <th style="cursor:default">Client</th>
         <th style="cursor:default">Model</th>
         <th style="cursor:default">Provider</th>
@@ -599,7 +591,6 @@ function renderRecent(data){
     return `<tr>
       <td style="white-space:nowrap;color:var(--text2)">${timeAgo(r.timestamp)}</td>
       <td>${userCell(r.username,r.display_name,{country:r.country})}</td>
-      <td>${fmtGroup(r.group_name)}</td>
       <td style="color:${clientColor}" title="${r.user_agent||''}">${client||'—'}</td>
       <td>${r.model||'—'}</td>
       <td style="color:${provColor}">${r.provider||'—'}</td>
@@ -656,7 +647,6 @@ function renderGroupFilterBtns(data){}
 
 const COLS=[
   {key:'username',label:'User',cls:''},
-  {key:'group_name',label:'Group',cls:''},
   {key:'requests',label:'Requests',cls:'num'},
   {key:'prompt_tokens',label:'Prompt Tokens',cls:'num'},
   {key:'completion_tokens',label:'Completion Tokens',cls:'num'},
@@ -685,7 +675,6 @@ function renderUsers(data){
     let row=`<tr class="${cls}" tabindex="0" onclick="openUserDetailsByIndex(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openUserDetailsByIndex(${i})}">
       <td style="color:var(--text2);font-size:10px">&#9654;</td>
       <td>${userCell(u.username,u.display_name,u.tags)}</td>
-      <td>${fmtGroup(u.group_name)}</td>
       <td class="num">${fmtN(u.requests)}</td>
       <td class="num">${fmtN(u.prompt_tokens)}</td>
       <td class="num">${fmtN(u.completion_tokens)}</td>
@@ -915,12 +904,6 @@ function populateFilterDropdowns(models, users){
   if(ms){
     var cur=ms.value;
     ms.innerHTML='<option value="">All</option>'+models.map(function(m){return '<option value="'+m.model+'"'+(m.model===cur?' selected':'')+'>'+m.model+'</option>';}).join('');
-  }
-  var gs=document.getElementById('group-filter-select');
-  if(gs){
-    var curG=gs.value;
-    var groups=[...new Set(users.map(function(u){return u.group_name}).filter(Boolean))];
-    gs.innerHTML='<option value="">All</option>'+groups.map(function(g){return '<option value="'+g+'"'+(g===curG?' selected':'')+'>'+fmtGroup(g)+'</option>';}).join('');
   }
   allUsers=users;
   renderUserChecklist();

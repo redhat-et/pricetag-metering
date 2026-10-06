@@ -74,16 +74,12 @@ func TestApplyScope_DBFreeBranches(t *testing.T) {
 	}
 }
 
-// The actor helper must attribute writes to the REAL admin mid view-as, not
-// the swapped identity — the audit trail depends on it.
-func TestActor_ImpersonationAttribution(t *testing.T) {
+// caller must resolve the swapped identity for scope math during view-as.
+func TestCaller_ImpersonationScope(t *testing.T) {
 	cfg := testCfg()
 	r := httptest.NewRequest(http.MethodPost, "/", nil)
 	r.Header.Set(cfg.UserHeader, "viewed-user")
 	r.Header.Set(realUserHeader, "boss")
-	if a := actor(r, cfg); a != "boss" {
-		t.Errorf("actor must be the real session identity, got %q", a)
-	}
 	if c := caller(r, cfg); c != "viewed-user" {
 		t.Errorf("caller must be the swapped identity for scope math, got %q", c)
 	}

@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"sort"
@@ -42,20 +41,14 @@ func (s *Store) migrateUserModelPolicy(ctx context.Context) error {
 	return nil
 }
 
-// userLogins returns the requested login plus other non-service logins linked
-// to the same directory person. A policy applied to one login therefore cannot
-// be bypassed by using another linked MaaS key.
+// userLogins returns the requested login plus other logins mapped to the same
+// partner user. A policy applied to one login therefore cannot be bypassed by
+// using another linked MaaS key. A login with no partner record resolves to
+// just itself.
 func (s *Store) userLogins(ctx context.Context, username string) ([]string, error) {
-	person, err := s.GetPersonByUsername(ctx, username)
-	if errors.Is(err, sql.ErrNoRows) {
-		return []string{username}, nil
-	}
+	logins, err := s.PartnerLoginsForUsername(ctx, username)
 	if err != nil {
 		return nil, fmt.Errorf("resolve username: %w", err)
-	}
-	logins, err := s.PersonUsernames(ctx, person.Slug)
-	if err != nil {
-		return nil, fmt.Errorf("list linked usernames: %w", err)
 	}
 	found := false
 	for _, login := range logins {

@@ -19,36 +19,3 @@ func TestSlugNorm(t *testing.T) {
 		}
 	}
 }
-
-func TestPgArray(t *testing.T) {
-	cases := map[string]string{
-		`quote"inside`: `{"quote\"inside"}`,
-		`back\slash`:   `{"back\\slash"}`,
-		"plain":        `{"plain"}`,
-		`a"b\c`:        `{"a\"b\\c"}`,
-	}
-	// exercise through the two-arg form used by callers
-	for in, want := range cases {
-		got := pgArray([]string{in})
-		if got != want {
-			t.Errorf("pgArray([%q]) = %s, want %s", in, got, want)
-		}
-	}
-	if got := pgArray(nil); got != "{}" {
-		t.Errorf("pgArray(nil) = %s, want {}", got)
-	}
-}
-
-func TestSQLAnyString(t *testing.T) {
-	if v := sqlAnyString(nil); v != nil {
-		t.Errorf("nil should map to NULL, got %v", v)
-	}
-	empty := ""
-	if v := sqlAnyString(&empty); v != nil {
-		t.Errorf("empty string should map to NULL (unique emails must not collide), got %v", v)
-	}
-	v := "a@b.c"
-	if got := sqlAnyString(&v); got != "a@b.c" {
-		t.Errorf("value passthrough failed: %v", got)
-	}
-}

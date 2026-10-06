@@ -262,6 +262,100 @@ func (s *Store) ListAllPartnerUsers(ctx context.Context) ([]PartnerUser, error) 
 	return users, rows.Err()
 }
 
+// PartnerManagerScope returns the set of MaaS login usernames a caller may
+// see: themselves plus every descendant in the partner_users manager tree.
+// The hierarchy is derived dynamically from partner_users.manager_user_id, so
+// a user created before their manager appears as a root until the manager
+// joins, after which the tree resolves automatically. isManager is true when
+// the caller has at least one direct report. A username with no partner record
+// resolves to just itself.
+func (s *Store) PartnerManagerScope(ctx context.Context, username string) (usernames []string, isManager bool, err error) {
+	var rootID string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT p.user_id::text
+		FROM partner_user_logins l
+		JOIN partner_users p ON p.user_id = l.user_id
+		WHERE l.username = $1 AND p.active`, username).Scan(&rootID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return []string{username}, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	// depth is capped and the path is tracked so cyclic or corrupt manager
+	// data (a user who transitively reports to themselves) can never cause
+	// unbounded recursion. A node already on the path is not re-expanded.
+	rows, err := s.db.QueryContext(ctx, `
+		WITH RECURSIVE subtree(user_id, depth, path) AS (
+			SELECT $1::uuid, 0, ARRAY[$1::uuid]
+			UNION ALL
+			SELECT p.user_id, st.depth + 1, st.path || p.user_id
+			FROM partner_users p
+			JOIN subtree st ON p.manager_user_id = st.user_id
+			WHERE p.active AND st.depth < 1000 AND NOT p.user_id = ANY(st.path)
+		)
+		SELECT DISTINCT l.username
+		FROM subtree st
+		JOIN partner_user_logins l ON l.user_id = st.user_id
+		ORDER BY l.username`, rootID)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	seen := map[string]bool{username: true}
+	out := []string{username}
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			return nil, false, err
+		}
+		if !seen[u] {
+			out = append(out, u)
+			seen[u] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	var reports int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM partner_users WHERE active AND manager_user_id = $1::uuid`, rootID).Scan(&reports); err != nil {
+		return nil, false, err
+	}
+	return out, reports > 0, nil
+}
+
+// PartnerLoginsForUsername returns every MaaS login mapped to the same partner
+// user as the given username, so usage and spend aggregate across a person's
+// logins (for example after an email change). A username with no partner record
+// resolves to just itself, which keeps tool-facing reports working for logins
+// that predate the partner directory.
+func (s *Store) PartnerLoginsForUsername(ctx context.Context, username string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT other.username
+		FROM partner_user_logins self
+		JOIN partner_user_logins other ON other.user_id = self.user_id
+		WHERE self.username = $1
+		ORDER BY other.username`, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	seen := map[string]bool{username: true}
+	out := []string{username}
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			return nil, err
+		}
+		if !seen[u] {
+			out = append(out, u)
+			seen[u] = true
+		}
+	}
+	return out, rows.Err()
+}
+
 // UpdatePartnerUserAccess changes operator-controlled authorization fields.
 // It is intentionally separate from Atlas profile PATCH so external callers
 // cannot grant themselves dashboard roles.
@@ -301,6 +395,24 @@ func (s *Store) UpdatePartnerUserAccess(ctx context.Context, actor, userID, role
 		}
 		if !exists {
 			return PartnerUser{}, ErrPartnerUserNotFound
+		}
+		// Reject cycles: the proposed manager must not already report (directly
+		// or transitively) to this user, which would make the hierarchy loop.
+		var cycle bool
+		if err := tx.QueryRowContext(ctx, `
+			WITH RECURSIVE up(user_id, depth, path) AS (
+				SELECT $1::uuid, 0, ARRAY[$1::uuid]
+				UNION ALL
+				SELECT p.manager_user_id, u.depth + 1, u.path || p.manager_user_id
+				FROM partner_users p
+				JOIN up u ON p.user_id = u.user_id
+				WHERE p.manager_user_id IS NOT NULL AND u.depth < 1000 AND NOT p.manager_user_id = ANY(u.path)
+			)
+			SELECT EXISTS(SELECT 1 FROM up WHERE user_id = $2::uuid)`, *manager, id).Scan(&cycle); err != nil {
+			return PartnerUser{}, err
+		}
+		if cycle {
+			return PartnerUser{}, fmt.Errorf("%w: manager assignment would create a cycle", ErrInvalidPartnerUser)
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `
@@ -547,39 +659,6 @@ func partnerTagKeys(tags map[string]any) []string {
 	return keys
 }
 
-func syncPartnerUserProfiles(ctx context.Context, tx *sql.Tx, userID string, firstName, lastName string) error {
-	rows, err := tx.QueryContext(ctx, `SELECT username FROM partner_user_logins WHERE user_id = $1`, userID)
-	if err != nil {
-		return err
-	}
-	var usernames []string
-	for rows.Next() {
-		var username string
-		if err := rows.Scan(&username); err != nil {
-			rows.Close()
-			return err
-		}
-		usernames = append(usernames, username)
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	// Fill-only, like the roster import: a display name an admin already set
-	// in the dashboard is never overwritten by partner tag updates.
-	for _, username := range usernames {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO user_profiles (username, first_name, last_name, updated_at)
-			VALUES ($1,$2,$3,NOW())
-			ON CONFLICT (username) DO UPDATE SET
-				first_name=EXCLUDED.first_name, last_name=EXCLUDED.last_name, updated_at=NOW()
-			WHERE user_profiles.first_name = '' AND user_profiles.last_name = ''`,
-			username, firstName, lastName); err != nil {
-			return fmt.Errorf("sync dashboard profile for %s: %w", username, err)
-		}
-	}
-	return nil
-}
-
 func (s *Store) CreatePartnerUser(ctx context.Context, actor, userID string, tags map[string]any) (PartnerUser, error) {
 	id, err := normalizePartnerUserID(userID)
 	if err != nil {
@@ -610,9 +689,6 @@ func (s *Store) CreatePartnerUser(ctx context.Context, actor, userID string, tag
 			return PartnerUser{}, ErrPartnerUserConflict
 		}
 		return PartnerUser{}, fmt.Errorf("link partner MaaS username: %w", err)
-	}
-	if err := syncPartnerUserProfiles(ctx, tx, id, cleanTags["first_name"].(string), cleanTags["last_name"].(string)); err != nil {
-		return PartnerUser{}, err
 	}
 	if err := s.auditTx(ctx, tx, actor, "partner_user.create", id, map[string]any{"tag_keys": partnerTagKeys(cleanTags)}); err != nil {
 		return PartnerUser{}, err
@@ -723,9 +799,6 @@ func (s *Store) updatePartnerUser(ctx context.Context, actor, userID string, tag
 		if isUniqueViolation(err) {
 			return PartnerUser{}, ErrPartnerUserConflict
 		}
-		return PartnerUser{}, err
-	}
-	if err := syncPartnerUserProfiles(ctx, tx, id, cleanTags["first_name"].(string), cleanTags["last_name"].(string)); err != nil {
 		return PartnerUser{}, err
 	}
 	action := "partner_user.update"

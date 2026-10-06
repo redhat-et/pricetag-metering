@@ -1070,17 +1070,7 @@ function showFullDashboard() {
 }
 
 function checkApproval() {
-  fetchJSON('/api/v1/admin/groups').then(function(groups) {
-    var allGroups = Array.isArray(groups) ? groups : [];
-    for (var i = 0; i < allGroups.length; i++) {
-      var members = allGroups[i].members || [];
-      if (members.indexOf(currentUser) >= 0) {
-        currentGroups = [allGroups[i].name];
-        showFullDashboard();
-        return;
-      }
-    }
-  }).catch(function() {});
+  showFullDashboard();
 }
 
 /* ================================================================
@@ -1115,24 +1105,7 @@ function init() {
       }
     }
 
-    if (currentGroups.length > 0) {
-      showFullDashboard();
-    } else {
-      fetchJSON('/api/v1/admin/groups').then(function(groups) {
-        var allGroups = Array.isArray(groups) ? groups : [];
-        for (var i = 0; i < allGroups.length; i++) {
-          var members = allGroups[i].members || [];
-          if (members.indexOf(currentUser) >= 0) {
-            currentGroups = [allGroups[i].name];
-            showFullDashboard();
-            return;
-          }
-        }
-        showWelcomePage();
-      }).catch(function() {
-        showWelcomePage();
-      });
-    }
+    showFullDashboard();
   }).catch(function(err) {
     document.getElementById('user-badge').innerHTML = '<span style="color:var(--red)">Not logged in</span>';
     console.error('whoami failed:', err);
