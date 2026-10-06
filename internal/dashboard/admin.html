@@ -1439,7 +1439,10 @@ function loadRoles() {
     if (u.role === 'super_admin') roleData.superAdmins.push(email);
     else if (u.role === 'admin') roleData.admins.push(email);
   });
-  renderPeople();
+  // The legacy People table is not rendered on the current admin page.
+  // Keep this compatible with older templates without reading a missing
+  // people-search element on the Partner Users page.
+  if (document.getElementById('people-search')) renderPeople();
 }
 /* A person's platform role: match their login or email (case-insensitive)
    against active Partner identities. Super-admin wins; super-admin implies admin. */
