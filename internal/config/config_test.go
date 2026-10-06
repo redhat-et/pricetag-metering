@@ -42,6 +42,17 @@ func TestRollupReadSwitchDefaults(t *testing.T) {
 	}
 }
 
+func TestQuotaEnforcementDefaultsDisabled(t *testing.T) {
+	os.Unsetenv("QUOTA_ENFORCEMENT_ENABLED")
+	if cfg := Load(); cfg.QuotaEnforcementEnabled {
+		t.Fatal("quota enforcement must default disabled until the quota rewrite is ready")
+	}
+	t.Setenv("QUOTA_ENFORCEMENT_ENABLED", "true")
+	if cfg := Load(); !cfg.QuotaEnforcementEnabled {
+		t.Fatal("explicit quota enforcement enablement was ignored")
+	}
+}
+
 func TestPartnerAPISecretsLoadFromEnvironment(t *testing.T) {
 	t.Setenv("USAGE_REPORT_API_SECRET", "usage")
 	t.Setenv("MODEL_POLICY_API_SECRET", "policy")

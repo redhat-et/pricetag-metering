@@ -34,6 +34,16 @@ type QuotaHandler struct {
 	cfg   config.Config
 }
 
+func RequireQuotaEnabled(cfg config.Config, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !cfg.QuotaEnforcementEnabled {
+			http.Error(w, "quota enforcement is disabled", http.StatusNotFound)
+			return
+		}
+		next(w, r)
+	}
+}
+
 func NewQuotaHandler(store *storage.Store, cfg config.Config) *QuotaHandler {
 	return &QuotaHandler{store: store, cfg: cfg}
 }
