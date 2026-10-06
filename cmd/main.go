@@ -41,7 +41,6 @@ func main() {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
-	store.SetQuotaEnforcement(cfg.QuotaEnforcementEnabled)
 	defer store.Close()
 	store.SetQuotaEnforcement(cfg.QuotaEnforcementEnabled)
 
