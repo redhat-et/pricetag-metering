@@ -684,6 +684,9 @@ func (s *Store) CreatePartnerUser(ctx context.Context, actor, userID string, tag
 		}
 		return PartnerUser{}, fmt.Errorf("create partner user: %w", err)
 	}
+	if _, err := reconcilePartnerManagerLinksTx(ctx, tx); err != nil {
+		return PartnerUser{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO partner_user_logins (username,user_id,is_current) VALUES ($1,$2,TRUE)`, email, id); err != nil {
 		if isUniqueViolation(err) {
 			return PartnerUser{}, ErrPartnerUserConflict
@@ -697,6 +700,41 @@ func (s *Store) CreatePartnerUser(ctx context.Context, actor, userID string, tag
 		return PartnerUser{}, err
 	}
 	return s.GetPartnerUser(ctx, id)
+}
+
+// reconcilePartnerManagerLinksTx repairs the relational hierarchy from the
+// imported manager_uuid tag. It is intentionally idempotent and uses text UUID
+// comparison so legacy malformed tags cannot make the whole repair fail.
+func reconcilePartnerManagerLinksTx(ctx context.Context, tx *sql.Tx) (int64, error) {
+	result, err := tx.ExecContext(ctx, `
+		UPDATE partner_users child
+		SET manager_user_id = manager.user_id, updated_at = NOW()
+		FROM partner_users manager
+		WHERE child.user_id <> manager.user_id
+		  AND lower(child.tags->>'manager_uuid') = lower(manager.user_id::text)
+		  AND child.manager_user_id IS DISTINCT FROM manager.user_id`)
+	if err != nil {
+		return 0, fmt.Errorf("reconcile partner manager links: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// ReconcilePartnerManagerLinks repairs existing rows whose manager was
+// provisioned after the employee. It is safe to run repeatedly.
+func (s *Store) ReconcilePartnerManagerLinks(ctx context.Context) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	updated, err := reconcilePartnerManagerLinksTx(ctx, tx)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return updated, nil
 }
 
 func isUniqueViolation(err error) bool {
@@ -799,6 +837,9 @@ func (s *Store) updatePartnerUser(ctx context.Context, actor, userID string, tag
 		if isUniqueViolation(err) {
 			return PartnerUser{}, ErrPartnerUserConflict
 		}
+		return PartnerUser{}, err
+	}
+	if _, err := reconcilePartnerManagerLinksTx(ctx, tx); err != nil {
 		return PartnerUser{}, err
 	}
 	action := "partner_user.update"

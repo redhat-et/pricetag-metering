@@ -140,3 +140,37 @@ func TestPatchPartnerUserMergesTagsAndUpdatesEmail(t *testing.T) {
 		t.Fatalf("missing user patch error = %v, want ErrPartnerUserNotFound", err)
 	}
 }
+
+func TestCreatePartnerUserReconcilesReportsWhenManagerArrivesLater(t *testing.T) {
+	s, ctx := openTestStore(t)
+	const (
+		managerID = "123e4567-e89b-12d3-a456-426614174030"
+		reportID  = "123e4567-e89b-12d3-a456-426614174031"
+	)
+
+	report, err := s.CreatePartnerUser(ctx, "partner-m2m", reportID, map[string]any{
+		"email": "report@example.com", "first_name": "Report", "last_name": "User",
+		"manager_uuid": managerID,
+	})
+	if err != nil {
+		t.Fatalf("create report: %v", err)
+	}
+	if report.ManagerUserID != nil {
+		t.Fatalf("report unexpectedly resolved manager before manager existed: %v", *report.ManagerUserID)
+	}
+
+	if _, err := s.CreatePartnerUser(ctx, "partner-m2m", managerID, map[string]any{
+		"email": "manager@example.com", "first_name": "Manager", "last_name": "User",
+		"manager_uuid": nil,
+	}); err != nil {
+		t.Fatalf("create manager: %v", err)
+	}
+
+	repaired, err := s.GetPartnerUser(ctx, reportID)
+	if err != nil {
+		t.Fatalf("get repaired report: %v", err)
+	}
+	if repaired.ManagerUserID == nil || *repaired.ManagerUserID != managerID {
+		t.Fatalf("report manager_user_id = %v, want %s", repaired.ManagerUserID, managerID)
+	}
+}
