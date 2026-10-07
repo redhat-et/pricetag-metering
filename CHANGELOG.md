@@ -34,6 +34,9 @@ This is the first tagged EnMaaS release of the metering service.
 - Paginated administrator and usage-user views.
 - Local-only Compose fixtures for synthetic users, usage, MaaS validation, and
   Praxis/LLM-Katan testing.
+- Pi setup guidance for OpenAI-compatible, Anthropic-compatible, and hosted GLM
+  models.
+- Separate OpenCode v1 and v2 setup examples.
 
 ### Changed
 
@@ -43,6 +46,9 @@ This is the first tagged EnMaaS release of the metering service.
   and super-administrators where appropriate.
 - The welcome and operations documentation now describes EnMaaS gateway URLs,
   authentication dialects, model discovery, and model limits.
+- The welcome-page smoke test now uses the routable GLM model, and the GLM
+  examples document a 262144-token context window with a 65536-token output
+  limit.
 
 ### Removed
 
