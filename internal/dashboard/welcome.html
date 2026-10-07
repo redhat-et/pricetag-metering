@@ -42,7 +42,7 @@ MODEL_ID='exact-model-id'</pre></div></div><div class="card"><h3>Use the model�
 
 # OpenAI-compatible APIs
 -H "Authorization: Bearer $ENMAAS_KEY"</pre></div></div></div><div class="tool-info"><strong>Tool-specific model settings:</strong> Claude Code changes the model through <code>/model</code> or <code>modelPicker</code>; Codex changes <code>model</code> in its EnMaaS profile; OpenCode changes its pinned provider model; Pi adds the model under the matching provider entry. Do not copy a GLM-only context window or capability setting to another model.</div></section>
-<section id="tools"><div class="head"><h2>Use the tools you already know.</h2><p class="lede">EnMaaS supports <a href="#tool-claude">Claude Code</a>, <a href="#tool-codex">Codex</a>, and <a href="#tool-opencode">OpenCode</a>. More tools and recipes are coming soon. Keep your existing AI access available while EnMaaS is in beta.</p></div><div class="card">
+<section id="tools"><div class="head"><h2>Use the tools you already know.</h2><p class="lede">EnMaaS supports <a href="#tool-claude">Claude Code</a>, <a href="#tool-codex">Codex</a>, <a href="#tool-opencode">OpenCode</a>, and <a href="#tool-pi">Pi</a>. More tools and recipes are coming soon. Keep your existing AI access available while EnMaaS is in beta.</p></div><div class="card">
   <div class="tool" id="tool-claude"><div class="tool-icon claude-logo"><svg viewBox="0 0 64 64" role="img" aria-label="Claude logo"><path d="M32 4 38 26 60 32 38 38 32 60 26 38 4 32 26 26Z"/></svg></div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Claude Code</h3><p>Route Claude Code through EnMaaS, then use <span class="mono">/model</span> or model discovery to choose an available model.</p>
     <h4 class="setup-heading">1. Connect Claude Code to EnMaaS</h4>
     <p class="setup-copy">Add or merge this into <code>~/.claude/settings.json</code>.</p>
@@ -123,9 +123,17 @@ opencode --standalone
     <p>Use the provider matching the model's API dialect: Anthropic-compatible models use <code>/v1/messages</code>; OpenAI-compatible models use <code>/v1/responses</code> or <code>/v1/chat/completions</code>. The catalog is advisory and can omit models for some credential types; the local provider model entries and the pinned model are the source of truth for what this client can select.</p><p class="tool-info"><strong>OpenCode does not need a separate model-picker block.</strong> Its <code>/models</code> command may read the gateway catalog, but the catalog is not authoritative for every credential type. Pin the default model locally and use an exact supported model ID even when it is absent from the catalog.</p>
     <div class="warning fallback"><span class="icon">↩</span><div><strong>Rollback if EnMaaS is unavailable</strong><br>Close the standalone EnMaaS process and run your normal <code>opencode</code> command without the EnMaaS environment variables. Your normal <code>XDG_CONFIG_HOME</code> and <code>XDG_DATA_HOME</code> remain separate, so existing sessions and providers are preserved.</div></div>
   </div></div>
-   <div class="tool" id="tool-pi"><div class="tool-icon">π</div><div><p class="tool-note">Pi pins provider configuration directly; it does not need the gateway catalog to discover GLM.</p><h3>Pi</h3><p>Use the provider and API dialect required by the model. The example below configures GLM 5.3; add other supported models to the same provider or a separate provider entry with their exact model ID and documented limits.</p>
-     <div class="code"><button class="copy">copy</button><pre>{
+   <div class="tool" id="tool-pi"><div class="tool-icon">π</div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Pi</h3><p>Route all of Pi’s model families through EnMaaS with one key: OpenAI, Anthropic, and the hosted GLM model. Merge the entries below into the <code>providers</code> object of your existing <code>~/.pi/agent/models.json</code>.</p>
+    <h4 class="setup-heading">1. Route Pi’s providers through EnMaaS</h4>
+    <p class="setup-copy">The <code>openai</code> and <code>anthropic</code> entries override Pi’s built-in providers without a <code>models</code> list, so their full catalogues (<span class="mono">gpt-*</span>, <span class="mono">claude-*</span>) stay available while routing through the gateway. The base URLs match Pi’s built-in defaults: <code>openai</code> keeps the <code>/v1</code> suffix, <code>anthropic</code> stays bare because Pi appends <code>/v1/messages</code> itself. The <code>enmaas-glm-5-3</code> entry pins the hosted GLM model.</p>
+    <div class="code"><button class="copy">copy</button><pre>{
   "providers": {
+    "openai": {
+      "baseUrl": "{{GATEWAY_URL}}/v1"
+    },
+    "anthropic": {
+      "baseUrl": "{{GATEWAY_URL}}"
+    },
     "enmaas-glm-5-3": {
       "baseUrl": "{{GATEWAY_URL}}/v1",
       "api": "openai-completions",
@@ -137,13 +145,24 @@ opencode --standalone
         "contextWindow": 262144,
         "maxTokens": 65536,
         "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-        "compat": {"supportsDeveloperRole": false}
+        "compat": {"supportsDeveloperRole": false},
+        "samplingParams": {"frequency_penalty": 0, "presence_penalty": 0}
       }]
     }
   }
 }</pre></div>
-     <div class="code"><button class="copy">copy</button><pre># ~/.pi/agent/auth.json — chmod 0600
+    <h4 class="setup-heading">2. Store the key and smoke test</h4>
+    <p class="setup-copy">Add an entry for each provider to <code>~/.pi/agent/auth.json</code> so every model family authenticates with the same EnMaaS key. Keep the file private.</p>
+    <div class="code"><button class="copy">copy</button><pre># ~/.pi/agent/auth.json — chmod 0600
 {
+  "openai": {
+    "type": "api_key",
+    "key": "your-enmaas-key"
+  },
+  "anthropic": {
+    "type": "api_key",
+    "key": "your-enmaas-key"
+  },
   "enmaas-glm-5-3": {
     "type": "api_key",
     "key": "your-enmaas-key"
@@ -152,7 +171,9 @@ opencode --standalone
 
 # Smoke test
 pi --provider enmaas-glm-5-3 --model "rits/zai-org/glm-5-3" -p "Reply with exactly: OK"</pre></div>
-     <div class="warning"><span class="icon">!</span><div><strong>Pin the model directly.</strong><br>The <code>/v1/models</code> response is not authoritative for every credential type, so GLM may not appear in Pi’s model search even when inference works. The pinned entry above keeps it available in <code>/model</code>. Use a repetition/frequency penalty of <code>1.0</code> (off) if your Pi configuration exposes it; penalties can make GLM drift into Chinese.</div></div>
+    <p>Frontier models appear in <code>/model</code> with their usual Pi catalogue entries; select any of them and the request routes through EnMaaS. Use the provider matching the model family — <code>openai/*</code> and <code>enmaas-glm-5-3/*</code> speak OpenAI dialects, <code>anthropic/*</code> uses Messages.</p>
+    <div class="warning"><span class="icon">!</span><div><strong>Pin the GLM model directly.</strong><br>The <code>/v1/models</code> response is not authoritative for every credential type, so GLM may not appear in Pi’s model search even when inference works. The pinned entry above keeps it available in <code>/model</code>. Its <code>samplingParams</code> pin both penalties to <code>0</code> (off); penalties can make GLM drift into Chinese.</div></div>
+    <div class="warning fallback"><span class="icon">↩</span><div><strong>Rollback if EnMaaS is unavailable</strong><br>Restore your backed-up <code>~/.pi/agent/models.json</code>, or remove the EnMaaS entries so <code>openai</code> and <code>anthropic</code> return to their built-in endpoints, and relaunch Pi. Keeping the backup makes rollback immediate while the service is being scaled and stabilized.</div></div>
    </div></div>
    <div class="soon"><span>＋</span><span><b>More tools coming soon.</b> Tell us what you want supported in <a href="https://slack.com/archives/forum-enmaas">#forum-enmaas</a>.</span></div>
 </div></section>
