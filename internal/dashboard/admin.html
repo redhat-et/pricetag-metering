@@ -1924,8 +1924,11 @@ function loadPeople(cb) {
 var partnerUsersAll = [], partnerManagersAll = [], partnerUsersPage = 0, partnerUsersPageSize = 50, partnerUsersHasMore = false;
 function loadPartnerUsers(page) {
   if (typeof page === 'number') partnerUsersPage = page;
-  var offset = partnerUsersPage * partnerUsersPageSize;
-  fetchJSON('/api/v1/admin/partner-users?limit=' + partnerUsersPageSize + '&offset=' + offset).then(function(payload) {
+  // refreshTab can call this before the declarations below have executed.
+  // Keep the first request valid instead of sending undefined/NaN to the API.
+  var limit = partnerUsersPageSize || 50;
+  var offset = (partnerUsersPage || 0) * limit;
+  fetchJSON('/api/v1/admin/partner-users?limit=' + limit + '&offset=' + offset).then(function(payload) {
     var pageData = Array.isArray(payload) ? {users: payload, managers: payload, total: payload.length, has_more: false} : payload;
     partnerUsersAll = Array.isArray(pageData.users) ? pageData.users : [];
     partnerManagersAll = Array.isArray(pageData.managers) ? pageData.managers : partnerUsersAll;
