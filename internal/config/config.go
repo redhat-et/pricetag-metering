@@ -227,10 +227,13 @@ func (k Kubernetes) Enabled() bool {
 // Load resolves configuration from the environment.
 func Load() Config {
 	return Config{
-		DatabaseURL:              os.Getenv("DATABASE_URL"),
-		Port:                     envDefault("PORT", "8080"),
-		MonthlyTokenQuota:        envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
-		QuotaEnforcementEnabled:  envBool("QUOTA_ENFORCEMENT_ENABLED", false),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		Port:              envDefault("PORT", "8080"),
+		MonthlyTokenQuota: envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
+		// The $600 safety net is on by default. Operators can still use the
+		// environment as a deployment-level kill switch while the policy's
+		// enforced field is the normal super-admin control.
+		QuotaEnforcementEnabled:  envBool("QUOTA_ENFORCEMENT_ENABLED", true),
 		DBMaxOpenConns:           envInt("DB_MAX_OPEN_CONNS", 50),
 		DBMaxIdleConns:           envInt("DB_MAX_IDLE_CONNS", 10),
 		DBConnMaxLifetimeSeconds: envInt("DB_CONN_MAX_LIFETIME_SECONDS", 14400),
