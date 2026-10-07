@@ -42,10 +42,10 @@ func TestRollupReadSwitchDefaults(t *testing.T) {
 	}
 }
 
-func TestQuotaEnforcementDefaultsDisabled(t *testing.T) {
+func TestQuotaEnforcementDefaultsEnabled(t *testing.T) {
 	os.Unsetenv("QUOTA_ENFORCEMENT_ENABLED")
-	if cfg := Load(); cfg.QuotaEnforcementEnabled {
-		t.Fatal("quota enforcement must default disabled until the quota rewrite is ready")
+	if cfg := Load(); !cfg.QuotaEnforcementEnabled {
+		t.Fatal("quota enforcement must default enabled for the safety net")
 	}
 	t.Setenv("QUOTA_ENFORCEMENT_ENABLED", "true")
 	if cfg := Load(); !cfg.QuotaEnforcementEnabled {

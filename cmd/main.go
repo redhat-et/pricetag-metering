@@ -205,6 +205,8 @@ func main() {
 	partnerUserUsageHandler := handler.NewPartnerUserUsageHandler(store)
 	modelCatalogHandler := handler.NewModelCatalogHandler(k8sClient)
 	userModelPolicyHandler := handler.NewUserModelPolicyHandler(store)
+	quotaAdminHandler := handler.NewQuotaAdminHandler(store)
+	modelPolicyAdminHandler := handler.NewModelPolicyAdminHandler(store)
 	auth := authHandler.RequireAuth
 
 	mux := http.NewServeMux()
@@ -315,6 +317,8 @@ func main() {
 	mux.HandleFunc("/api/v1/admin/config", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleConfig)))
 	mux.HandleFunc("/api/v1/admin/models/provider/", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleUpdateProvider)))
 	mux.HandleFunc("/api/v1/admin/pricing/refresh", auth(handler.RequirePartnerSuperAdmin(cfg, store, handler.NewPricingRefreshHandler(store).HandleRefresh)))
+	mux.HandleFunc("/api/v1/admin/safety-net", auth(handler.RequirePartnerSuperAdmin(cfg, store, quotaAdminHandler.HandlePolicy)))
+	mux.HandleFunc("/api/v1/admin/model-policies", auth(handler.RequirePartnerSuperAdmin(cfg, store, modelPolicyAdminHandler.HandleList)))
 	// OpenShift users/entitlements management (redesigned admin page).
 
 	// Key APIs are reachable by any signed-in user: the user dashboard manages

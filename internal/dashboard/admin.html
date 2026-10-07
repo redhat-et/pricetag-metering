@@ -22,7 +22,7 @@
   --cyn:#38d4c2;
 }
 body{background:var(--bg);color:var(--t);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;line-height:1.5}
-.quota-disabled{display:none!important}
+
 #vtab-keys,#tab-keys,#createKeyModal{display:none!important}
 .country-flag{display:inline-block;margin-right:6px;font-size:15px;vertical-align:-1px}
 .partner-detail-ov{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:180;align-items:center;justify-content:center;padding:20px}
@@ -555,7 +555,7 @@ td .tag{white-space:nowrap}
 
 <!-- Console tabs -->
 <div class="vtabs">
-  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button>
+  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Model Restrictions</button>
   <div class="vtab-tools">
     <span id="last-updated"></span>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="refreshTab(activeTab,true)">Refresh</button>
@@ -628,6 +628,25 @@ td .tag{white-space:nowrap}
 
 
 
+</div>
+
+<!-- ============ TAB: Safety Net ============ -->
+<div class="tab-panel" id="tab-safety-net">
+  <div class="card">
+    <div class="card-hdr"><div><span class="card-title">Monthly Safety Net</span><span class="card-count" id="safety-net-meta"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadSafetyNet()">Refresh</button></div>
+    <div class="ts" style="margin-bottom:14px">Global month-to-date spend protection. Users are blocked at the limit except for the exact models listed as bypass models. Super-admins are exempt.</div>
+    <div id="safety-net-body"><div class="loading"><div class="spinner"></div>Loading safety-net policy...</div></div>
+  </div>
+</div>
+
+<!-- ============ TAB: Model Restrictions ============ -->
+<div class="tab-panel" id="tab-model-restrictions">
+  <div class="card">
+    <div class="card-hdr"><div><span class="card-title">External Model Restrictions</span><span class="card-count" id="model-restrictions-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelRestrictions()">Refresh</button></div>
+    <div class="ts" style="margin-bottom:14px">Read-only view of users restricted by the external model-policy API. An empty allowed-model list means deny-all.</div>
+    <div id="model-restrictions-list"><div class="loading"><div class="spinner"></div>Loading model restrictions...</div></div>
+    <div class="partner-users-pager"><button id="model-restrictions-prev" onclick="changeModelRestrictionsPage(-1)">Previous</button><span id="model-restrictions-page-label">Page 1</span><button id="model-restrictions-next" onclick="changeModelRestrictionsPage(1)">Next</button></div>
+  </div>
 </div>
 
 <!-- Create Key Modal -->
@@ -804,7 +823,7 @@ function resolveModelName(crdName) {
 /* ================================================================
    Tabs — one panel visible, lazy load on first open, deep-linkable
    ================================================================ */
-var TABS = ['people'];
+var TABS = ['people', 'safety-net', 'model-restrictions'];
 
 function showTab(name, pushHash) {
   if (TABS.indexOf(name) < 0) name = 'people';
@@ -826,6 +845,10 @@ function showTab(name, pushHash) {
 function refreshTab(name, manual) {
   if (name === 'people') {
     loadPartnerUsers();
+  } else if (name === 'safety-net') {
+    loadSafetyNet();
+  } else if (name === 'model-restrictions') {
+    loadModelRestrictions();
   }
   if (manual) touchUpdated();
 }
@@ -847,256 +870,84 @@ function setTabBadge(tab, n, alert) {
   }
 }
 
-/* ================================================================
-   Quotas tab — monthly $ budgets (policy + per-user/group overrides).
-   The enforcement toggle is the kill switch for gateway 429s, so it
-   saves through the confirm dialog and never silently on checkbox
-   click. Calendar month follows the DB clock (UTC), same window the
-   legacy token quota uses — the copy says so in the user's terms.
-   ================================================================ */
-var quotaPolicy = null;
+var safetyNetPolicy = null, safetyNetModels = [], safetyNetDraft = null;
+var modelRestrictionsPage = 0, modelRestrictionsPageSize = 50, modelRestrictionsHasMore = false;
 
-function loadQuotaPolicy() {
-  loadQuotaDenials();
-  loadQuotaModelOptions();
-  fetchJSON('/api/v1/admin/quota/policy').then(function(p) {
-    quotaPolicy = p;
-    renderQuotaPolicy();
-    renderQuotaAllowance();
+function loadSafetyNet() {
+  fetchJSON('/api/v1/admin/safety-net').then(function(policy) {
+    safetyNetPolicy = policy;
+    safetyNetDraft = (policy.allowed_over_limit_models || []).slice();
+    return fetchJSON('/api/v1/admin/models').then(function(models) {
+      safetyNetModels = (Array.isArray(models) ? models : []).map(function(m) {
+        return m.name || m.id || m.model || '';
+      }).filter(Boolean);
+    }).catch(function() { safetyNetModels = []; }).then(renderSafetyNet);
   }).catch(function(err) {
-    document.getElementById('quota-policy-body').innerHTML = '<div class="err-msg">Policy: ' + esc(err.message) + '</div>';
+    document.getElementById('safety-net-body').innerHTML = '<div class="err-msg">' + esc(err.message) + '</div>';
   });
 }
-
-function renderQuotaPolicy() {
-  if (!quotaPolicy) return;
-  var enforced = !!quotaPolicy.enforced;
-  document.getElementById('quota-policy-meta').textContent =
-    'last change ' + new Date(quotaPolicy.updated_at).toLocaleString('en-US', { hour12: false }) +
-    (quotaPolicy.updated_by ? ' by ' + quotaPolicy.updated_by : '');
-  document.getElementById('quota-policy-body').innerHTML =
-    '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;padding:14px 16px">' +
-      '<div>' +
-        '<label style="display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:6px">Default monthly limit (USD)</label>' +
-        '<div style="display:flex;gap:10px;align-items:center">' +
-          '<input type="number" id="quota-default" min="1" step="1" value="' + esc(quotaPolicy.default_monthly_usd) + '" style="width:120px">' +
-          '<button class="btn btn-grn" style="padding:7px 18px;font-size:11px" onclick="saveQuotaLimit()">Save</button>' +
-        '</div>' +
-        '<div class="ts" style="margin-top:8px">Everyone without an override gets this.</div>' +
-      '</div>' +
-      '<div style="flex:1;min-width:260px">' +
-        '<label style="display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:6px">Gateway enforcement</label>' +
-        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
-          '<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--t1);cursor:pointer">' +
-            '<input type="checkbox" id="quota-enforced" ' + (enforced ? 'checked' : '') + ' style="width:auto">' +
-            'Block over-limit requests with 429' +
-          '</label>' +
-          '<button class="btn ' + (enforced ? 'btn-red' : 'btn-grn') + '" style="padding:7px 18px;font-size:11px" onclick="saveQuotaEnforce()">' +
-            (enforced ? 'Turn off' : 'Turn on') + '</button>' +
-          '<span class="badge ' + (enforced ? 'badge-grn' : 'badge-gray') + '" style="font-size:9px">' +
-            (enforced ? 'ENFORCING' : 'OFF — tracking only') + '</span>' +
-        '</div>' +
-        '<div class="ts" style="margin-top:8px">Limits cover the calendar month (UTC). When on, a user at or over their limit is denied at the gateway from their next request; over-limit users request more from their dashboard and their manager approves. While this service is unreachable the gateway admits traffic (fail-open) — enforcement pauses, it never blocks on an outage.</div>' +
-      '</div>' +
-    '</div>';
+function renderSafetyNet() {
+  if (!safetyNetPolicy) return;
+  var p = safetyNetPolicy, draft = safetyNetDraft || [];
+  var chips = draft.length ? draft.map(function(m, i) {
+    return '<span class="badge badge-grn" style="font-size:10px;display:inline-flex;gap:6px;align-items:center;padding:5px 9px;margin:0 6px 6px 0">' + esc(m) + '<button class="btn" style="padding:0;background:none;color:inherit;font-weight:700" onclick="removeSafetyModel(' + i + ')">&times;</button></span>';
+  }).join('') : '<span class="ts">No bypass models — over-limit users are fully blocked.</span>';
+  var opts = safetyNetModels.filter(function(m) { return draft.indexOf(m) < 0; }).map(function(m) { return '<option value="' + esc(m) + '">'; }).join('');
+  document.getElementById('safety-net-meta').textContent = p.enforced ? 'ENFORCING' : 'tracking only';
+  document.getElementById('safety-net-body').innerHTML =
+    '<div class="warning" style="margin-bottom:14px"><span class="icon">!</span><div>Enforcement uses month-to-date USD spend. Bypass matching is exact and case-sensitive; the gateway must provide the request model for it to work.</div></div>' +
+    '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;padding:4px 0 14px">' +
+      '<div><label class="field-label">Monthly limit (USD)</label><input type="number" id="safety-limit" min="1" step="1" value="' + esc(p.default_monthly_usd) + '" style="width:140px"></div>' +
+      '<div><label class="field-label">Enforcement</label><label style="display:flex;gap:8px;align-items:center;margin-top:9px"><input type="checkbox" id="safety-enforced" style="width:auto" ' + (p.enforced ? 'checked' : '') + '> Block over-limit requests</label></div>' +
+      '<div><label class="field-label">Soft bypass ceiling (USD, optional)</label><input type="number" id="safety-ceiling" min="0" step="1" placeholder="unlimited" value="' + (p.over_cap_ceiling_usd == null ? '' : esc(p.over_cap_ceiling_usd)) + '" style="width:140px"><div class="ts">0 or empty = unlimited</div></div>' +
+    '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:14px"><label class="field-label">Models allowed after the limit</label><div style="margin:8px 0 12px">' + chips + '</div>' +
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input id="safety-model-add" list="safety-model-list" placeholder="Exact model ID" style="width:320px"><datalist id="safety-model-list">' + opts + '</datalist><button class="btn btn-outline" onclick="addSafetyModel()">Add model</button></div>' +
+    '</div><div style="margin-top:16px"><button class="btn btn-grn" onclick="saveSafetyNet()">Save safety net</button></div>';
 }
-
-var quotaModelsObserved = null;
-var quotaAllowDraft = null;
-
-function loadQuotaModelOptions() {
-  fetchJSON('/api/v1/admin/quota/models').then(function(m) {
-    quotaModelsObserved = m || [];
-    renderQuotaAllowance();
-  }).catch(function() { quotaModelsObserved = []; renderQuotaAllowance(); });
+function addSafetyModel() {
+  var el = document.getElementById('safety-model-add'), value = (el.value || '').trim();
+  if (!value) return;
+  if (/[*?\[\] ]/.test(value)) { showToast('Use an exact model ID without spaces or wildcards', 'error'); return; }
+  if (safetyNetDraft.indexOf(value) < 0) safetyNetDraft.push(value);
+  renderSafetyNet();
 }
-
-function renderQuotaAllowance() {
-  if (!quotaPolicy) return;
-  if (!quotaAllowDraft) quotaAllowDraft = (quotaPolicy.allowed_over_limit_models || []).slice();
-  var ceiling = quotaPolicy.over_cap_ceiling_usd;
-  var meta = document.getElementById('quota-allowance-meta');
-  if (meta) meta.textContent = quotaAllowDraft.length ? quotaAllowDraft.length + ' model' + (quotaAllowDraft.length > 1 ? 's' : '') : 'off';
-  var chips = quotaAllowDraft.length
-    ? quotaAllowDraft.map(function(m, i) {
-        return '<span class="badge badge-grn" style="font-size:10px;display:inline-flex;gap:6px;align-items:center;padding:5px 9px;margin:0 6px 6px 0">' + esc(m) +
-          '<span onclick="quotaAllowRemove(' + i + ')" style="cursor:pointer;font-weight:700">&times;</span></span>';
-      }).join('')
-    : '<span class="ts">None — over-cap users are fully blocked.</span>';
-  var opts = (quotaModelsObserved || []).filter(function(m) { return quotaAllowDraft.indexOf(m) < 0; })
-    .map(function(m) { return '<option value="' + esc(m) + '">'; }).join('');
-  document.getElementById('quota-allowance-body').innerHTML =
-    '<div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">' +
-      '<div>' + chips + '</div>' +
-      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">' +
-        '<input id="quota-allow-add" list="quota-model-list" placeholder="Add exact model name…" style="width:320px">' +
-        '<datalist id="quota-model-list">' + opts + '</datalist>' +
-        '<button class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="quotaAllowAdd()">Add</button>' +
-        '<span class="ts">' + (quotaModelsObserved ? quotaModelsObserved.length + ' models observed in the last 7 days' : 'loading observed models…') + '</span>' +
-      '</div>' +
-      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
-        '<label style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3)">Soft monthly ceiling over the limit (USD)</label>' +
-        '<input type="number" id="quota-ceiling" min="0" step="1" value="' + (ceiling != null ? esc(ceiling) : '') + '" placeholder="unlimited" style="width:120px">' +
-        '<button class="btn btn-grn" style="padding:7px 18px;font-size:11px" onclick="saveQuotaAllowance()">Save allowance</button>' +
-      '</div>' +
-      '<div class="ts">Names must match exactly what clients send, case included — pick from the observed list rather than typing. The ceiling softly bounds total monthly spend while riding the allowance (a month may exceed its limit by at most this much); empty = unlimited. Requests already in flight and the 15-second decision cache can overshoot it slightly — it is a budget guardrail, not a hard cutoff. Until the gateway reports each request’s model, requests arrive with no model and nothing here can match — blocked-request rows gaining model names is the signal it is live.</div>' +
-    '</div>';
-}
-
-function quotaAllowAdd() {
-  var el = document.getElementById('quota-allow-add');
-  var v = (el.value || '').trim();
-  if (!v) { showToast('Type or pick a model name', 'error'); return; }
-  if (/[*?\[\] ]/.test(v)) { showToast('Exact identifiers only — no wildcards or spaces', 'error'); return; }
-  if (quotaAllowDraft.indexOf(v) >= 0) { showToast('Already on the list', 'error'); return; }
-  quotaAllowDraft.push(v);
-  renderQuotaAllowance();
-}
-
-function quotaAllowRemove(i) { quotaAllowDraft.splice(i, 1); renderQuotaAllowance(); }
-
-function saveQuotaAllowance() {
-  var body = { allowed_over_limit_models: quotaAllowDraft };
-  var cEl = document.getElementById('quota-ceiling');
-  body.over_cap_ceiling_usd = 0; // empty field = no ceiling
-  if (cEl.value !== '') {
-    body.over_cap_ceiling_usd = parseFloat(cEl.value);
-    if (!(body.over_cap_ceiling_usd >= 0)) { showToast('Ceiling must be 0 or more', 'error'); return; }
-  }
-  var cur = quotaPolicy.allowed_over_limit_models || [];
-  var curCeil = quotaPolicy.over_cap_ceiling_usd || 0;
-  if (JSON.stringify(quotaAllowDraft) === JSON.stringify(cur) && curCeil === body.over_cap_ceiling_usd) {
-    showToast('Allowance unchanged', 'error'); return;
-  }
-  updateJSON('/api/v1/admin/quota/policy', 'PATCH', body).then(function() {
-    showToast('Allowance saved', 'success');
-    quotaAllowDraft = null;
-    loadQuotaPolicy();
+function removeSafetyModel(index) { safetyNetDraft.splice(index, 1); renderSafetyNet(); }
+function saveSafetyNet() {
+  var limit = parseFloat(document.getElementById('safety-limit').value);
+  var ceilingEl = document.getElementById('safety-ceiling'), ceiling = ceilingEl.value === '' ? 0 : parseFloat(ceilingEl.value);
+  if (!(limit > 0)) { showToast('Monthly limit must be greater than zero', 'error'); return; }
+  if (!(ceiling >= 0)) { showToast('Soft ceiling must be zero or greater', 'error'); return; }
+  updateJSON('/api/v1/admin/safety-net', 'PUT', {default_monthly_usd: limit, enforced: document.getElementById('safety-enforced').checked, allowed_over_limit_models: safetyNetDraft, over_cap_ceiling_usd: ceiling}).then(function() {
+    showToast('Safety net saved', 'success'); loadSafetyNet();
   }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
 }
 
-function saveQuotaLimit() {
-  var v = parseFloat(document.getElementById('quota-default').value);
-  if (!(v > 0)) { showToast('Enter a positive monthly limit', 'error'); return; }
-  updateJSON('/api/v1/admin/quota/policy', 'PATCH', { default_monthly_usd: v }).then(function() {
-    showToast('Default limit saved', 'success');
-    loadQuotaPolicy();
-  }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
+function loadModelRestrictions(page) {
+  if (typeof page === 'number') modelRestrictionsPage = page;
+  var offset = modelRestrictionsPage * modelRestrictionsPageSize;
+  fetchJSON('/api/v1/admin/model-policies?limit=' + modelRestrictionsPageSize + '&offset=' + offset).then(function(payload) {
+    var rows = Array.isArray(payload) ? payload : (payload.policies || []);
+    modelRestrictionsHasMore = !!payload.has_more;
+    document.getElementById('model-restrictions-count').textContent = '(' + (payload.total || rows.length) + ')';
+    var html = '<div class="tbl-wrap"><table><thead><tr><th>User</th><th>Status</th><th>Allowed models</th><th>Updated by</th><th>Updated</th></tr></thead><tbody>';
+    rows.forEach(function(row) {
+      var name = row.name || row.email || row.user_id;
+      var models = row.deny_all ? '<span class="badge badge-red">deny-all</span>' : (row.models || []).map(function(m) { return '<span class="tag tag-blu">' + esc(m) + '</span>'; }).join(' ');
+      html += '<tr><td><b>' + esc(name) + '</b><div class="ts">' + esc(row.email || '') + '<br>' + esc(row.user_id) + '</div></td><td><span class="badge ' + (row.active ? 'badge-grn' : 'badge-gray') + '">' + (row.active ? 'active' : 'inactive') + '</span></td><td>' + models + '</td><td>' + esc(row.updated_by || '—') + '</td><td>' + esc(new Date(row.updated_at).toLocaleString('en-US', {hour12:false})) + '</td></tr>';
+    });
+    if (!rows.length) html += '<tr><td colspan="5" class="loading">No externally restricted users.</td></tr>';
+    html += '</tbody></table></div>';
+    document.getElementById('model-restrictions-list').innerHTML = html;
+    document.getElementById('model-restrictions-prev').disabled = modelRestrictionsPage === 0;
+    document.getElementById('model-restrictions-next').disabled = !modelRestrictionsHasMore;
+    document.getElementById('model-restrictions-page-label').textContent = 'Page ' + (modelRestrictionsPage + 1);
+  }).catch(function(err) { document.getElementById('model-restrictions-list').innerHTML = '<div class="err-msg">' + esc(err.message) + '</div>'; });
 }
-
-function saveQuotaEnforce() {
-  var want = document.getElementById('quota-enforced').checked;
-  if (quotaPolicy && !!quotaPolicy.enforced === want) { showToast('Enforcement unchanged', 'error'); return; }
-  if (!want) { applyQuotaEnforce(false); return; }
-  if (!confirm('Turn on gateway enforcement? Anyone at or over their monthly limit — including approvals still pending — gets 429 on their next request.')) {
-    renderQuotaPolicy(); // snap the checkbox back to server truth
-    return;
-  }
-  applyQuotaEnforce(true);
-}
-
-function applyQuotaEnforce(want) {
-  updateJSON('/api/v1/admin/quota/policy', 'PATCH', { enforced: want }).then(function() {
-    showToast(want ? 'Quotas enforced at the gateway' : 'Gateway enforcement off — spend still tracked', 'success');
-    loadQuotaPolicy();
-    loadQuotaOverrides();
-  }).catch(function(err) { showToast('Failed: ' + err.message, 'error'); loadQuotaPolicy(); });
-}
-
-function fillQuotaPickers() {
-  var opts = {};
-  (peopleAll || []).forEach(function(p) { opts[p.slug] = true; });
-  (validGroups || []).forEach(function(g) { if (g) opts[g] = true; });
-  var dl = document.getElementById('quota-principals');
-  if (!dl) return;
-  dl.innerHTML = Object.keys(opts).sort().map(function(k) { return '<option value="' + esc(k) + '">'; }).join('');
-}
-
-function loadQuotaOverrides() {
-  fetchJSON('/api/v1/admin/quota/overrides').then(function(list) {
-    renderQuotaOverrides(Array.isArray(list) ? list : []);
-  }).catch(function(err) {
-    document.getElementById('quota-overrides-body').innerHTML = '<div class="err-msg">Overrides: ' + esc(err.message) + '</div>';
-  });
-}
-
-function loadQuotaDenials() {
-  fetchJSON('/api/v1/admin/quota/denials').then(function(d) {
-    renderQuotaDenials(d && typeof d.total === 'number' ? d : { total: 0, by_user: [] });
-  }).catch(function(err) {
-    document.getElementById('quota-denials-body').innerHTML = '<div class="err-msg">Blocked requests: ' + esc(err.message) + '</div>';
-  });
-}
-
-function renderQuotaDenials(d) {
-  var list = Array.isArray(d.by_user) ? d.by_user : [];
-  document.getElementById('quota-denials-meta').textContent =
-    d.total ? d.total + ' blocked this month' : 'none blocked this month';
-  var html = '<div class="tbl-wrap"><table><thead><tr>' +
-    '<th>Username</th><th>Blocked</th><th>Last block</th>' +
-    '</tr></thead><tbody>';
-  list.forEach(function(u) {
-    html += '<tr>' +
-      '<td>' + esc(u.username) + '</td>' +
-      '<td style="font-variant-numeric:tabular-nums">' + esc(u.count) + '</td>' +
-      '<td>' + new Date(u.last_at).toLocaleString('en-US', { hour12: false }) + '</td>' +
-      '</tr>';
-  });
-  if (!list.length) html += '<tr><td colspan="3" class="loading">Nothing has been blocked this month.</td></tr>';
-  html += '</tbody></table></div>';
-  document.getElementById('quota-denials-body').innerHTML = html;
-}
-
-function renderQuotaOverrides(list) {
-  document.getElementById('quota-overrides-count').textContent = list.length ? list.length + '' : '';
-  var html = '<div class="tbl-wrap"><table><thead><tr>' +
-    '<th>Scope</th><th>Principal</th><th>$/month</th><th>Updated</th><th></th>' +
-    '</tr></thead><tbody>';
-  list.forEach(function(o) {
-    html += '<tr>' +
-      '<td><span class="badge ' + (o.scope === 'user' ? 'badge-blu' : 'badge-org') + '">' + esc(o.scope) + '</span></td>' +
-      '<td>' + esc(o.principal) + '</td>' +
-      '<td>$' + esc(o.monthly_usd) + '</td>' +
-      '<td>' + esc(o.updated_by || '—') + ' · ' + new Date(o.updated_at).toLocaleDateString('en-US') + '</td>' +
-      '<td style="text-align:right"><button class="btn btn-red" style="padding:3px 10px;font-size:9px" onclick="deleteQuotaOverride(\'' + esc(o.scope) + '\',\'' + esc(o.principal) + '\')">Delete</button></td>' +
-      '</tr>';
-  });
-  if (!list.length) html += '<tr><td colspan="5" class="loading">No overrides — everyone is on the default limit.</td></tr>';
-  html += '</tbody></table></div>' +
-    '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border)">' +
-      '<div><label style="display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:6px">Scope</label>' +
-        '<select id="qo-scope" style="padding:7px 10px"><option value="user">user (slug)</option><option value="group">group</option></select></div>' +
-      '<div><label style="display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:6px">Principal</label>' +
-        '<input type="text" id="qo-principal" list="quota-principals" placeholder="slug or group name" style="width:200px"></div>' +
-      '<div><label style="display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:6px">$/month</label>' +
-        '<input type="number" id="qo-usd" min="1" step="1" style="width:110px"></div>' +
-      '<button class="btn btn-grn" style="padding:7px 18px;font-size:11px" onclick="saveQuotaOverride()">Add / update</button>' +
-      '<datalist id="quota-principals"></datalist>' +
-    '</div>';
-  document.getElementById('quota-overrides-body').innerHTML = html;
-  fillQuotaPickers();
-}
-
-function saveQuotaOverride() {
-  var scope = document.getElementById('qo-scope').value;
-  var principal = document.getElementById('qo-principal').value.trim();
-  var usd = parseFloat(document.getElementById('qo-usd').value);
-  if (!principal) { showToast('Principal is required', 'error'); return; }
-  if (!(usd > 0)) { showToast('Enter a positive monthly limit', 'error'); return; }
-  updateJSON('/api/v1/admin/quota/overrides', 'PUT', { scope: scope, principal: principal, monthly_usd: usd }).then(function() {
-    showToast('Override saved', 'success');
-    document.getElementById('qo-principal').value = '';
-    document.getElementById('qo-usd').value = '';
-    loadQuotaOverrides();
-  }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
-}
-
-function deleteQuotaOverride(scope, principal) {
-  if (!confirm('Remove the ' + scope + ' override for ' + principal + '? They fall back to the group/default limit.')) return;
-  updateJSON('/api/v1/admin/quota/overrides?scope=' + encodeURIComponent(scope) + '&principal=' + encodeURIComponent(principal), 'DELETE').then(function() {
-    showToast('Override removed', 'success');
-    loadQuotaOverrides();
-  }).catch(function(err) { showToast('Delete failed: ' + err.message, 'error'); });
+function changeModelRestrictionsPage(delta) {
+  var next = modelRestrictionsPage + delta;
+  if (next < 0 || (delta > 0 && !modelRestrictionsHasMore)) return;
+  loadModelRestrictions(next);
 }
 
 /* ================================================================
@@ -1124,7 +975,7 @@ refreshTimer = setInterval(function() {
   if (document.querySelector('.modal-overlay.open, .confirm-overlay.open')) return;
   var ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
-  if (activeTab === 'people') return; // inline edits on partner table; manual Refresh there
+  if (activeTab === 'people' || activeTab === 'safety-net') return; // editable tabs use explicit refresh/save
   refreshTab(activeTab, false);
 }, REFRESH_INTERVAL);
 

@@ -27,16 +27,19 @@ import (
 var quotaMigrations = []string{
 	// Single-row table: the boolean PK that must be true is the classic
 	// Postgres singleton trick — there is exactly one row and no way to add
-	// a second. Seeded dark (enforced=false) so the ship is inert until an
-	// operator flips the flag deliberately.
+	// a second. The safety net is enabled by default; operators can turn it
+	// off from the super-admin Safety Net tab if needed.
 	`CREATE TABLE IF NOT EXISTS quota_policy (
 		id BOOLEAN PRIMARY KEY DEFAULT true CHECK (id),
-		default_monthly_usd NUMERIC(12,2) NOT NULL DEFAULT 300,
-		enforced BOOLEAN NOT NULL DEFAULT false,
+		default_monthly_usd NUMERIC(12,2) NOT NULL DEFAULT 600,
+		enforced BOOLEAN NOT NULL DEFAULT true,
 		updated_by TEXT NOT NULL DEFAULT '',
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
 	`INSERT INTO quota_policy (id) VALUES (true) ON CONFLICT DO NOTHING`,
+	// Existing installations created by the first quota implementation have
+	// the old untouched $300/dark defaults. Upgrade only those rows; never
+	// overwrite an operator-edited policy.
 	// Per-scope limits. Only the 'user' scope is consulted now (keyed by the
 	// MaaS login); the legacy 'group' scope is retained in the schema for
 	// historical rows but no longer resolved. A NULL lookup result is "no
@@ -58,8 +61,16 @@ var quotaMigrations = []string{
 	// routed and billed. Empty list = feature off — which is also the
 	// provably-inert state until the gateway can report the model
 	// (upstream sends an empty one today, see the issue).
-	`ALTER TABLE quota_policy ADD COLUMN IF NOT EXISTS allowed_over_limit_models TEXT[] NOT NULL DEFAULT '{}'`,
+	`ALTER TABLE quota_policy ADD COLUMN IF NOT EXISTS allowed_over_limit_models TEXT[] NOT NULL DEFAULT ARRAY['rits/zai-org/glm-5-3']`,
 	`ALTER TABLE quota_policy ADD COLUMN IF NOT EXISTS over_cap_ceiling_usd NUMERIC(12,2)`,
+	// Existing installations created by the first quota implementation have
+	// the old untouched $300/dark defaults. Upgrade only those rows; never
+	// overwrite an operator-edited policy. The allowance default is set after
+	// the column exists so old rows also get the initial GLM bypass.
+	`UPDATE quota_policy SET default_monthly_usd = 600, enforced = true,
+	        allowed_over_limit_models = CASE WHEN cardinality(allowed_over_limit_models) = 0
+	          THEN ARRAY['rits/zai-org/glm-5-3'] ELSE allowed_over_limit_models END
+	 WHERE default_monthly_usd = 300 AND updated_by = ''`,
 	// The entitlement endpoint now runs a month-scoped SUM per username on
 	// every gateway request inside its 5s subrequest budget; the best
 	// existing index was username-only with a timestamp recheck.
