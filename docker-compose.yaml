@@ -29,6 +29,7 @@ services:
       DATABASE_URL: postgres://metering:metering-dev@postgres:5432/metering?sslmode=disable
       MAAS_VALIDATE_URL: http://maas-api:8081/internal/v1/api-keys/validate
       SESSION_SECRET: local-development-only-session-secret
+      M2M_AUTH_REQUIRED: "false"
       QUOTA_ENFORCEMENT_ENABLED: "true"
     depends_on:
       postgres:
