@@ -11,10 +11,14 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError:
             body = {}
-        valid = body.get("key") == "local-noy-key"
+        identities = {
+            "local-noy-key": "nitzikow@redhat.com",
+            "local-test-user-key": "local-test-user@example.com",
+        }
+        username = identities.get(body.get("key"), "")
         response = {
-            "valid": valid,
-            "username": "nitzikow@redhat.com" if valid else "",
+            "valid": bool(username),
+            "username": username,
             "groups": [],
         }
         payload = json.dumps(response).encode()

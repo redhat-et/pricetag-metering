@@ -23,7 +23,6 @@ type quotaPolicyUpdateRequest struct {
 	DefaultMonthlyUSD      *float64  `json:"default_monthly_usd"`
 	Enforced               *bool     `json:"enforced"`
 	AllowedOverLimitModels *[]string `json:"allowed_over_limit_models"`
-	OverCapCeilingUSD      *float64  `json:"over_cap_ceiling_usd"`
 }
 
 func quotaAdminActor(r *http.Request) string {
@@ -57,7 +56,6 @@ func (h *QuotaAdminHandler) HandlePolicy(w http.ResponseWriter, r *http.Request)
 			DefaultMonthlyUSD: body.DefaultMonthlyUSD,
 			Enforced:          body.Enforced,
 			Models:            body.AllowedOverLimitModels,
-			Ceiling:           body.OverCapCeilingUSD,
 		})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

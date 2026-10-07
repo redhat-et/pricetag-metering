@@ -25,10 +25,6 @@ func TestModelAllowedOverLimit(t *testing.T) {
 		{"enforcement off", func(d *QuotaDecision) { d.Enforced = false }, "gpt-5.6-luna", false},
 		{"exempt super-admin", func(d *QuotaDecision) { d.Exempt = true }, "gpt-5.6-luna", false},
 		{"empty list disables", func(d *QuotaDecision) { d.OverLimitModels = nil }, "gpt-5.6-luna", false},
-		{"ceiling not reached", func(d *QuotaDecision) { d.OverCapCeilingUSD = 50 }, "gpt-5.6-luna", true},
-		{"ceiling exactly reached denies", func(d *QuotaDecision) { d.OverCapCeilingUSD = 1 }, "gpt-5.6-luna", false},
-		{"ceiling exceeded denies", func(d *QuotaDecision) { d.OverCapCeilingUSD = 0.5 }, "gpt-5.6-luna", false},
-		{"zero ceiling means unlimited", func(d *QuotaDecision) { d.SpentUSD = 100000; d.OverCapCeilingUSD = 0 }, "gpt-5.6-luna", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

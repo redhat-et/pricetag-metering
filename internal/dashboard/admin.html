@@ -899,7 +899,6 @@ function renderSafetyNet() {
     '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;padding:4px 0 14px">' +
       '<div><label class="field-label">Monthly limit (USD)</label><input type="number" id="safety-limit" min="1" step="1" value="' + esc(p.default_monthly_usd) + '" style="width:140px"></div>' +
       '<div><label class="field-label">Enforcement</label><label style="display:flex;gap:8px;align-items:center;margin-top:9px"><input type="checkbox" id="safety-enforced" style="width:auto" ' + (p.enforced ? 'checked' : '') + '> Block over-limit requests</label></div>' +
-      '<div><label class="field-label">Soft bypass ceiling (USD, optional)</label><input type="number" id="safety-ceiling" min="0" step="1" placeholder="unlimited" value="' + (p.over_cap_ceiling_usd == null ? '' : esc(p.over_cap_ceiling_usd)) + '" style="width:140px"><div class="ts">0 or empty = unlimited</div></div>' +
     '</div>' +
     '<div style="border-top:1px solid var(--border);padding-top:14px"><label class="field-label">Models allowed after the limit</label><div style="margin:8px 0 12px">' + chips + '</div>' +
       '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input id="safety-model-add" list="safety-model-list" placeholder="Exact model ID" style="width:320px"><datalist id="safety-model-list">' + opts + '</datalist><button class="btn btn-outline" onclick="addSafetyModel()">Add model</button></div>' +
@@ -915,10 +914,8 @@ function addSafetyModel() {
 function removeSafetyModel(index) { safetyNetDraft.splice(index, 1); renderSafetyNet(); }
 function saveSafetyNet() {
   var limit = parseFloat(document.getElementById('safety-limit').value);
-  var ceilingEl = document.getElementById('safety-ceiling'), ceiling = ceilingEl.value === '' ? 0 : parseFloat(ceilingEl.value);
   if (!(limit > 0)) { showToast('Monthly limit must be greater than zero', 'error'); return; }
-  if (!(ceiling >= 0)) { showToast('Soft ceiling must be zero or greater', 'error'); return; }
-  updateJSON('/api/v1/admin/safety-net', 'PUT', {default_monthly_usd: limit, enforced: document.getElementById('safety-enforced').checked, allowed_over_limit_models: safetyNetDraft, over_cap_ceiling_usd: ceiling}).then(function() {
+  updateJSON('/api/v1/admin/safety-net', 'PUT', {default_monthly_usd: limit, enforced: document.getElementById('safety-enforced').checked, allowed_over_limit_models: safetyNetDraft}).then(function() {
     showToast('Safety net saved', 'success'); loadSafetyNet();
   }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
 }

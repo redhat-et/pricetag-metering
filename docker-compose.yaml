@@ -30,6 +30,7 @@ services:
       MAAS_VALIDATE_URL: http://maas-api:8081/internal/v1/api-keys/validate
       SESSION_SECRET: local-development-only-session-secret
       M2M_AUTH_REQUIRED: "false"
+      MODEL_POLICY_API_SECRET: local-development-model-policy-secret
       QUOTA_ENFORCEMENT_ENABLED: "true"
     depends_on:
       postgres:
