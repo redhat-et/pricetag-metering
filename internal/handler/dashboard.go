@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redhat-et/pricetag-metering/internal/config"
@@ -102,10 +103,19 @@ func (h *DashboardHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
 		limit = l
 	}
+	// Server-side cap mirrors the storage layer's own bound so a client can
+	// never request an unbounded page.
+	if limit > 200 {
+		limit = 200
+	}
 	offset := 0
 	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
 		offset = o
 	}
+	// search is a case-insensitive substring over username and display name;
+	// it stays within the caller's resolved scope because resolveScope has
+	// already pinned the user filter for non-admins/managers above.
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
 	// ref selects the reference model for the SavedUSD counterfactual; the
 	// dashboard passes its savings-ref selection so the user-table column
 	// and the Saved · Hosted Models KPI stay in lockstep.
@@ -113,7 +123,7 @@ func (h *DashboardHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("paginate") == "true" {
 		queryLimit = limit + 1 // one extra row tells us whether a next page exists
 	}
-	result, err := h.store.GetDashboardUsers(r.Context(), since, until, group, user, model, sortCol, sortOrder, queryLimit, offset, r.URL.Query().Get("ref"))
+	result, err := h.store.GetDashboardUsers(r.Context(), since, until, group, user, model, sortCol, sortOrder, queryLimit, offset, r.URL.Query().Get("ref"), search)
 	if err != nil {
 		slog.Error("dashboard query failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)

@@ -614,6 +614,17 @@ td .tag{white-space:nowrap}
 <div class="card">
   <div class="card-hdr"><div><span class="card-title">Partner / Atlas Users</span><span class="card-count" id="partner-users-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPartnerUsers()">Refresh</button></div>
   <div class="ts" style="margin-bottom:10px">Partner identity records — the single source of truth for user management. Role changes are restricted to super-admins.</div>
+  <div class="partner-users-toolbar" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <input type="search" id="partner-users-search" placeholder="Search name, email, or user ID" oninput="onPartnerUsersSearch()" style="flex:1;min-width:220px;padding:6px 10px;font-size:12px">
+    <label style="font-size:11px;color:#8b949e">Per page
+      <select id="partner-users-page-size" onchange="onPartnerUsersPageSize()" style="margin-left:6px;padding:5px 8px;font-size:12px">
+        <option value="20">20</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+        <option value="200">200</option>
+      </select>
+    </label>
+  </div>
   <div id="partner-users-list"><div class="loading"><div class="spinner"></div>Loading partner users...</div></div>
   <div class="partner-users-pager"><button id="partner-users-prev" onclick="changePartnerUsersPage(-1)">Previous</button><span id="partner-users-page-label">Page 1</span><button id="partner-users-next" onclick="changePartnerUsersPage(1)">Next</button></div>
   </div>
@@ -1769,14 +1780,16 @@ function loadPeople(cb) {
     if (cb) cb();
   });
 }
-var partnerUsersAll = [], partnerManagersAll = [], partnerUsersPage = 0, partnerUsersPageSize = 50, partnerUsersHasMore = false;
+var partnerUsersAll = [], partnerManagersAll = [], partnerUsersPage = 0, partnerUsersPageSize = 50, partnerUsersHasMore = false, partnerUsersSearch = '', partnerUsersSearchTimer = null;
 function loadPartnerUsers(page) {
   if (typeof page === 'number') partnerUsersPage = page;
   // refreshTab can call this before the declarations below have executed.
   // Keep the first request valid instead of sending undefined/NaN to the API.
   var limit = partnerUsersPageSize || 50;
   var offset = (partnerUsersPage || 0) * limit;
-  fetchJSON('/api/v1/admin/partner-users?limit=' + limit + '&offset=' + offset).then(function(payload) {
+  var q = '/api/v1/admin/partner-users?limit=' + limit + '&offset=' + offset;
+  if (partnerUsersSearch) q += '&search=' + encodeURIComponent(partnerUsersSearch);
+  fetchJSON(q).then(function(payload) {
     var pageData = Array.isArray(payload) ? {users: payload, managers: payload, total: payload.length, has_more: false} : payload;
     partnerUsersAll = Array.isArray(pageData.users) ? pageData.users : [];
     partnerManagersAll = Array.isArray(pageData.managers) ? pageData.managers : partnerUsersAll;
@@ -1800,6 +1813,20 @@ function changePartnerUsersPage(delta) {
   var next = partnerUsersPage + delta;
   if (next < 0 || (delta > 0 && !partnerUsersHasMore)) return;
   loadPartnerUsers(next);
+}
+function onPartnerUsersPageSize() {
+  var sel = document.getElementById('partner-users-page-size');
+  partnerUsersPageSize = parseInt(sel.value, 10) || 50;
+  loadPartnerUsers(0); // page size change resets to the first page
+}
+function onPartnerUsersSearch() {
+  var el = document.getElementById('partner-users-search');
+  // Debounce so each keystroke does not fire a request.
+  if (partnerUsersSearchTimer) clearTimeout(partnerUsersSearchTimer);
+  partnerUsersSearchTimer = setTimeout(function() {
+    partnerUsersSearch = (el.value || '').trim();
+    loadPartnerUsers(0); // a new search starts from the first page
+  }, 250);
 }
 function renderPartnerUsers() {
   var byId = {};

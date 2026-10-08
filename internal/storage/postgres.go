@@ -621,7 +621,7 @@ func (s *Store) GetDashboardGroups(ctx context.Context, since, until time.Time, 
 // reference model for the SavedUSD counterfactual (empty = claude-opus-4-8);
 // keep it in sync with the dashboard's savings reference selector. offset
 // supports server-side pagination for large user tables.
-func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, group, user, model, sortCol, sortOrder string, limit, offset int, refModel string) ([]UserSummary, error) {
+func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, group, user, model, sortCol, sortOrder string, limit, offset int, refModel, search string) ([]UserSummary, error) {
 	if refModel == "" {
 		refModel = "claude-opus-4-8"
 	}
@@ -667,13 +667,13 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 		LEFT JOIN model_pricing p ON e.model = p.model
 		LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
 		LEFT JOIN sv ON sv.username = e.username
-		WHERE e.timestamp >= $1 AND e.timestamp < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
+		WHERE e.timestamp >= $1 AND e.timestamp < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5) AND ($9 = '' OR lower(e.username) LIKE '%%' || lower($9) || '%%' OR lower(TRIM(CONCAT_WS(' ', up.first_name, up.last_name))) LIKE '%%' || lower($9) || '%%')
 		GROUP BY e.username, %s, COALESCE(e.group_name, '')
 		ORDER BY %s %s, e.username ASC, COALESCE(e.group_name, '') ASC
 			LIMIT $6 OFFSET $7`, displayNameExpr, costUSDExpr, displayNameExpr, sortExpr, direction)
 	}
 
-	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model, limit, offset, refModel)
+	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model, limit, offset, refModel, search)
 	if err != nil {
 		return nil, err
 	}

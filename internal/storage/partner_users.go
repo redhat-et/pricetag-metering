@@ -262,38 +262,59 @@ func (s *Store) ListAllPartnerUsers(ctx context.Context) ([]PartnerUser, error) 
 	return users, rows.Err()
 }
 
-// ListPartnerUsersPage returns one active Partner-user page and whether a
-// later page exists. The offset is used only by the admin table; the full list
-// method remains available for internal manager and role lookups.
-func (s *Store) ListPartnerUsersPage(ctx context.Context, limit, offset int) ([]PartnerUser, bool, error) {
+// ListPartnerUsersPage returns one active Partner-user page, the total number
+// of active users matching the (optional) search, and whether a later page
+// exists. search is a case-insensitive substring matched against email, first
+// and last name, and the stable Partner user id; an empty search returns the
+// normal unfiltered page. The offset is used only by the admin table; the full
+// list method remains available for internal manager and role lookups.
+func (s *Store) ListPartnerUsersPage(ctx context.Context, search string, limit, offset int) ([]PartnerUser, int, bool, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	if offset < 0 {
 		offset = 0
 	}
+	// $1 holds the search term. An empty term disables the filter so the
+	// clause stays a no-op (every active row matches). user_id is cast to
+	// text so a partial UUID search works. All comparisons are lower-cased
+	// for case-insensitivity.
+	where := `WHERE p.active AND ($1 = '' OR (
+		lower(COALESCE(p.tags->>'email','')) LIKE '%' || lower($1) || '%'
+		OR lower(COALESCE(p.tags->>'first_name','')) LIKE '%' || lower($1) || '%'
+		OR lower(COALESCE(p.tags->>'last_name','')) LIKE '%' || lower($1) || '%'
+		OR lower(TRIM(CONCAT_WS(' ', p.tags->>'first_name', p.tags->>'last_name'))) LIKE '%' || lower($1) || '%'
+		OR lower(p.user_id::text) LIKE '%' || lower($1) || '%'
+	))`
+
+	var total int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM partner_users p `+where, search).Scan(&total); err != nil {
+		return nil, 0, false, err
+	}
+
 	rows, err := s.db.QueryContext(ctx, partnerUserSelect+`
-		WHERE p.active ORDER BY p.created_at, p.user_id LIMIT $1 OFFSET $2`, limit+1, offset)
+		`+where+` ORDER BY p.created_at, p.user_id LIMIT $2 OFFSET $3`, search, limit+1, offset)
 	if err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 	defer rows.Close()
 	users := make([]PartnerUser, 0, limit+1)
 	for rows.Next() {
 		user, err := scanPartnerUser(rows)
 		if err != nil {
-			return nil, false, err
+			return nil, 0, false, err
 		}
 		users = append(users, user)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 	hasMore := len(users) > limit
 	if hasMore {
 		users = users[:limit]
 	}
-	return users, hasMore, nil
+	return users, total, hasMore, nil
 }
 
 // PartnerManagerScope returns the set of MaaS login usernames a caller may
