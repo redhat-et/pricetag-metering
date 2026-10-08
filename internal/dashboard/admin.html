@@ -615,9 +615,9 @@ td .tag{white-space:nowrap}
   <div class="card-hdr"><div><span class="card-title">Partner / Atlas Users</span><span class="card-count" id="partner-users-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPartnerUsers()">Refresh</button></div>
   <div class="ts" style="margin-bottom:10px">Partner identity records — the single source of truth for user management. Role changes are restricted to super-admins.</div>
   <div class="partner-users-toolbar" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-    <input type="search" id="partner-users-search" placeholder="Search name, email, or user ID" oninput="onPartnerUsersSearch()" style="flex:1;min-width:220px;padding:6px 10px;font-size:12px">
-    <label style="font-size:11px;color:#8b949e">Per page
-      <select id="partner-users-page-size" onchange="onPartnerUsersPageSize()" style="margin-left:6px;padding:5px 8px;font-size:12px">
+    <input type="search" id="partner-users-search" class="tbl-input" placeholder="Search name, email, or user ID" oninput="onPartnerUsersSearch()" style="flex:1;min-width:220px;padding:7px 10px;font-size:12px">
+    <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:6px">Per page
+      <select id="partner-users-page-size" onchange="onPartnerUsersPageSize()" style="background:var(--c2);color:var(--t);border:1px solid var(--bdr);padding:6px 10px;border-radius:5px;font-size:12px;font-family:inherit;cursor:pointer;outline:none">
         <option value="20">20</option>
         <option value="50" selected>50</option>
         <option value="100">100</option>
