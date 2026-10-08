@@ -97,7 +97,7 @@ func LoadPrices(ctx context.Context) ([]ModelPrice, string) {
 // Parity snapshot (OpenRouter, per MTok, 2026-09-14):
 //   - qwen/qwen3.8-27b:            in $0.214 · out $2.55 · cache read $0.15
 //   - qwen/qwen3.8-flash:          in $0.15  · out $0.47 · cache read $0.016
-//   Neither lists a cache-write premium.
+//     Neither lists a cache-write premium.
 //
 // They must be seeded explicitly for two reasons: LiteLLM never emits them,
 // and without a model_pricing row the cost query falls back to the default
@@ -115,11 +115,11 @@ func LocalPrices() []ModelPrice {
 		// historical events, and stays off the pricing list.
 		{Model: "Qwen3.8-27B-FP8", Provider: "vllm", Deprecated: true,
 			InputCost: 0.214, OutputCost: 2.55, CacheReadCost: 0.15},
-		// Qwen3.8-Flash-Next on external cluster, proxied via qwen-flash-proxy.
-		// Priced at OpenRouter qwen/qwen3.8-flash parity (closest listed match).
-		// The only active Qwen id.
+		// Qwen3.8-Flash-Next was served by the retired external cluster and is
+		// no longer offered. Keep its rate row for historical usage pricing,
+		// but hide it from the dashboard pricing tab.
 		{Model: "Inferact/Qwen3.8-Flash-Next-NVFP4", Provider: "vllm",
-			InputCost: 0.15, OutputCost: 0.47, CacheReadCost: 0.016},
+			InputCost: 0.15, OutputCost: 0.47, CacheReadCost: 0.016, Deprecated: true},
 		// GLM 5.3 on the curvebender cluster, proxied via the unified route.
 		// Deliberately free — every token type $0 (the cost expression only
 		// falls back to the paid default on a MISSING row; a seeded 0 is a

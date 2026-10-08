@@ -236,14 +236,15 @@ func TestLocalPrices_OpenRouterParity(t *testing.T) {
 	// Rates are an OpenRouter parity snapshot (per MTok). If these drift the
 	// dashboard's hosted-vs-vendor comparison silently lies, so pin them.
 	// GLM is the deliberate exception: every rate 0 by design (free), and
-	// the retired 27B id is deprecated — priced for history, off the list.
+	// retired Qwen ids are deprecated — priced for history, off the list.
 	want := map[string]ModelPrice{
 		"Qwen3.8-27B-FP8":                   {InputCost: 0.214, OutputCost: 2.55, CacheReadCost: 0.15},
 		"Inferact/Qwen3.8-Flash-Next-NVFP4": {InputCost: 0.15, OutputCost: 0.47, CacheReadCost: 0.016},
 		"rits/zai-org/glm-5-3":              {},
 	}
 	wantDeprecated := map[string]bool{
-		"Qwen3.8-27B-FP8": true,
+		"Qwen3.8-27B-FP8":                   true,
+		"Inferact/Qwen3.8-Flash-Next-NVFP4": true,
 	}
 	seen := map[string]bool{}
 	for _, p := range prices {
