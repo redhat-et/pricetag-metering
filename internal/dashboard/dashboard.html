@@ -698,7 +698,10 @@ function renderUsers(data){
      }
      return row;
   }).join('');
-  if(expandedUser){loadUserModels(expandedUser);}
+  if(expandedUser){
+    const expanded=renderedUsers.find(u=>u.username===expandedUser);
+    if(expanded)loadUserModels(expanded);
+  }
  }
 
 async function toggleExpand(username){
@@ -713,7 +716,8 @@ function toggleExpandByIndex(index){
   if(user&&user.username)toggleExpand(user.username);
 }
 
-async function loadUserModels(username){
+async function loadUserModels(user){
+  const username=user.username;
   const el=document.getElementById('expand-content-'+encodeURIComponent(username));
   if(!el)return;
   try{
@@ -727,7 +731,8 @@ async function loadUserModels(username){
     if(r==='custom'&&customFrom&&customTo)r='custom&from='+customFrom+'&to='+customTo;
     var gf=groupFilter?'&group='+encodeURIComponent(groupFilter):'';
     var mf=modelFilter?'&model='+encodeURIComponent(modelFilter):'';
-    const models=await api(`/api/v1/dashboard/models?range=${r}${gf}${mf}&user=${encodeURIComponent(username)}`);
+    const usernames=(user.usernames&&user.usernames.length?user.usernames:[username]).join(',');
+    const models=await api(`/api/v1/dashboard/models?range=${r}${gf}${mf}&user=${encodeURIComponent(usernames)}`);
     if(!models.length){el.innerHTML='<div style="padding:12px;color:var(--text2)">No model data</div>';return;}
     const total=models.reduce((s,m)=>s+m.total_tokens,0);
     el.innerHTML=`<div class="expand-detail">
@@ -748,9 +753,10 @@ async function loadUserModels(username){
           const pct=total>0?((m.total_tokens/total)*100):0;
           const provColor=m.provider==='anthropic'?'var(--orange)':m.provider==='openai'?'var(--green)':'var(--cyan)';
           const newInput=Math.max((m.prompt_tokens||0)-(m.cached_input_tokens||0),0);
+          const safe=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
           return `<tr>
-            <td><strong>${m.model}</strong></td>
-            <td style="color:${provColor}">${m.provider}</td>
+            <td><strong>${safe(m.model)}</strong></td>
+            <td style="color:${provColor}">${safe(m.provider)}</td>
             <td class="num">${fmtN(m.requests)}</td>
             <td class="num">${fmtN(newInput)}</td>
             <td class="num">${fmtN(m.completion_tokens||0)}</td>
