@@ -93,14 +93,6 @@ tr.clickable{cursor:pointer}
 .user-mail{font-size:10px;color:var(--text2);margin-top:1px}
 .country-flag{display:inline-block;margin-right:6px;font-size:15px;line-height:1;vertical-align:-1px}
 #quota-banner,#quota-ov{display:none!important}
-.user-detail-ov{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:180;align-items:center;justify-content:center;padding:20px}
-.user-detail-ov.show{display:flex}
-.user-detail-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;width:100%;max-width:620px;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.5)}
-.user-detail-head{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--border)}
-.user-detail-head h2{font-size:16px;margin:0;flex:1}
-.user-detail-close{background:var(--bg-hover);color:var(--text2);border:1px solid var(--border);width:28px;height:28px;border-radius:6px;cursor:pointer}
-.user-detail-body{padding:18px}.user-detail-grid{display:grid;grid-template-columns:150px 1fr;gap:8px 14px;font-size:12px}
-.user-detail-key{color:var(--text2);font-weight:600}.user-detail-value{word-break:break-word}
 @media(max-width:600px){.kpi-row{grid-template-columns:1fr}}
 /* ── Model pricing modal ──────────────────────────────────────────── */
 .pricing-ov{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:150;align-items:flex-start;justify-content:center;padding:5vh 16px}
@@ -372,14 +364,6 @@ tr.clickable{cursor:pointer}
 </div>
 
 </main>
-
-<div class="user-detail-ov" id="user-detail-ov" onclick="if(event.target===this)closeUserDetails()">
-  <section class="user-detail-card" role="dialog" aria-modal="true" aria-labelledby="user-detail-title">
-    <div class="user-detail-head"><h2 id="user-detail-title">User details</h2><button class="user-detail-close" onclick="closeUserDetails()" aria-label="Close">×</button></div>
-    <div class="user-detail-body" id="user-detail-body"></div>
-    <div class="user-detail-body" id="user-detail-models"></div>
-  </section>
-</div>
 
 <!-- ── Subtle welcome-page background animation (issue #11) ────────────── -->
 <script>
@@ -695,9 +679,10 @@ function renderUsers(data){
     let cls='clickable';
     if(i<5&&len>10)cls+=' top5';
     if(i>=len-5&&len>10)cls+=' bottom5';
-    let row=`<tr class="${cls}" tabindex="0" onclick="openUserDetailsByIndex(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openUserDetailsByIndex(${i})}">
-      <td style="color:var(--text2);font-size:10px">&#9654;</td>
-      <td>${userCell(u.username,u.display_name,u.tags)}</td>
+     let isExpanded=expandedUser===u.username;
+     let row=`<tr class="${cls}" tabindex="0" onclick="toggleExpand(${JSON.stringify(u.username)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleExpand(${JSON.stringify(u.username)})}">
+       <td style="color:var(--text2);font-size:10px;transition:transform .15s;transform:${isExpanded?'rotate(90deg)':'none'}">&#9654;</td>
+       <td>${userCell(u.username,u.display_name,u.tags)}</td>
       <td class="num">${fmtN(u.requests)}</td>
       <td class="num">${fmtN(u.prompt_tokens)}</td>
       <td class="num">${fmtN(u.completion_tokens)}</td>
@@ -705,42 +690,17 @@ function renderUsers(data){
       <td class="num">${fmtC(u.cost_usd)}</td>
       <td class="num">${fmtC(u.saved_usd||0)}</td>
       ${isSuperAdmin?`<td><a href="/admin/impersonate?as=${encodeURIComponent(u.username)}" onclick="event.stopPropagation()" title="Open this user's personal view" style="color:var(--blue);font-size:11px;text-decoration:none;white-space:nowrap">view as &#8594;</a></td>`:''}
-    </tr>`;
-    return row;
+     </tr>`;
+     if(isExpanded){
+       const detailID='expand-content-'+encodeURIComponent(u.username);
+       const colspan=COLS.length+1+(isSuperAdmin?1:0);
+       row+=`<tr class="user-expanded-row"><td colspan="${colspan}" id="${detailID}"><div class="expand-loading">Loading model usage…</div></td></tr>`;
+     }
+     return row;
   }).join('');
 
-}
-
-function openUserDetailsByIndex(index){
-  const user=renderedUsers[index];
-  if(!user)return;
-  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const tags=user.tags||{};
-  const rows=[];
-  if(user.user_id)rows.push(['RH UUID',user.user_id]);
-  Object.keys(tags).sort().forEach(key=>rows.push([key,typeof tags[key]==='object'?JSON.stringify(tags[key]):tags[key]]));
-  rows.push(['Requests',fmtN(user.requests||0)],['Total tokens',fmtN(user.total_tokens||0)],['Cost',fmtC(user.cost_usd||0)]);
-  document.getElementById('user-detail-title').innerHTML=countryFlag(tags.country)+esc(user.display_name||user.username||'User');
-  document.getElementById('user-detail-body').innerHTML='<div class="user-detail-grid">'+rows.map(r=>'<div class="user-detail-key">'+esc(r[0])+'</div><div class="user-detail-value">'+esc(r[1])+'</div>').join('')+'</div>';
-  document.getElementById('user-detail-models').innerHTML='<div class="expand-loading">Loading model usage…</div>';
-  document.getElementById('user-detail-ov').classList.add('show');
-  loadUserDetailModels(user);
-}
-function closeUserDetails(){document.getElementById('user-detail-ov').classList.remove('show')}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeUserDetails()});
-async function loadUserDetailModels(user){
-  try{
-    let modelRange=range;
-    if(modelRange==='custom'&&customFrom&&customTo)modelRange='custom&from='+encodeURIComponent(customFrom)+'&to='+encodeURIComponent(customTo);
-    const gf=groupFilter?'&group='+encodeURIComponent(groupFilter):'';
-    const mf=modelFilter?'&model='+encodeURIComponent(modelFilter):'';
-    const usernames=(user.usernames&&user.usernames.length?user.usernames:[user.username]).join(',');
-    const models=await api('/api/v1/dashboard/models?range='+modelRange+gf+mf+'&user='+encodeURIComponent(usernames));
-    const body=document.getElementById('user-detail-models');
-    if(!models.length){body.innerHTML='<div class="expand-loading">No model usage in this period.</div>';return;}
-    body.innerHTML='<h3 style="font-size:13px;margin-bottom:8px">Model usage</h3><table><thead><tr><th>Model</th><th>Requests</th><th>Total</th><th>Cost</th></tr></thead><tbody>'+models.map(m=>'<tr><td>'+String(m.model||'—').replace(/[&<>]/g,'')+'</td><td>'+fmtN(m.requests)+'</td><td>'+fmtN(m.total_tokens)+'</td><td>'+fmtC(m.cost_usd)+'</td></tr>').join('')+'</tbody></table>';
-  }catch(e){document.getElementById('user-detail-models').innerHTML='<div class="expand-loading">Model usage unavailable.</div>'}
-}
+ }
+ if(expandedUser){loadUserModels(expandedUser);}
 
 async function toggleExpand(username){
   if(expandedUser===username){expandedUser='';refresh();return;}
@@ -749,7 +709,7 @@ async function toggleExpand(username){
 }
 
 async function loadUserModels(username){
-  const el=document.getElementById('expand-content-'+username);
+  const el=document.getElementById('expand-content-'+encodeURIComponent(username));
   if(!el)return;
   try{
     // Same query string the rest of the page uses: a bare range=custom is
