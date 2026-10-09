@@ -649,7 +649,13 @@ function renderRecent(data){
   tbody.innerHTML=data.map(r=>{
     const provColor=r.provider==='anthropic'?'var(--orange)':r.provider==='openai'?'var(--green)':'var(--cyan)';
     const client=friendlyClient(r.user_agent);
-     const clientColor=toolColor(client);
+    // Keep the pie's aggregate "Other" bucket, but do not hide the source
+    // client in Recent Activity. Unknown user-agents are useful operational
+    // evidence (for example Bun, Python, LiteLLM, or a new CLI) and should
+    // remain visible instead of being rendered only as "Other".
+    const clientLabel=client==='Other'&&r.user_agent?r.user_agent:client;
+    const clientColor=toolColor(client);
+    const clientTitle=pmEsc(r.user_agent||clientLabel);
     const st=statusCell(r.status_code);
     // Quota blocks are real usage_events rows (status 429, zero usage) that
     // we refused ourselves (provider 'gateway'), so they render here exactly
@@ -658,7 +664,7 @@ function renderRecent(data){
     return `<tr>
       <td style="white-space:nowrap;color:var(--text2)">${timeAgo(r.timestamp)}</td>
       <td>${userCell(r.username,r.display_name,{country:r.country})}</td>
-      <td style="color:${clientColor}" title="${r.user_agent||''}">${client||'—'}</td>
+      <td style="color:${clientColor}" title="${clientTitle}">${pmEsc(clientLabel||'—')}</td>
       <td>${r.model||'—'}</td>
       <td style="color:${provColor}">${r.provider||'—'}</td>
       <td style="color:${st.color};font-weight:600" title="${st.title}">${st.text}</td>
