@@ -96,8 +96,14 @@ type Store struct {
 	// only to log transitions once. Enforcement and the Recent feed never
 	// consult these; they stay on raw for freshness and detail.
 	useRollups     atomic.Bool
+	liveRollups    atomic.Bool
 	parityHealthy  atomic.Bool
 	servingRollups atomic.Bool
+	// Unix nanoseconds of the last successful maintenance rebuild. This is
+	// intentionally separate from rollupsReadyNow: ready means backfill has
+	// completed, while this value reports current freshness for eventual
+	// consistency monitoring.
+	rollupLastRefreshUnixNano atomic.Int64
 }
 
 // PoolConfig sizes the database connection pools (primary and read
@@ -140,6 +146,23 @@ func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) 
 	return s, nil
 }
 func (s *Store) SetQuotaEnforcement(enabled bool) { s.quotaEnforcement.Store(enabled) }
+
+// SetLiveRollups controls synchronous usage_hourly writes. Raw usage_events
+// ingestion remains enabled regardless of this switch.
+func (s *Store) SetLiveRollups(enabled bool) { s.liveRollups.Store(enabled) }
+
+func (s *Store) LiveRollupsEnabled() bool { return s.liveRollups.Load() }
+
+// RollupLastRefreshedAt reports the last successful bounded rebuild of the
+// recent-hour window. The zero value means maintenance has not completed a
+// refresh since this process started.
+func (s *Store) RollupLastRefreshedAt() time.Time {
+	n := s.rollupLastRefreshUnixNano.Load()
+	if n == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, n).UTC()
+}
 
 func (s *Store) Close() error {
 	if s.readDB != nil {
@@ -210,11 +233,12 @@ var insertEventSQL = fmt.Sprintf(`
 	ON CONFLICT DO NOTHING
 	RETURNING cost_usd`, costUSDExpr)
 
-// InsertEvent writes the ledger row and maintains the hourly rollup in
-// the SAME transaction (plan rev2 pt.2): either both land or neither, so
-// usage_hourly is never reachable in a state that disagrees with raw.
-// The rollup rides the cost the database just computed (returned as
-// text to keep NUMERIC exact — no float round-trip).
+// InsertEvent writes the ledger row and, when live rollups are enabled,
+// maintains the hourly rollup in the SAME transaction (plan rev2 pt.2).
+// With live writes disabled, raw usage_events remains authoritative and the
+// maintenance loop rebuilds usage_hourly from it in bounded batches. The
+// rollup rides the cost the database just computed (returned as text to keep
+// NUMERIC exact — no float round-trip).
 func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -236,9 +260,11 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 	if err != nil {
 		return err
 	}
-	if err := upsertRollup(ctx, tx, e.Timestamp, e.Username, e.GroupName, e.Model, e.Provider,
-		1, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, costUSD); err != nil {
-		return err
+	if s.liveRollups.Load() {
+		if err := upsertRollup(ctx, tx, e.Timestamp, e.Username, e.GroupName, e.Model, e.Provider,
+			1, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, costUSD); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -1239,8 +1265,9 @@ var migrations = []string{
 	// construction — the SAME expression string, not a Go re-implementation
 	// (that is the fallback-rate trap in the PR #18 review).
 	`ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS cost_usd NUMERIC(16,8)`,
-	// Hourly rollup, maintained in each event's insert transaction.
-	// group_name is coalesced to '' because a NULL could never live in a
+	// Hourly rollup, maintained in each event's insert transaction when
+	// LIVE_ROLLUPS_ENABLED is true; otherwise bounded maintenance rebuilds it
+	// from usage_events. group_name is coalesced to '' because a NULL could never live in a
 	// conflict key; reads map back transparently. Denial rows (zero usage)
 	// count in requests — the parity gate counts them too (plan rev2 pt.4).
 	`CREATE TABLE IF NOT EXISTS usage_hourly (
