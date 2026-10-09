@@ -542,8 +542,8 @@ async function refresh(force){
    renderUsers(mergeDirectoryUsers(collapseUsageUsers(cachedUsers),[],false,userFilter));
    renderUsersPager();
   renderRecent(rc);
-  renderModelChart();
-  refresh();
+   renderModelChart();
+   renderUserCostChart();
   renderSavings();
   renderTimeline(tl);
     document.getElementById('last-refresh').textContent=' • '+new Date().toLocaleTimeString();
