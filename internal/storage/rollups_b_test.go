@@ -74,6 +74,27 @@ func TestRebuildPathsAcquireHourLocks(t *testing.T) {
 	}
 }
 
+func TestToolRollupRechecksReadinessInsideExclusiveLock(t *testing.T) {
+	body := funcBody(t, "rollups.go", "func (s *Store) ensureToolRollups")
+	lock := strings.Index(body, "LOCK TABLE usage_tool_hourly IN ACCESS EXCLUSIVE MODE")
+	recheck := strings.Index(body, "SELECT value FROM rollup_meta WHERE key = $1")
+	truncate := strings.Index(body, "TRUNCATE usage_tool_hourly")
+	marker := strings.Index(body, "INSERT INTO rollup_meta")
+	commit := strings.LastIndex(body, "tx.Commit()")
+	if lock < 0 || recheck < 0 || truncate < 0 || marker < 0 || commit < 0 {
+		t.Fatal("tool rebuild must lock, recheck readiness, rebuild, mark ready, and commit")
+	}
+	if !(lock < recheck && recheck < truncate) {
+		t.Error("tool readiness must be rechecked after the exclusive table lock and before truncate")
+	}
+	if marker > commit {
+		t.Error("tool readiness marker must be written before the rebuild transaction commits")
+	}
+	if strings.Contains(body[commit:], "s.metaSet(ctx, metaToolRollupsReady") {
+		t.Error("tool readiness must not be written after the rebuild transaction commits")
+	}
+}
+
 func TestRollupReadVariantsReadOnlyHourlyTable(t *testing.T) {
 	variants := map[string]string{
 		"rollupOverviewSQL": rollupOverviewSQL,

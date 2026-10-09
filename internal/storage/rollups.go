@@ -281,6 +281,18 @@ func (s *Store) ensureToolRollups(ctx context.Context) error {
 	if _, err := tx.ExecContext(ctx, `LOCK TABLE usage_tool_hourly IN ACCESS EXCLUSIVE MODE`); err != nil {
 		return err
 	}
+	// Several pods can pass the fast-path check before the first rebuild
+	// commits. Recheck while holding the exclusive table lock so waiters do
+	// not repeat the full historical rebuild. The readiness marker is written
+	// in this same transaction below, leaving no commit-to-marker race.
+	var ready string
+	err = tx.QueryRowContext(ctx, `SELECT value FROM rollup_meta WHERE key = $1`, metaToolRollupsReady).Scan(&ready)
+	if err == nil && ready == "true" {
+		return tx.Commit()
+	}
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `TRUNCATE usage_tool_hourly`); err != nil {
 		return err
 	}
@@ -292,10 +304,15 @@ func (s *Store) ensureToolRollups(ctx context.Context) error {
 	if _, err := tx.ExecContext(ctx, full); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO rollup_meta (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		metaToolRollupsReady, "true"); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.metaSet(ctx, metaToolRollupsReady, "true")
+	return nil
 }
 
 // backfillPass drives the stages to completion in dependency order:
