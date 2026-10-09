@@ -20,6 +20,34 @@ Nothing yet.
 
 Nothing yet.
 
+## [0.3.0] - 2026-10-09
+
+This release is the EnMaaS metering source of truth for the coordinated
+PriceTag deployment. It includes all metering changes merged after `v0.2.1`.
+
+### Added
+
+- Inline expansion of user details in the dashboard ([PR #60](https://github.com/redhat-et/pricetag-metering/pull/60)).
+- Server-side user search and page-size selection for paginated user views ([PR #56](https://github.com/redhat-et/pricetag-metering/pull/56)).
+
+### Changed
+
+- Dashboard user charts now rank independently by Cost, Tokens, and Requests ([PR #62](https://github.com/redhat-et/pricetag-metering/pull/62)).
+
+### Fixed
+
+- Rollup ingestion no longer takes an hour-wide lock, reducing contention with event writes ([PR #59](https://github.com/redhat-et/pricetag-metering/pull/59)).
+- Retired Qwen models are excluded from pricing and model views ([PR #54](https://github.com/redhat-et/pricetag-metering/pull/54)).
+
+### Coordinated EnMaaS deployment changes
+
+The matching deployment and operations changes are tracked in the PriceTag
+repository release `v0.3.0`, including model routing/catalog updates, Vertex
+integration, rollout scaling, database-pool configuration, TLS, RDS, staging,
+load-test, and operational documentation work:
+
+- [PriceTag PR #53](https://github.com/redhat-et/pricetag/pull/53), [#54](https://github.com/redhat-et/pricetag/pull/54), [#55](https://github.com/redhat-et/pricetag/pull/55), [#56](https://github.com/redhat-et/pricetag/pull/56), [#57](https://github.com/redhat-et/pricetag/pull/57), [#58](https://github.com/redhat-et/pricetag/pull/58), [#60](https://github.com/redhat-et/pricetag/pull/60), [#61](https://github.com/redhat-et/pricetag/pull/61), [#62](https://github.com/redhat-et/pricetag/pull/62), [#63](https://github.com/redhat-et/pricetag/pull/63), [#64](https://github.com/redhat-et/pricetag/pull/64), [#65](https://github.com/redhat-et/pricetag/pull/65), [#66](https://github.com/redhat-et/pricetag/pull/66), [#69](https://github.com/redhat-et/pricetag/pull/69), [#70](https://github.com/redhat-et/pricetag/pull/70), [#74](https://github.com/redhat-et/pricetag/pull/74), and [#76](https://github.com/redhat-et/pricetag/pull/76).
+
 ## [0.2.0] - 2026-10-07
 
 This is the first tagged EnMaaS release of the metering service.
@@ -65,5 +93,6 @@ This is the first tagged EnMaaS release of the metering service.
 
 ## Links
 
-- [Unreleased]: https://github.com/redhat-et/pricetag-metering/compare/v0.2.0...HEAD
+- [Unreleased]: https://github.com/redhat-et/pricetag-metering/compare/v0.3.0...HEAD
+- [0.3.0]: https://github.com/redhat-et/pricetag-metering/releases/tag/v0.3.0
 - [0.2.0]: https://github.com/redhat-et/pricetag-metering/releases/tag/v0.2.0
