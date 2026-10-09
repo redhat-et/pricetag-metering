@@ -45,6 +45,23 @@ h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);
 
 .three-col{grid-template-columns:1fr 1fr 1fr!important}
 .three-col .chart-box canvas{max-height:220px}
+.four-col{grid-template-columns:repeat(4,minmax(0,1fr));align-items:start}
+.four-col .chart-box{min-width:0;padding:12px;display:flex;flex-direction:column}
+.four-col .chart-box canvas{box-sizing:border-box;width:220px!important;height:220px!important;max-width:220px!important;max-height:220px!important;flex:0 0 220px;display:block;align-self:center;margin-bottom:10px}
+.four-col .chart-box h2{text-align:center;height:24px;line-height:24px;margin-bottom:8px;flex:0 0 24px}
+.four-col .chart-head{display:block;margin-bottom:0}
+.four-col .chart-head h2{margin-bottom:12px}
+.four-col .tl-toggle{justify-content:center;flex:0 0 32px;z-index:1}
+.four-col .chart-control-spacer{height:32px;margin-top:8px;margin-bottom:4px}
+.four-col .pie-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(6,18px);gap:6px 10px;height:138px;margin:0 8px 12px;padding-top:0;color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:12px;font-weight:400;line-height:18px;align-content:start}
+.four-col .pie-legend.single-col{grid-template-columns:1fr}
+.four-col #user-legend{height:114px}
+.four-col #savings-legend{height:114px;grid-template-rows:repeat(2,18px)}
+.four-col #model-legend{height:114px;grid-template-rows:repeat(5,18px)}
+.four-col #tool-legend{height:114px;row-gap:0}
+.four-col .pie-legend-item{display:flex;align-items:flex-start;gap:7px;min-width:0;height:18px}
+.four-col .pie-legend-swatch{width:16px;height:16px;flex:0 0 16px;margin-top:1px}
+.four-col .pie-legend-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .section{margin-bottom:24px}
 table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:10px;overflow:hidden;border:1px solid var(--border)}
@@ -63,6 +80,7 @@ tr.clickable{cursor:pointer}
 .users-pager button:disabled{opacity:.4;cursor:not-allowed}
 
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.charts-row.four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .chart-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px}
 .chart-box canvas{max-height:280px}
 
@@ -295,30 +313,38 @@ tr.clickable{cursor:pointer}
   <div class="kpi"><span class="kpi-label">Active Users</span><span id="kpi-users" class="kpi-value purple">--</span></div>
 </div>
 
-<div class="charts-row three-col">
+<div class="charts-row four-col">
   <div class="chart-box">
     <h2>Token Usage · Hosted vs Vendor</h2>
-    <canvas id="savings-chart"></canvas>
+    <canvas id="savings-chart" width="220" height="220"></canvas>
+    <div id="savings-legend" class="pie-legend single-col"></div>
+    <div class="chart-control-spacer" aria-hidden="true"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head">
-      <h2>By Model</h2>
-      <div class="tl-toggle" id="model-metric-toggle">
-        <button data-mm="cost">Cost</button>
-        <button data-mm="tokens" class="active">Tokens</button>
-        <button data-mm="requests">Requests</button>
-      </div>
+    <h2>By Model</h2>
+    <canvas id="token-chart" width="220" height="220"></canvas>
+    <div id="model-legend" class="pie-legend"></div>
+    <div class="tl-toggle" id="model-metric-toggle">
+      <button data-mm="cost">Cost</button>
+      <button data-mm="tokens" class="active">Tokens</button>
+      <button data-mm="requests">Requests</button>
     </div>
-    <canvas id="token-chart"></canvas>
   </div>
   <div class="chart-box">
-    <h2>By User (Top 10)</h2>
+    <h2>By Tool (Tokens)</h2>
+    <canvas id="tool-chart" width="220" height="220"></canvas>
+    <div id="tool-legend" class="pie-legend single-col"></div>
+    <div class="chart-control-spacer" aria-hidden="true"></div>
+  </div>
+  <div class="chart-box">
+    <h2>By User (Top 5)</h2>
+    <canvas id="user-cost-chart" width="220" height="220"></canvas>
+    <div id="user-legend" class="pie-legend single-col"></div>
     <div class="tl-toggle" id="user-metric-toggle">
       <button data-um="cost" class="active">Cost</button>
       <button data-um="tokens">Tokens</button>
       <button data-um="requests">Requests</button>
     </div>
-    <canvas id="user-cost-chart"></canvas>
   </div>
 </div>
 
@@ -457,10 +483,10 @@ let isAdmin=false;        // org-wide Usage view (all users)
 let isSuperAdmin=false;   // operator tools: Routing/Compression/Admin nav + "view as"
 let modelMetric='tokens', userPieMetric='cost';
 let savingsRef='claude-opus-4-8';
-let tokenChart=null, userCostChart=null, tlChart=null, savingsChart=null;
+let tokenChart=null, userCostChart=null, toolChart=null, tlChart=null, savingsChart=null;
 let usersPage=0, usersPageSize=50, usersHasMore=false, usersSearch='', usersSearchTimer=null;
 let currentSort='total_tokens', currentOrder='desc';
-let cachedGroups=[], cachedModels=[], cachedUsers=[], chartUsers=[], directoryUsers=[], renderedUsers=[];
+let cachedGroups=[], cachedModels=[], cachedUsers=[], cachedTools=[], chartUsers=[], directoryUsers=[], renderedUsers=[];
 // Overview payload of the current refresh; it carries the server-computed
 // "Saved · Hosted Models" KPI (the sum of the user table's saved_usd
 // column), which is what the card shows — no client-side re-derivation.
@@ -513,12 +539,13 @@ async function refresh(force){
   // the list of things you can still pick.
   try {
     const chartSort=userPieMetric==='cost'?'cost_usd':userPieMetric==='requests'?'requests':'total_tokens';
-    const [ov,gr,us,chartUs,mo,tl,rc,rosterCat,modelCat,directory]=await Promise.all([
+    const [ov,gr,us,chartUs,mo,tools,tl,rc,rosterCat,modelCat,directory]=await Promise.all([
       api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/groups?'+filters,force),
-       api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&limit='+usersPageSize+'&offset='+(usersPage*usersPageSize)+'&paginate=true&ref='+encodeURIComponent(savingsRef)+(usersSearch?'&search='+encodeURIComponent(usersSearch):''),force),
+      api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&limit='+usersPageSize+'&offset='+(usersPage*usersPageSize)+'&paginate=true&ref='+encodeURIComponent(savingsRef)+(usersSearch?'&search='+encodeURIComponent(usersSearch):''),force),
       api('/api/v1/dashboard/users?'+filters+'&sort='+chartSort+'&order=desc&limit=10&offset=0&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/models?'+filters,force),
+      api('/api/v1/dashboard/tools?'+filters,force),
       api('/api/v1/dashboard/timeline?'+filters+'&group_by='+tlGroupBy,force),
       api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
       api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200',force),
@@ -527,7 +554,8 @@ async function refresh(force){
     ]);
   cachedOverview=ov;
   cachedGroups=gr;
-  cachedModels=modelFilter?mo.filter(function(m){return m.model===modelFilter}):mo;
+   cachedModels=modelFilter?mo.filter(function(m){return m.model===modelFilter}):mo;
+   cachedTools=Array.isArray(tools)?tools:[];
   // Unfiltered (range-only) model stats: used as the basis for the observed
   // cache ratio in renderSavings, so a user/group filter that contains no
   // paid traffic doesn't silently drop the cache assumption.
@@ -543,6 +571,7 @@ async function refresh(force){
    renderUsersPager();
   renderRecent(rc);
    renderModelChart();
+   renderToolChart();
    renderUserCostChart();
   renderSavings();
   renderTimeline(tl);
@@ -590,16 +619,20 @@ function timeAgo(ts){
 }
 
 function friendlyClient(ua){
-  if(!ua) return '';
-  if(ua.startsWith('claude-cli')||ua.startsWith('claude-code')) return 'Claude Code';
-  if(ua.startsWith('codex-tui')||ua.startsWith('codex/')) return 'OpenAI Codex';
-  if(ua==='undici') return 'OpenCLAW';
-  if(ua.startsWith('curl/')) return 'curl';
-  if(ua.startsWith('python-requests')) return 'Python SDK';
-  if(ua.startsWith('anthropic-python')) return 'Python SDK';
-  if(ua.startsWith('node-fetch')||ua.startsWith('axios')) return 'Node.js';
-  if(ua.startsWith('Go-http-client')) return 'Go';
-  return ua.split('/')[0];
+   if(!ua) return '';
+   const normalized=ua.toLowerCase();
+   if(normalized.startsWith('claude-cli')||normalized.startsWith('claude-code')) return 'Claude Code';
+   if(normalized.startsWith('codex-tui')||normalized.startsWith('codex/')) return 'Codex';
+   if(normalized==='opencode'||normalized.startsWith('opencode/')||normalized.startsWith('opencode-')||normalized.startsWith('opencode.')) return 'OpenCode';
+   if(normalized==='pi'||normalized.startsWith('pi/')||normalized.startsWith('pi-')||normalized.startsWith('pi.')) return 'Pi';
+   if(normalized.startsWith('curl/')) return 'curl';
+   return 'Other';
+}
+
+function toolColor(tool){
+  // Chart.js needs concrete colors; CSS var() values render as gray in its
+  // canvas even though they work for inline table styles.
+  return {'Claude Code':'#d29922','Codex':'#3fb950','OpenCode':'#58a6ff','Pi':'#bc8cff','curl':'#8b949e','Other':'#39d2c0'}[tool]||'#39d2c0';
 }
 
 // statusCell maps an HTTP status to a colored cell: green for 2xx, red for
@@ -616,7 +649,7 @@ function renderRecent(data){
   tbody.innerHTML=data.map(r=>{
     const provColor=r.provider==='anthropic'?'var(--orange)':r.provider==='openai'?'var(--green)':'var(--cyan)';
     const client=friendlyClient(r.user_agent);
-    const clientColor=client==='Claude Code'?'var(--orange)':client==='OpenCLAW'?'var(--cyan)':client==='curl'?'var(--text2)':'var(--green)';
+     const clientColor=toolColor(client);
     const st=statusCell(r.status_code);
     // Quota blocks are real usage_events rows (status 429, zero usage) that
     // we refused ourselves (provider 'gateway'), so they render here exactly
@@ -816,6 +849,21 @@ function pieUnit(metric){
   if(metric==='user_count')return ' users';
   return '';
 }
+function renderPieLegend(id,labels,colors){
+  var el=document.getElementById(id);if(!el)return;
+  el.innerHTML=labels.map(function(label,i){
+    var text=String(label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return '<div class="pie-legend-item" title="'+text+'"><span class="pie-legend-swatch" style="background:'+colors[i]+'"></span><span class="pie-legend-label">'+text+'</span></div>';
+  }).join('');
+}
+function topFiveItems(items,valueFn,labelFn,limit){
+  limit=limit||5;
+  var sorted=items.slice().sort(function(a,b){return valueFn(b)-valueFn(a);});
+  var top=sorted.slice(0,limit),rest=sorted.slice(limit),other=rest.reduce(function(sum,item){return sum+valueFn(item);},0);
+  var result=top.map(function(item){return {item:item,label:labelFn(item),value:valueFn(item)};});
+  if(rest.length)result.push({item:null,label:'Other',value:other});
+  return result;
+}
 
 var MODEL_PRICING_JS={
   'claude-opus-5':{i:5,o:25,cr:0.5,cw:6.25},'claude-fable-5':{i:10,o:50,cr:1,cw:12.5},
@@ -826,18 +874,27 @@ var MODEL_PRICING_JS={
   'gpt-5.3-codex':{i:1.5,o:6,cr:0,cw:0},'gpt-4o':{i:2.5,o:10,cr:0,cw:0}
 };
 function renderModelChart(){
-  const data=cachedModels;
+  const data=topFiveItems(cachedModels,function(d){return pieVal(d,modelMetric);},function(d){return d.model;},9);
   const m=modelMetric;
-  const vals=data.map(d=>pieVal(d,m));
-  const labels=data.map((d,i)=>`${d.model} — ${pieFmt(vals[i],m)}`);
+  const vals=data.map(d=>d.value);
+  const labels=data.map(d=>`${d.label} — ${pieFmt(d.value,m)}`);
   const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
-  if(tokenChart)tokenChart.destroy();
+  if(tokenChart){
+    tokenChart.data.labels=labels;
+    tokenChart.data.datasets[0].data=vals;
+    tokenChart.data.datasets[0].backgroundColor=colors;
+    tokenChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';};
+    tokenChart.update();
+    renderPieLegend('model-legend',labels,colors);
+    return;
+  }
   tokenChart=new Chart(document.getElementById('token-chart'),{
-    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#8b949e',font:{size:12},padding:12}},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].model+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';}}}
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
+    options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';}}}
     }}
   });
+  renderPieLegend('model-legend',labels,colors);
 }
 
 
@@ -911,13 +968,14 @@ function renderSavings(){
     type:'doughnut',
     data:{
       labels:['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],
-      datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0}]
+      datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0,radius:100}]
     },
-    options:{responsive:true,plugins:{
-      legend:{position:'right',labels:{color:'#8b949e',font:{size:12},padding:12}},
+    options:{responsive:false,width:220,height:220,radius:100,plugins:{
+       legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){var tot=hostedTokens+vendorTokens;var lbl=ctx.dataIndex===0?'Hosted':'Vendor';return lbl+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
+  renderPieLegend('savings-legend',['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],['#3fb950','#d29922']);
 }
 
 function populateFilterDropdowns(models, users){
@@ -1070,18 +1128,59 @@ function clearAllFilters(){
 }
 
 function renderUserCostChart(){
-  const data=chartUsers.slice(0,10);
+  const data=topFiveItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;}).slice(0,5);
   const m=userPieMetric;
-  const vals=data.map(d=>pieVal(d,m));
-  const labels=data.map((d,i)=>`${d.display_name||d.username} — ${m==='cost'&&vals[i]===0?'Free':pieFmt(vals[i],m)}`);
+  const vals=data.map(d=>d.value);
+  const labels=data.map(d=>`${d.label} — ${m==='cost'&&d.value===0?'Free':pieFmt(d.value,m)}`);
   const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
-  if(userCostChart)userCostChart.destroy();
+  if(userCostChart){
+    userCostChart.data.labels=labels;
+    userCostChart.data.datasets[0].data=vals;
+    userCostChart.data.datasets[0].backgroundColor=colors;
+    userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
+    userCostChart.update();
+    renderPieLegend('user-legend',labels,colors);
+    return;
+  }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
-    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#8b949e',font:{size:11},padding:8}},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
+    options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
+  renderPieLegend('user-legend',labels,colors);
+}
+
+async function refreshUserChartOnly(){
+  var r=range;
+  if(r==='custom'&&customFrom&&customTo)r='custom&from='+customFrom+'&to='+customTo;
+  var uf=userFilter.length?'&user='+encodeURIComponent(userFilter.join(',')):'';
+  var gf=groupFilter?'&group='+encodeURIComponent(groupFilter):'';
+  var mf=modelFilter?'&model='+encodeURIComponent(modelFilter):'';
+  var sort=userPieMetric==='cost'?'cost_usd':userPieMetric==='requests'?'requests':'total_tokens';
+  var rows=await api('/api/v1/dashboard/users?range='+r+gf+uf+mf+'&sort='+sort+'&order=desc&limit=10&offset=0&ref='+encodeURIComponent(savingsRef),false);
+  chartUsers=collapseUsageUsers(Array.isArray(rows)?rows:[]);
+  renderUserCostChart();
+}
+
+function renderToolChart(){
+  const toolRows=cachedTools||[];
+  const existingOther=toolRows.filter(function(d){return d.tool==='Other';}).reduce(function(sum,d){return sum+(d.total_tokens||0);},0);
+  const data=topFiveItems(toolRows.filter(function(d){return d.tool!=='Other';}),function(d){return d.total_tokens||0;},function(d){return d.tool;},5);
+  var otherItem=data.length&&data[data.length-1].label==='Other'?data.pop():{item:null,label:'Other',value:0};
+  otherItem.value+=existingOther;
+  if(otherItem.value>0)data.push(otherItem);
+  const vals=data.map(d=>d.value);
+  const labels=data.map(d=>`${d.label} — ${fmtN(d.value)}`);
+  const colors=data.map((d,i)=>d.item?toolColor(d.item.tool):COLORS[i%COLORS.length]);
+  if(toolChart)toolChart.destroy();
+  toolChart=new Chart(document.getElementById('tool-chart'),{
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
+    options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
+    }}
+  });
+  renderPieLegend('tool-legend',labels,colors);
 }
 
 function renderTimeline(data){
@@ -1127,7 +1226,7 @@ document.getElementById('range-btns').addEventListener('click',e=>{
   e.target.classList.add('active');
   range=e.target.dataset.range;usersPage=0;
   syncDateInputs();
-  refresh();
+   refresh();
 });
 
 
@@ -1144,7 +1243,7 @@ document.getElementById('user-metric-toggle').addEventListener('click',e=>{
   document.querySelector('#user-metric-toggle .active').classList.remove('active');
   e.target.classList.add('active');
   userPieMetric=e.target.dataset.um;
-  refresh();
+   refreshUserChartOnly().catch(function(){renderUserCostChart();});
 });
 
 document.getElementById('tl-toggle').addEventListener('click',e=>{
