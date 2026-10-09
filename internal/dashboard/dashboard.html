@@ -680,7 +680,7 @@ function renderUsers(data){
     if(i<5&&len>10)cls+=' top5';
     if(i>=len-5&&len>10)cls+=' bottom5';
      let isExpanded=expandedUser===u.username;
-     let row=`<tr class="${cls}" tabindex="0" onclick="toggleExpand(${JSON.stringify(u.username)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleExpand(${JSON.stringify(u.username)})}">
+     let row=`<tr class="${cls}" tabindex="0" onclick="toggleExpandByIndex(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleExpandByIndex(${i})}">
        <td style="color:var(--text2);font-size:10px;transition:transform .15s;transform:${isExpanded?'rotate(90deg)':'none'}">&#9654;</td>
        <td>${userCell(u.username,u.display_name,u.tags)}</td>
       <td class="num">${fmtN(u.requests)}</td>
@@ -708,6 +708,10 @@ async function toggleExpand(username){
   // Render immediately; model details arrive asynchronously below. Avoid
   // making a full dashboard refresh block the visible expand interaction.
   renderUsers(renderedUsers);
+}
+function toggleExpandByIndex(index){
+  const user=renderedUsers[index];
+  if(user&&user.username)toggleExpand(user.username);
 }
 
 async function loadUserModels(username){
