@@ -355,6 +355,17 @@ tr.clickable{cursor:pointer}
 
  <div class="section">
    <h2>Users</h2>
+   <div class="users-toolbar" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+     <input type="search" id="users-search" placeholder="Search user by name or email" oninput="onUsersSearch()" style="flex:1;min-width:220px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:5px;font-size:12px">
+     <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px">Per page
+       <select id="users-page-size" onchange="onUsersPageSize()" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:5px;font-size:12px;cursor:pointer">
+         <option value="20">20</option>
+         <option value="50" selected>50</option>
+         <option value="100">100</option>
+         <option value="200">200</option>
+       </select>
+     </label>
+   </div>
    <table>
      <thead><tr id="users-thead"></tr></thead>
      <tbody id="users-tbody"></tbody>
@@ -463,7 +474,7 @@ let isSuperAdmin=false;   // operator tools: Routing/Compression/Admin nav + "vi
 let modelMetric='tokens', userPieMetric='cost';
 let savingsRef='claude-opus-4-8';
 let tokenChart=null, userCostChart=null, tlChart=null, savingsChart=null;
-let usersPage=0, usersPageSize=50, usersHasMore=false;
+let usersPage=0, usersPageSize=50, usersHasMore=false, usersSearch='', usersSearchTimer=null;
 let currentSort='total_tokens', currentOrder='desc';
 let cachedGroups=[], cachedModels=[], cachedUsers=[], chartUsers=[], directoryUsers=[], renderedUsers=[];
 // Overview payload of the current refresh; it carries the server-computed
@@ -520,7 +531,7 @@ async function refresh(force){
     const [ov,gr,us,chartUs,mo,tl,rc,rosterCat,modelCat,directory]=await Promise.all([
       api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/groups?'+filters,force),
-       api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&limit='+usersPageSize+'&offset='+(usersPage*usersPageSize)+'&paginate=true&ref='+encodeURIComponent(savingsRef),force),
+       api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&limit='+usersPageSize+'&offset='+(usersPage*usersPageSize)+'&paginate=true&ref='+encodeURIComponent(savingsRef)+(usersSearch?'&search='+encodeURIComponent(usersSearch):''),force),
       api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&limit=10&offset=0&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/models?'+filters,force),
       api('/api/v1/dashboard/timeline?'+filters+'&group_by='+tlGroupBy,force),
@@ -568,6 +579,21 @@ function changeUsersPage(delta){
   if(next<0||(delta>0&&!usersHasMore))return;
   usersPage=next;
   refresh();
+}
+function onUsersPageSize(){
+  var sel=document.getElementById('users-page-size');
+  usersPageSize=parseInt(sel.value,10)||50;
+  usersPage=0; // page size change resets to the first page
+  refresh();
+}
+function onUsersSearch(){
+  var el=document.getElementById('users-search');
+  if(usersSearchTimer)clearTimeout(usersSearchTimer);
+  usersSearchTimer=setTimeout(function(){
+    usersSearch=(el.value||'').trim();
+    usersPage=0; // a new search starts from the first page
+    refresh();
+  },250);
 }
 
 function timeAgo(ts){

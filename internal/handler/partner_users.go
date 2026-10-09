@@ -245,7 +245,8 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 		return
 	}
 	limitText, offsetText := r.URL.Query().Get("limit"), r.URL.Query().Get("offset")
-	if limitText == "" && offsetText == "" {
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+	if limitText == "" && offsetText == "" && search == "" {
 		users, err := h.store.ListAllPartnerUsers(r.Context())
 		if err != nil {
 			http.Error(w, "partner user list failed", http.StatusInternalServerError)
@@ -259,6 +260,8 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Server-side cap: never let a client request an unbounded page.
+	const maxPageSize = 200
 	limit, offset := 50, 0
 	if limitText != "" {
 		parsed, err := strconv.Atoi(limitText)
@@ -268,6 +271,9 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 		}
 		limit = parsed
 	}
+	if limit > maxPageSize {
+		limit = maxPageSize
+	}
 	if offsetText != "" {
 		parsed, err := strconv.Atoi(offsetText)
 		if err != nil || parsed < 0 {
@@ -276,7 +282,7 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 		}
 		offset = parsed
 	}
-	users, hasMore, err := h.store.ListPartnerUsersPage(r.Context(), limit, offset)
+	users, total, hasMore, err := h.store.ListPartnerUsersPage(r.Context(), search, limit, offset)
 	if err != nil {
 		http.Error(w, "partner user page failed", http.StatusInternalServerError)
 		return
@@ -289,7 +295,7 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 	page := adminPartnerUsersPageResponse{
 		Users:    make([]adminPartnerUserResponse, 0, len(users)),
 		Managers: make([]adminPartnerUserResponse, 0, len(managers)),
-		Total:    len(managers),
+		Total:    total,
 		HasMore:  hasMore,
 	}
 	for _, user := range users {

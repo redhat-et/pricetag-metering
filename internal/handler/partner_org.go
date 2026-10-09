@@ -217,7 +217,7 @@ func (h *PartnerOrgHandler) HandleOrgCharts(w http.ResponseWriter, r *http.Reque
 		models = []storage.ModelSummary{}
 	}
 
-	users, err := h.store.GetDashboardUsers(ctx, since, until, "", userFilter, "", "", "", 200, 0, refModel)
+	users, err := h.store.GetDashboardUsers(ctx, since, until, "", userFilter, "", "", "", 200, 0, refModel, "")
 	if err != nil {
 		slog.Error("org charts users failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
