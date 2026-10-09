@@ -698,9 +698,8 @@ function renderUsers(data){
      }
      return row;
   }).join('');
-
+  if(expandedUser){loadUserModels(expandedUser);}
  }
- if(expandedUser){loadUserModels(expandedUser);}
 
 async function toggleExpand(username){
   if(expandedUser===username){expandedUser='';renderUsers(renderedUsers);return;}
