@@ -703,9 +703,11 @@ function renderUsers(data){
  if(expandedUser){loadUserModels(expandedUser);}
 
 async function toggleExpand(username){
-  if(expandedUser===username){expandedUser='';refresh();return;}
+  if(expandedUser===username){expandedUser='';renderUsers(renderedUsers);return;}
   expandedUser=username;
-  refresh();
+  // Render immediately; model details arrive asynchronously below. Avoid
+  // making a full dashboard refresh block the visible expand interaction.
+  renderUsers(renderedUsers);
 }
 
 async function loadUserModels(username){
