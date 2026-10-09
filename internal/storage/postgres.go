@@ -641,7 +641,9 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 	if sortOrder == "asc" {
 		direction = "ASC"
 	}
-	if limit <= 0 || limit > 200 {
+	// Paginated callers request one look-ahead row (limit+1) to determine
+	// has_more, so a page size of 200 legitimately arrives as 201 here.
+	if limit <= 0 || limit > 201 {
 		limit = 100
 	}
 	if offset < 0 {
