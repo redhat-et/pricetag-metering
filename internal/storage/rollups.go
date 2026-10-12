@@ -849,6 +849,7 @@ func rollupTimelineSQL(truncInterval, seriesCol string) string {
 			COALESCE(SUM(e.requests),0)
 		FROM usage_hourly e
 		WHERE e.hour >= $1 AND e.hour < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
+			AND ($9 = '' OR lower(e.username) LIKE '%%' || lower($9) || '%%' OR lower(TRIM(CONCAT_WS(' ', up.first_name, up.last_name))) LIKE '%%' || lower($9) || '%%')
 		GROUP BY bucket, series
 		ORDER BY bucket, series`, truncInterval, seriesCol)
 }
