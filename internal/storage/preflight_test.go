@@ -61,8 +61,9 @@ func TestWritePathSQLParsesAgainstLiveSchema(t *testing.T) {
 		"rollup_users": hostedSavingsWithSQL(7, true) +
 			fmt.Sprintf(rollupUsersSelect, displayNameExpr, displayNameExpr, "total_tokens", "DESC"),
 		"rollup_savings": hostedSavingsWithSQL(6, true) + `,
-		sa AS (SELECT COALESCE(SUM(saved), 0) as saved FROM sv)
-		SELECT COALESCE(ROUND((SELECT saved FROM sa)::numeric, 2), 0)::float8, (SELECT r FROM rat)`,
+		 sa AS (SELECT COALESCE(SUM(saved), 0) as saved FROM sv)
+		 SELECT COALESCE(ROUND((SELECT saved FROM sa)::numeric, 2), 0)::float8, (SELECT r FROM rat)`,
+		"users_without_savings": dashboardUsersWithoutSavingsSQL(true, displayNameExpr, "total_tokens", "DESC"),
 		"denial_insert": `
 		INSERT INTO usage_events (event_id, username, model, provider, group_name, status_code, source, cost_usd)
 		VALUES ('deny-' || gen_random_uuid()::text, $1, $2, 'gateway',

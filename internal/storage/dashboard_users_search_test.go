@@ -35,7 +35,7 @@ func TestGetDashboardUsersSearch(t *testing.T) {
 	}
 
 	// No search → both users.
-	all, err := s.GetDashboardUsers(ctx, from, until, "", "", "", "", "", 100, 0, "", "")
+	all, err := s.GetDashboardUsers(ctx, from, until, "", "", "", "", "", 100, 0, "", "", true)
 	if err != nil {
 		t.Fatalf("GetDashboardUsers all: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestGetDashboardUsersSearch(t *testing.T) {
 	}
 
 	// Search by username substring (case-insensitive).
-	bob, err := s.GetDashboardUsers(ctx, from, until, "", "", "", "", "", 100, 0, "", "BOB")
+	bob, err := s.GetDashboardUsers(ctx, from, until, "", "", "", "", "", 100, 0, "", "BOB", true)
 	if err != nil {
 		t.Fatalf("GetDashboardUsers bob: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestGetDashboardUsersSearch(t *testing.T) {
 	}
 
 	// Search by display name (partner first/last), not present in username.
-	wonder, err := s.GetDashboardUsers(ctx, from, until, "", "", "", "", "", 100, 0, "", "wonder")
+	wonder, err := s.GetDashboardUsers(ctx, from, until, "", "", "", "", "", 100, 0, "", "wonder", true)
 	if err != nil {
 		t.Fatalf("GetDashboardUsers wonder: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestGetDashboardUsersSearch(t *testing.T) {
 	}
 
 	// No match → empty, no error.
-	none, err := s.GetDashboardUsers(ctx, from, until, "", "", "", "", "", 100, 0, "", "nobody")
+	none, err := s.GetDashboardUsers(ctx, from, until, "", "", "", "", "", 100, 0, "", "nobody", true)
 	if err != nil || len(none) != 0 {
 		t.Fatalf("no-match search = %#v, err %v; want empty", none, err)
 	}

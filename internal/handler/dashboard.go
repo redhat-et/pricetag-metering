@@ -123,7 +123,8 @@ func (h *DashboardHandler) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("paginate") == "true" {
 		queryLimit = limit + 1 // one extra row tells us whether a next page exists
 	}
-	result, err := h.store.GetDashboardUsers(r.Context(), since, until, group, user, model, sortCol, sortOrder, queryLimit, offset, r.URL.Query().Get("ref"), search)
+	includeSavings := r.URL.Query().Get("savings") != "false"
+	result, err := h.store.GetDashboardUsers(r.Context(), since, until, group, user, model, sortCol, sortOrder, queryLimit, offset, r.URL.Query().Get("ref"), search, includeSavings)
 	if err != nil {
 		slog.Error("dashboard query failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)

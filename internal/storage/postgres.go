@@ -680,7 +680,7 @@ func (s *Store) GetDashboardGroups(ctx context.Context, since, until time.Time, 
 // reference model for the SavedUSD counterfactual (empty = claude-opus-4-8);
 // keep it in sync with the dashboard's savings reference selector. offset
 // supports server-side pagination for large user tables.
-func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, group, user, model, sortCol, sortOrder string, limit, offset int, refModel, search string) ([]UserSummary, error) {
+func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, group, user, model, sortCol, sortOrder string, limit, offset int, refModel, search string, includeSavings bool) ([]UserSummary, error) {
 	if refModel == "" {
 		refModel = "claude-opus-4-8"
 	}
@@ -710,10 +710,14 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 	}
 
 	rollup := s.rollupsLive()
-	query := hostedSavingsWithSQL(8, rollup)
-	if rollup {
+	var query string
+	if !includeSavings {
+		query = dashboardUsersWithoutSavingsSQL(rollup, displayNameExpr, sortExpr, direction)
+	} else if rollup {
+		query = hostedSavingsWithSQL(8, rollup)
 		query += fmt.Sprintf(rollupUsersSelect, displayNameExpr, displayNameExpr, sortExpr, direction)
 	} else {
+		query = hostedSavingsWithSQL(8, rollup)
 		query += fmt.Sprintf(`
 		SELECT e.username,
 			%s,
@@ -734,7 +738,13 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 			LIMIT $6 OFFSET $7`, displayNameExpr, costUSDExpr, displayNameExpr, sortExpr, direction)
 	}
 
-	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model, limit, offset, refModel, search)
+	var rows *sql.Rows
+	var err error
+	if includeSavings {
+		rows, err = s.reader().QueryContext(ctx, query, since, until, group, user, model, limit, offset, refModel, search)
+	} else {
+		rows, err = s.reader().QueryContext(ctx, query, since, until, group, user, model, limit, offset, search)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -761,6 +771,33 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 		return nil, err
 	}
 	return result, nil
+}
+
+func dashboardUsersWithoutSavingsSQL(rollup bool, displayNameExpr, sortExpr, direction string) string {
+	from, window := "usage_events e LEFT JOIN model_pricing p ON e.model = p.model", "e.timestamp >= $1 AND e.timestamp < $2"
+	cost := fmt.Sprintf("ROUND(SUM(%s)::numeric, 2)", costUSDExpr)
+	requests := "COUNT(*)"
+	if rollup {
+		from, window, cost, requests = "usage_hourly e", "e.hour >= $1 AND e.hour < $2", "ROUND(SUM(e.cost_usd)::numeric, 2)", "SUM(e.requests)"
+	}
+	return fmt.Sprintf(`
+		SELECT e.username,
+			%s,
+			COALESCE(e.group_name, '') AS group_name,
+			%s AS requests,
+			COALESCE(SUM(e.prompt_tokens),0) AS prompt_tokens,
+			COALESCE(SUM(e.completion_tokens),0) AS completion_tokens,
+			COALESCE(SUM(e.total_tokens),0) AS total_tokens,
+			COALESCE(%s, 0) AS cost_usd,
+			0::numeric AS saved_usd
+		FROM %s
+		LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name
+			FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
+		WHERE %s AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
+			AND ($8 = '' OR lower(e.username) LIKE '%%' || lower($8) || '%%' OR lower(TRIM(CONCAT_WS(' ', up.first_name, up.last_name))) LIKE '%%' || lower($8) || '%%')
+		GROUP BY e.username, %s, COALESCE(e.group_name, '')
+		ORDER BY %s %s, e.username ASC, COALESCE(e.group_name, '') ASC
+		LIMIT $6 OFFSET $7`, displayNameExpr, requests, cost, from, window, displayNameExpr, sortExpr, direction)
 }
 
 // enrichDashboardUsers attaches Atlas metadata to usage rows. The usage
