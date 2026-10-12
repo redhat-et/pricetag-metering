@@ -75,6 +75,9 @@ type Config struct {
 	// remain false until the table has been backfilled and verified; writes
 	// maintain the table regardless so it is warm before the switch.
 	MonthSpendEnabled bool
+	// MonthSpendWrites enables the per-event accumulator write. Keep this off
+	// during image rollout and until the accumulator has been backfilled.
+	MonthSpendWrites bool
 
 	// M2MAuthRequired gates the gateway-to-metering endpoints with the
 	// configured bearer secret. Keep this false for local compatibility; GA
@@ -271,6 +274,7 @@ func Load() Config {
 		AllowUnauthenticatedAdmin: envBool("ALLOW_UNAUTHENTICATED_ADMIN", false),
 		DefaultGroup:              envDefault("DEFAULT_GROUP", "default"),
 		MonthSpendEnabled:         envBool("MONTH_SPEND_ENABLED", false),
+		MonthSpendWrites:          envBool("MONTH_SPEND_WRITE_ENABLED", false),
 		M2MAuthRequired:           envBool("M2M_AUTH_REQUIRED", false),
 		M2MSharedSecret:           os.Getenv("M2M_SHARED_SECRET"),
 		UsageReportAPISecret:      os.Getenv("USAGE_REPORT_API_SECRET"),

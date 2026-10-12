@@ -480,10 +480,12 @@ func (s *Store) RecordQuotaDenial(ctx context.Context, username, model string) e
 		return err
 	}
 	// Denials are ledger rows too. They have zero spend/tokens, but must still
-	// increment the month accumulator's request count so it stays consistent
-	// with the backfill and usage_events.
-	if _, err := tx.ExecContext(ctx, upsertMonthSpendSQL, username, ts, 0, "0"); err != nil {
-		return err
+	// increment the month accumulator's request count when accumulator writes
+	// are enabled, so it stays consistent with the backfill and usage_events.
+	if s.monthSpendWrites.Load() {
+		if _, err := tx.ExecContext(ctx, upsertMonthSpendSQL, username, ts, 0, "0"); err != nil {
+			return err
+		}
 	}
 	// When live writes are enabled, denials ride the rollup as requests+1 at zero usage/cost.
 	if s.liveRollups.Load() {

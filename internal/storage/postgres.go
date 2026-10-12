@@ -87,6 +87,7 @@ type Store struct {
 	quotaCache        map[string]quotaCacheEntry
 	quotaEnforcement  atomic.Bool
 	monthSpendEnabled atomic.Bool
+	monthSpendWrites  atomic.Bool
 
 	// rollupsReadyNow caches the rollup backfill completion flag; the
 	// authoritative value lives in rollup_meta. See rollups.go.
@@ -157,6 +158,12 @@ func (s *Store) SetQuotaEnforcement(enabled bool) { s.quotaEnforcement.Store(ena
 // spend table. It stays off until that table has been backfilled and verified;
 // inserts maintain it regardless, so it is warm before the switch.
 func (s *Store) SetMonthSpendEnabled(enabled bool) { s.monthSpendEnabled.Store(enabled) }
+
+// SetMonthSpendWrites controls the additional per-event accumulator write.
+// It is separate from reads so a new image can be deployed without adding
+// database write load before the MTD table has been backfilled and capacity is
+// verified.
+func (s *Store) SetMonthSpendWrites(enabled bool) { s.monthSpendWrites.Store(enabled) }
 
 // SetLiveRollups controls synchronous usage_hourly writes. Raw usage_events
 // ingestion remains enabled regardless of this switch.
@@ -284,9 +291,11 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, upsertMonthSpendSQL,
-		e.Username, e.Timestamp, e.TotalTokens, costUSD); err != nil {
-		return err
+	if s.monthSpendWrites.Load() {
+		if _, err := tx.ExecContext(ctx, upsertMonthSpendSQL,
+			e.Username, e.Timestamp, e.TotalTokens, costUSD); err != nil {
+			return err
+		}
 	}
 	if s.liveRollups.Load() {
 		if err := upsertRollup(ctx, tx, e.Timestamp, e.Username, e.GroupName, e.Model, e.Provider,
