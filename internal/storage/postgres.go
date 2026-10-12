@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+
+	"github.com/redhat-et/pricetag-metering/internal/metrics"
 )
 
 type UsageEvent struct {
@@ -271,8 +273,16 @@ const upsertMonthSpendSQL = `
 // rollup rides the cost the database just computed (returned as text to keep
 // NUMERIC exact — no float round-trip).
 func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
+	start := time.Now()
+	result := "error"
+	defer func() {
+		metrics.UsageEventInsertDurationSeconds.Observe(time.Since(start).Seconds())
+		metrics.EventsIngestedTotal.WithLabelValues(result).Inc()
+	}()
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		metrics.UsageEventInsertErrorsTotal.Inc()
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
@@ -286,30 +296,45 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 		// A replay of an already accepted CloudEvent is idempotent once the
 		// explicit event_id index has been installed. Do not increment the
 		// hourly rollup a second time.
+		result = "replayed"
 		return nil
 	}
 	if err != nil {
+		metrics.UsageEventInsertErrorsTotal.Inc()
 		return err
 	}
 	if s.monthSpendWrites.Load() {
 		if _, err := tx.ExecContext(ctx, upsertMonthSpendSQL,
 			e.Username, e.Timestamp, e.TotalTokens, costUSD); err != nil {
+			metrics.UsageEventInsertErrorsTotal.Inc()
 			return err
 		}
 	}
 	if s.liveRollups.Load() {
 		if err := upsertRollup(ctx, tx, e.Timestamp, e.Username, e.GroupName, e.Model, e.Provider,
 			dashboardTool(e.UserAgent), 1, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, costUSD); err != nil {
+			metrics.UsageEventInsertErrorsTotal.Inc()
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		metrics.UsageEventInsertErrorsTotal.Inc()
+		return err
+	}
+	result = "accepted"
+	return nil
 }
 
 // Ping verifies that the primary database is reachable. Readiness uses this
 // rather than returning healthy forever after process startup.
 func (s *Store) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
+}
+
+// PoolStats reports the primary database pool's current statistics, posted to the
+// metering_db_pool_* gauges by a background goroutine.
+func (s *Store) PoolStats() sql.DBStats {
+	return s.db.Stats()
 }
 
 type TeamUserUsage struct {
@@ -458,7 +483,7 @@ func (s *Store) GetTeamUsage(ctx context.Context, groupName string) ([]TeamUserU
 // and admits the request (fail_open) — so a metering outage disables
 // enforcement rather than blocking traffic. That is the accepted tradeoff.
 func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exempt bool) (UsageStats, error) {
-	decision, err := s.QuotaDecisionCached(ctx, username, exempt)
+	decision, cached, err := s.QuotaDecisionCached(ctx, username, exempt)
 	if err != nil {
 		return UsageStats{}, err
 	}
@@ -484,6 +509,18 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 		stats.HasAccess = true
 	}
 	stats.HasAccess = stats.HasAccess && allowed && stats.ModelAllowed
+	// Classify against the FINAL access decision so the result label survives the
+	// token budget and the over-limit model exception (they can flip the raw
+	// dollar-gate answer either way). The cached flag still reports cache hits.
+	cachedLabel := "false"
+	if cached {
+		cachedLabel = "true"
+	}
+	if stats.HasAccess {
+		metrics.QuotaChecksTotal.WithLabelValues("allowed", cachedLabel).Inc()
+	} else {
+		metrics.QuotaChecksTotal.WithLabelValues("denied", cachedLabel).Inc()
+	}
 	return stats, nil
 }
 
