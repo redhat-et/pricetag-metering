@@ -293,6 +293,7 @@ type QuotaDecision struct {
 	BaseUSD           float64  `json:"base_usd"`  // user override or policy default
 	LimitUSD          float64  `json:"limit_usd"` // effective monthly limit
 	SpentUSD          float64  `json:"spent_usd"`
+	TokensUsed        int64    `json:"-"`
 	// Post-cap allowance (issue #22): admin-listed exact model identifiers
 	// that pass when the dollar gate denies.
 	OverLimitModels []string  `json:"over_limit_models,omitempty"`
@@ -374,13 +375,22 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	}
 	d.LimitUSD = d.BaseUSD
 
-	err = s.db.QueryRowContext(ctx, fmt.Sprintf(`
-		SELECT COALESCE(SUM(%s), 0)
-		FROM usage_events e
-		LEFT JOIN model_pricing p ON e.model = p.model
-		WHERE e.username = ANY($1) AND e.timestamp >= date_trunc('month', NOW())`, costUSDExpr),
-		logins,
-	).Scan(&d.SpentUSD)
+	if s.monthSpendEnabled.Load() {
+		err = s.db.QueryRowContext(ctx, `
+			SELECT COALESCE(SUM(spent_usd), 0), COALESCE(SUM(tokens), 0)
+			FROM user_month_spend
+			WHERE username = ANY($1) AND month = date_trunc('month', NOW())::date`,
+			pq.Array(logins),
+		).Scan(&d.SpentUSD, &d.TokensUsed)
+	} else {
+		err = s.db.QueryRowContext(ctx, fmt.Sprintf(`
+			SELECT COALESCE(SUM(%s), 0), COALESCE(SUM(e.total_tokens), 0)
+			FROM usage_events e
+			LEFT JOIN model_pricing p ON e.model = p.model
+			WHERE e.username = ANY($1) AND e.timestamp >= date_trunc('month', NOW())`, costUSDExpr),
+			pq.Array(logins),
+		).Scan(&d.SpentUSD, &d.TokensUsed)
+	}
 	if err != nil {
 		return d, fmt.Errorf("quota spend lookup: %w", err)
 	}

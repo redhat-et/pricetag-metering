@@ -83,9 +83,10 @@ type Store struct {
 
 	// quotaCache memoises the entitlement decision per person for
 	// quotaCacheTTL; see QuotaDecisionCached. Guarded by quotaMu.
-	quotaMu          sync.Mutex
-	quotaCache       map[string]quotaCacheEntry
-	quotaEnforcement atomic.Bool
+	quotaMu           sync.Mutex
+	quotaCache        map[string]quotaCacheEntry
+	quotaEnforcement  atomic.Bool
+	monthSpendEnabled atomic.Bool
 
 	// rollupsReadyNow caches the rollup backfill completion flag; the
 	// authoritative value lives in rollup_meta. See rollups.go.
@@ -151,6 +152,11 @@ func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) 
 	return s, nil
 }
 func (s *Store) SetQuotaEnforcement(enabled bool) { s.quotaEnforcement.Store(enabled) }
+
+// SetMonthSpendEnabled switches quota reads to the pre-aggregated monthly
+// spend table. It stays off until that table has been backfilled and verified;
+// inserts maintain it regardless, so it is warm before the switch.
+func (s *Store) SetMonthSpendEnabled(enabled bool) { s.monthSpendEnabled.Store(enabled) }
 
 // SetLiveRollups controls synchronous usage_hourly writes. Raw usage_events
 // ingestion remains enabled regardless of this switch.
@@ -238,6 +244,19 @@ var insertEventSQL = fmt.Sprintf(`
 	ON CONFLICT DO NOTHING
 	RETURNING cost_usd`, costUSDExpr)
 
+// upsertMonthSpendSQL maintains the exact month-to-date accumulator in the
+// same transaction as the ledger insert. The caller only executes this after
+// INSERT ... ON CONFLICT DO NOTHING returned a row, so event replays cannot
+// double-count the accumulator.
+const upsertMonthSpendSQL = `
+	INSERT INTO user_month_spend (username, month, spent_usd, tokens, requests)
+	VALUES ($1, date_trunc('month', $2::timestamptz)::date, $4::numeric, $3::bigint, 1)
+	ON CONFLICT (username, month) DO UPDATE SET
+		spent_usd = user_month_spend.spent_usd + EXCLUDED.spent_usd,
+		tokens = user_month_spend.tokens + EXCLUDED.tokens,
+		requests = user_month_spend.requests + EXCLUDED.requests,
+		updated_at = NOW()`
+
 // InsertEvent writes the ledger row and, when live rollups are enabled,
 // maintains the hourly rollup in the SAME transaction (plan rev2 pt.2).
 // With live writes disabled, raw usage_events remains authoritative and the
@@ -263,6 +282,10 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 		return nil
 	}
 	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, upsertMonthSpendSQL,
+		e.Username, e.Timestamp, e.TotalTokens, costUSD); err != nil {
 		return err
 	}
 	if s.liveRollups.Load() {
@@ -426,23 +449,12 @@ func (s *Store) GetTeamUsage(ctx context.Context, groupName string) ([]TeamUserU
 // and admits the request (fail_open) — so a metering outage disables
 // enforcement rather than blocking traffic. That is the accepted tradeoff.
 func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exempt bool) (UsageStats, error) {
-	var used int64
-	row := s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(total_tokens), 0) FROM usage_events
-		 WHERE username = $1 AND timestamp >= date_trunc('month', NOW())`,
-		username,
-	)
-	if err := row.Scan(&used); err != nil {
-		return UsageStats{}, err
-	}
-
-	stats := computeUsageStats(used, s.tokenQuota)
-	enforce := s.quotaEnforcement.Load()
-
 	decision, err := s.QuotaDecisionCached(ctx, username, exempt)
 	if err != nil {
 		return UsageStats{}, err
 	}
+	stats := computeUsageStats(decision.TokensUsed, s.tokenQuota)
+	enforce := s.quotaEnforcement.Load()
 	stats.QuotaUSD = decision.LimitUSD
 	stats.SpendUSD = decision.SpentUSD
 	stats.MonthEnds = decision.MonthEnds.UTC().Format(time.RFC3339)
@@ -1340,6 +1352,15 @@ var migrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_group ON usage_events (group_name)`,
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_model ON usage_events (model)`,
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_ts_user_model ON usage_events (timestamp, username, model)`,
+	`CREATE TABLE IF NOT EXISTS user_month_spend (
+		username TEXT NOT NULL,
+		month DATE NOT NULL,
+		spent_usd NUMERIC(20,8) NOT NULL DEFAULT 0,
+		tokens BIGINT NOT NULL DEFAULT 0,
+		requests BIGINT NOT NULL DEFAULT 0,
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		PRIMARY KEY (username, month)
+	)`,
 	`ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS user_agent TEXT NOT NULL DEFAULT ''`,
 	// Nullable on purpose: rows ingested before this column existed have an
 	// unknown status (rendered neutral), while every new row carries a

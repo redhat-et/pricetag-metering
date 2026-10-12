@@ -43,6 +43,7 @@ func main() {
 	}
 	defer store.Close()
 	store.SetQuotaEnforcement(cfg.QuotaEnforcementEnabled)
+	store.SetMonthSpendEnabled(cfg.MonthSpendEnabled)
 	store.SetLiveRollups(cfg.LiveRollupsEnabled)
 	if cfg.DashboardUseRollups && !cfg.LiveRollupsEnabled {
 		slog.Warn("dashboard rollups are eventually consistent because live writes are disabled", "refresh_interval_seconds", cfg.RollupRefreshSeconds)
