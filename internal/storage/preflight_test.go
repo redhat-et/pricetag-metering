@@ -44,6 +44,7 @@ func TestWritePathSQLParsesAgainstLiveSchema(t *testing.T) {
 	// exercised by its own endpoint after backfill.
 	stmts := map[string]string{
 		"insert_event":         insertEventSQL,
+		"month_spend_upsert":   upsertMonthSpendSQL,
 		"upsert_rollup":        upsertRollupSQL,
 		"hour_lock_up":         upsertHourLockSQL,
 		"hour_lock_rng":        rebuildHourLockSQL,

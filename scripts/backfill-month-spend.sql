@@ -1,20 +1,34 @@
--- Backfill the exact month-to-date accumulator before setting
--- MONTH_SPEND_ENABLED=true. Run with the metering writer role during the
--- controlled post-rollout step, not from application startup.
+-- Safe MTD accumulator backfill. Do NOT run automatically at application
+-- startup and do NOT run against production without an approved ingestion
+-- drain. This script intentionally fails closed if historical cost_usd is not
+-- complete: rebuilding with NULL costs would silently undercount spend.
 --
--- The application maintains user_month_spend for all new events regardless of
--- MONTH_SPEND_ENABLED. Run this only after every metering pod runs the version
--- containing that upsert, otherwise old pods can create a race by writing raw
--- events without updating the accumulator.
+-- Run after every metering pod contains the accumulator writer. The first
+-- phase builds a replacement table without locking the live accumulator. The
+-- short final phase must run while metering event ingestion is drained so the
+-- snapshot cannot miss writes made by older pods.
 
-BEGIN;
+DO $$
+DECLARE missing BIGINT;
+BEGIN
+  SELECT COUNT(*) INTO missing FROM usage_events WHERE cost_usd IS NULL;
+  IF missing <> 0 THEN
+    RAISE EXCEPTION 'refusing MTD backfill: % usage_events rows have NULL cost_usd', missing;
+  END IF;
+END $$;
 
--- Block accumulator upserts while the authoritative snapshot is replaced.
-LOCK TABLE user_month_spend IN ACCESS EXCLUSIVE MODE;
+DROP TABLE IF EXISTS user_month_spend_backfill;
+CREATE TABLE user_month_spend_backfill (
+  username TEXT NOT NULL,
+  month DATE NOT NULL,
+  spent_usd NUMERIC(20,8) NOT NULL DEFAULT 0,
+  tokens BIGINT NOT NULL DEFAULT 0,
+  requests BIGINT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (username, month)
+);
 
-TRUNCATE user_month_spend;
-
-INSERT INTO user_month_spend (username, month, spent_usd, tokens, requests)
+INSERT INTO user_month_spend_backfill (username, month, spent_usd, tokens, requests)
 SELECT username,
        date_trunc('month', timestamp)::date,
        COALESCE(SUM(cost_usd), 0),
@@ -23,9 +37,29 @@ SELECT username,
 FROM usage_events
 GROUP BY username, date_trunc('month', timestamp)::date;
 
+-- Validate the replacement before the controlled cutover.
+DO $$
+DECLARE bad BIGINT;
+BEGIN
+  SELECT COUNT(*) INTO bad
+  FROM user_month_spend_backfill
+  WHERE spent_usd IS NULL OR tokens < 0 OR requests < 0;
+  IF bad <> 0 THEN
+    RAISE EXCEPTION 'refusing MTD backfill: % invalid replacement rows', bad;
+  END IF;
+END $$;
+
+-- Controlled cutover:
+--   1. Drain/stop metering event ingestion while inference remains available.
+--   2. Run the following transaction.
+--   3. Start metering ingestion again.
+--   4. Enable MONTH_SPEND_ENABLED=true only after validation.
+BEGIN;
+LOCK TABLE user_month_spend IN ACCESS EXCLUSIVE MODE;
+ALTER TABLE user_month_spend RENAME TO user_month_spend_previous;
+ALTER TABLE user_month_spend_backfill RENAME TO user_month_spend;
 COMMIT;
 
--- Verify before enabling MONTH_SPEND_ENABLED=true:
--- SELECT COUNT(*) FROM user_month_spend;
--- SELECT SUM(spent_usd), SUM(tokens), SUM(requests) FROM user_month_spend;
--- Compare these with the equivalent usage_events aggregates.
+-- Keep user_month_spend_previous until post-cutover totals and entitlement
+-- checks are verified. Drop it separately after the rollback window:
+-- DROP TABLE user_month_spend_previous;
