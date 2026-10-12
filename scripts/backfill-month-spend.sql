@@ -3,10 +3,18 @@
 -- drain. This script intentionally fails closed if historical cost_usd is not
 -- complete: rebuilding with NULL costs would silently undercount spend.
 --
--- Run after every metering pod contains the accumulator writer. The first
--- phase builds a replacement table without locking the live accumulator. The
--- short final phase must run while metering event ingestion is drained so the
--- snapshot cannot miss writes made by older pods.
+-- Run after every metering pod contains the accumulator writer.
+--
+-- REQUIRED OPERATOR SEQUENCE:
+--   1. Drain/stop ALL metering event ingestion before starting this script.
+--      Inference can remain available; this drain protects accounting while
+--      the raw ledger snapshot is built.
+--   2. Execute the script from line 11 through the COMMIT below. Do not start
+--      ingestion during this period. The replacement snapshot is deliberately
+--      taken after the drain, so there is no watermark/delta race and no
+--      possibility of losing rows written between snapshot and swap.
+--   3. Start metering ingestion again.
+--   4. Validate totals, then enable MONTH_SPEND_ENABLED=true.
 
 DO $$
 DECLARE missing BIGINT;
@@ -49,11 +57,8 @@ BEGIN
   END IF;
 END $$;
 
--- Controlled cutover:
---   1. Drain/stop metering event ingestion while inference remains available.
---   2. Run the following transaction.
---   3. Start metering ingestion again.
---   4. Enable MONTH_SPEND_ENABLED=true only after validation.
+-- Controlled cutover. Ingestion must still be drained from the operator
+-- sequence above; this lock is only the short catalog/data-table swap.
 BEGIN;
 LOCK TABLE user_month_spend IN ACCESS EXCLUSIVE MODE;
 ALTER TABLE user_month_spend RENAME TO user_month_spend_previous;
