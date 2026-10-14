@@ -59,6 +59,10 @@ export ANTHROPIC_BASE_URL="{{GATEWAY_URL}}"
 export ANTHROPIC_API_KEY="$ENMAAS_KEY"
 export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
 claude</pre></div>
+    <h4 class="setup-heading">Optional: use client-side auto-mode</h4>
+    <p class="setup-copy">If server-side auto-mode is unavailable or you prefer Claude Code to make the auto-mode decision locally, add this to the same <code>env</code> block in <code>~/.claude/settings.json</code>.</p>
+    <div class="code"><button class="copy">copy</button><pre>"CLAUDE_CODE_AUTO_MODE_SERVER": "0"</pre></div>
+    <div class="tool-info"><strong>Claude Code setting, not gateway routing.</strong><br>This changes where Claude Code decides auto-mode; it does not change EnMaaS model routing, authentication, or authorization. This is a user-reported fallback: verify it with your installed Claude Code version and remove it or restore your settings backup if it does not behave as expected.</div>
     <h4 class="setup-heading">2. Add hosted models to the <code>/model</code> picker</h4>
     <p class="setup-copy">Claude Code’s picker filters model IDs, so discovery alone may not show hosted models. Add or merge these entries into <code>~/.claude/settings.json</code>. This requires Claude Code 2.1.242 or newer.</p>
     <div class="code"><button class="copy">copy</button><pre># ~/.claude/settings.json — add
