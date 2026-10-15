@@ -1437,6 +1437,37 @@ var migrations = []string{
 		updated_by TEXT NOT NULL DEFAULT '',
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
+	`CREATE TABLE IF NOT EXISTS pricing_reprice_operations (
+		operation_id TEXT PRIMARY KEY,
+		actor TEXT NOT NULL,
+		provider TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', model_prefix TEXT NOT NULL DEFAULT '',
+		from_ts TIMESTAMPTZ NOT NULL, until_ts TIMESTAMPTZ NOT NULL,
+		policy_version TEXT NOT NULL, policy_hash TEXT NOT NULL, status TEXT NOT NULL,
+		total_chunks INTEGER NOT NULL, completed_chunks INTEGER NOT NULL DEFAULT 0,
+		rows BIGINT NOT NULL DEFAULT 0, old_total_usd NUMERIC NOT NULL DEFAULT 0,
+		new_total_usd NUMERIC NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '',
+		created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`,
+	`CREATE TABLE IF NOT EXISTS pricing_reprice_operations (
+		operation_id TEXT PRIMARY KEY,
+		actor TEXT NOT NULL,
+		provider TEXT NOT NULL DEFAULT '',
+		model TEXT NOT NULL DEFAULT '',
+		model_prefix TEXT NOT NULL DEFAULT '',
+		from_ts TIMESTAMPTZ NOT NULL,
+		until_ts TIMESTAMPTZ NOT NULL,
+		policy_version TEXT NOT NULL,
+		policy_hash TEXT NOT NULL,
+		status TEXT NOT NULL,
+		total_chunks INTEGER NOT NULL,
+		completed_chunks INTEGER NOT NULL DEFAULT 0,
+		rows BIGINT NOT NULL DEFAULT 0,
+		old_total_usd NUMERIC NOT NULL DEFAULT 0,
+		new_total_usd NUMERIC NOT NULL DEFAULT 0,
+		error TEXT NOT NULL DEFAULT '',
+		created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`,
 	// Idempotent for pre-existing databases (CREATE TABLE IF NOT EXISTS does
 	// not add columns to a table that already exists).
 	`ALTER TABLE model_pricing ADD COLUMN IF NOT EXISTS list_input_cost_per_mtok NUMERIC(10,4) NOT NULL DEFAULT 0`,

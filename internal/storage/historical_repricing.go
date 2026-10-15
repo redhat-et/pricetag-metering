@@ -202,11 +202,7 @@ func (s *Store) RepriceHistorical(ctx context.Context, actor string, req Histori
 		if err != nil {
 			return HistoricalRepriceResult{}, err
 		}
-		fromHour, untilHour := req.From.UTC().Truncate(time.Hour), req.Until.UTC().Truncate(time.Hour)
-		totalChunks := int(untilHour.Sub(fromHour) / time.Hour)
-		if totalChunks < 1 {
-			totalChunks = 1
-		}
+		_, _, totalChunks := repriceHourBounds(req.From, req.Until)
 		if err := s.createRepriceOperation(ctx, repriceOperation{ID: id, Actor: actor, Provider: req.Provider, Model: req.Model, ModelPrefix: req.ModelPrefix, From: req.From, Until: req.Until, PolicyVersion: req.Policy, PolicyHash: snapshotHash, Status: "dry_run", TotalChunks: totalChunks}, result); err != nil {
 			return HistoricalRepriceResult{}, err
 		}
@@ -235,10 +231,7 @@ func (s *Store) RepriceHistorical(ctx context.Context, actor string, req Histori
 		return HistoricalRepriceResult{}, err
 	}
 
-	fromHour, untilHour := req.From.UTC().Truncate(time.Hour), req.Until.UTC().Truncate(time.Hour)
-	if !fromHour.Before(untilHour) {
-		untilHour = fromHour.Add(time.Hour)
-	}
+	fromHour, untilHour, _ := repriceHourBounds(req.From, req.Until)
 	// Apply one UTC hour per transaction. This bounds locks, WAL, and rollback
 	// scope even when an operator requests a long historical range.
 	for i, hour := 0, fromHour.Add(time.Duration(op.CompletedChunks)*time.Hour); hour.Before(untilHour); i, hour = i+1, hour.Add(time.Hour) {
@@ -307,4 +300,20 @@ func (s *Store) RepriceHistorical(ctx context.Context, actor string, req Histori
 	s.parityHealthy.Store(false)
 	s.servingRollups.Store(false)
 	return result, nil
+}
+
+// repriceHourBounds returns UTC hour buckets covering the request. The
+// mutation chunks are clipped back to the exact request interval below, so a
+// partial first/last hour never expands the scope of the update.
+func repriceHourBounds(from, until time.Time) (time.Time, time.Time, int) {
+	fromHour := from.UTC().Truncate(time.Hour)
+	untilHour := until.UTC().Truncate(time.Hour)
+	if until.After(untilHour) {
+		untilHour = untilHour.Add(time.Hour)
+	}
+	chunks := int(untilHour.Sub(fromHour) / time.Hour)
+	if chunks < 1 {
+		chunks = 1
+	}
+	return fromHour, untilHour, chunks
 }

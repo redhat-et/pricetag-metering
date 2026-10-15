@@ -29,8 +29,9 @@ func (h *HistoricalRepricingHandler) Handle(w http.ResponseWriter, r *http.Reque
 		From        string `json:"from"`
 		Until       string `json:"until"`
 		Policy      string `json:"policy_version"`
-		PolicyHash  string `json:"policy_hash"`
 		Confirm     bool   `json:"confirm"`
+		OperationID string `json:"operation_id"`
+		PolicyHash  string `json:"policy_hash"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -47,7 +48,7 @@ func (h *HistoricalRepricingHandler) Handle(w http.ResponseWriter, r *http.Reque
 	}
 	result, err := h.store.RepriceHistorical(r.Context(), quotaAdminActor(r), storage.HistoricalRepriceRequest{
 		Provider: req.Provider, Model: req.Model, ModelPrefix: req.ModelPrefix,
-		From: from, Until: until, Policy: req.Policy, PolicyHash: req.PolicyHash, Confirm: req.Confirm,
+		From: from, Until: until, Policy: req.Policy, Confirm: req.Confirm, OperationID: req.OperationID, PolicyHash: req.PolicyHash,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -56,4 +57,24 @@ func (h *HistoricalRepricingHandler) Handle(w http.ResponseWriter, r *http.Reque
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		return
 	}
+}
+
+func (h *HistoricalRepricingHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/admin/pricing/reprice/")
+	if id == "" || strings.Contains(id, "/") {
+		http.Error(w, "operation id required", http.StatusBadRequest)
+		return
+	}
+	result, err := h.store.RepriceOperationStatus(r.Context(), id)
+	if err != nil {
+		http.Error(w, "operation not found", http.StatusNotFound)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(result)
 }

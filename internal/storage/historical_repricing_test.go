@@ -41,3 +41,17 @@ func TestDiscountPolicyHashBindsRules(t *testing.T) {
 		t.Fatal("policy hash did not change when policy rules changed")
 	}
 }
+
+func TestRepriceHourBoundsCeilAndClipPartialRange(t *testing.T) {
+	from := time.Date(2026, 1, 1, 10, 30, 0, 0, time.UTC)
+	until := time.Date(2026, 1, 1, 11, 30, 0, 0, time.UTC)
+	hourFrom, hourUntil, chunks := repriceHourBounds(from, until)
+	if !hourFrom.Equal(time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)) || !hourUntil.Equal(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)) || chunks != 2 {
+		t.Fatalf("bounds=(%s,%s,%d), want 10:00,12:00,2", hourFrom, hourUntil, chunks)
+	}
+	// The implementation must clip each chunk to [10:30,11:30], rather than
+	// updating the surrounding full hours.
+	if !from.Before(hourFrom.Add(time.Hour)) || !until.After(hourFrom.Add(time.Hour)) {
+		t.Fatal("test range must cross a partial-hour boundary")
+	}
+}
