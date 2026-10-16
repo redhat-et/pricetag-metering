@@ -77,10 +77,10 @@ claude</pre></div>
     ]
   },
   "modelSettings": {
-    "rits/zai-org/glm-5-3": { "effortLevel": "low" }
+    "rits/zai-org/glm-5-3": { "effortLevel": "default" }
   }
 }</pre></div>
-    <div class="warning"><span class="icon">!</span><div><strong>Use the exact hosted model ID and low effort.</strong><br>Run <code>/models</code> or <code>/model</code> after saving the settings. For GLM, use <code>rits/zai-org/glm-5-3</code> exactly and keep Claude Code’s <code>effortLevel</code> set to <code>low</code>. Do not copy this Claude Code setting into Codex, OpenCode, Pi, or other harness configurations.</div></div>
+    <div class="warning"><span class="icon">!</span><div><strong>Use the exact hosted model ID and default effort.</strong><br>Run <code>/models</code> or <code>/model</code> after saving the settings. For GLM, use <code>rits/zai-org/glm-5-3</code> exactly and keep Claude Code’s <code>effortLevel</code> set to <code>default</code>. Do not copy this Claude Code setting into Codex, OpenCode, Pi, or other harness configurations.</div></div>
     <div class="warning fallback"><span class="icon">↩</span><div><strong>Rollback if EnMaaS is unavailable</strong><br>Exit Claude Code, restore your previous <code>~/.claude/settings.json</code> backup, or remove the EnMaaS <code>env</code> block and relaunch. Keep the previous provider configuration unchanged so you can switch back immediately during this beta period.</div></div>
   </div></div>
   <div class="tool" id="tool-codex"><div class="tool-icon codex-logo"><svg viewBox="0 0 64 64" role="img" aria-label="Codex logo"><path d="M32 6 53 18v24L32 54 11 42V18Z"/><path d="m24 24-8 8 8 8m16-16 8 8-8 8M36 20 28 44"/></svg></div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Codex</h3><p>Codex uses the OpenAI-compatible Responses API. Add EnMaaS as a provider and select it with a profile.</p>
