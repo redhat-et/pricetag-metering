@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"math"
 	"sort"
 	"time"
 
 	_ "github.com/lib/pq"
+
+	"github.com/redhat-et/pricetag-metering/internal/metrics"
 )
 
 // Hourly rollup maintenance and the one-time backfill (Phase 3 of
@@ -354,6 +357,10 @@ func (s *Store) ensureToolRollups(ctx context.Context) error {
 // sums cost_usd), and the ready flag lands only after all of it. Each
 // stage is resumable, so a restart mid-stage picks up at the watermark.
 func (s *Store) backfillPass(ctx context.Context) (bool, error) {
+	start := time.Now()
+	defer func() {
+		metrics.RollupBackfillDurationSeconds.Observe(time.Since(start).Seconds())
+	}()
 	for {
 		if ctx.Err() != nil {
 			return false, ctx.Err()
@@ -582,11 +589,16 @@ func (s *Store) RunRollupMaintenance(ctx context.Context, interval time.Duration
 }
 
 func (s *Store) maintainOnce(ctx context.Context, deep bool) {
+	start := time.Now()
 	if !s.RollupsReady() {
 		return // the backfill goroutine owns the table until it lands ready
 	}
 	if err := s.refreshRecentHours(ctx); err != nil {
 		slog.Error("rollup refresh failed", "error", err)
+		metrics.RollupRefreshDurationSeconds.Observe(time.Since(start).Seconds())
+		// A failed pass must not look like a healthy one: mark the parity
+		// state unavailable and leave the checked-at timestamp stale.
+		metrics.RollupParityGreen.Set(math.NaN())
 		return
 	}
 	window := 24 * time.Hour
@@ -599,6 +611,8 @@ func (s *Store) maintainOnce(ctx context.Context, deep bool) {
 	report, err := s.ParityReport(ctx, until.Add(-window), until)
 	if err != nil {
 		slog.Error("rollup parity check failed", "window", window, "error", err)
+		metrics.RollupRefreshDurationSeconds.Observe(time.Since(start).Seconds())
+		metrics.RollupParityGreen.Set(math.NaN())
 		return
 	}
 	red := false
@@ -611,6 +625,13 @@ func (s *Store) maintainOnce(ctx context.Context, deep bool) {
 				"raw_cost", ps.RawCostUSD, "rollup_cost", ps.RollCostUSD)
 		}
 	}
+	metrics.RollupRefreshDurationSeconds.Observe(time.Since(start).Seconds())
+	parityGreen := 0.0
+	if !red {
+		parityGreen = 1.0
+	}
+	metrics.RollupParityGreen.Set(parityGreen)
+	metrics.RollupParityCheckedAtSeconds.Set(float64(time.Now().Unix()))
 	prev := s.parityHealthy.Swap(!red)
 	healthyStr, checkedAt := "false", time.Now().UTC().Format(time.RFC3339)
 	if !red {

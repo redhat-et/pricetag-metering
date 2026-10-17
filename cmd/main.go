@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -14,9 +15,68 @@ import (
 	"github.com/redhat-et/pricetag-metering/internal/handler"
 	"github.com/redhat-et/pricetag-metering/internal/k8s"
 	"github.com/redhat-et/pricetag-metering/internal/maasapi"
+	"github.com/redhat-et/pricetag-metering/internal/metrics"
 	"github.com/redhat-et/pricetag-metering/internal/pricing"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
+
+// statusRecorder captures the response status code so the metrics middleware can
+// label metering_requests_total and
+// metering_http_request_duration_seconds with it.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// instrument records per-request metrics for every route on the application
+// listener (8080). The /metrics endpoint lives on its own listener and is not
+// counted here.
+func instrument(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		// r.Pattern is the registered route template (e.g.
+		// /api/v1/usage/users/, /invite/), so the label never carries
+		// per-request segments (usernames, key IDs, invite tokens) and the
+		// series set stays bounded. Unmatched requests fall back to a fixed
+		// category.
+		path := r.Pattern
+		if path == "" {
+			path = "unmatched"
+		}
+		code := strconv.Itoa(rec.status)
+		metrics.RequestsTotal.WithLabelValues(path, code).Inc()
+		metrics.HTTPRequestDurationSeconds.WithLabelValues(path, code).Observe(time.Since(start).Seconds())
+	})
+}
+
+// postDBPoolStats mirrors the primary pool's sql.DBStats onto the
+// metering_db_pool_* gauges. The wait gauges are cumulative counters on the
+// pool, so only the delta since the last tick is added.
+func postDBPoolStats(store *storage.Store) {
+	prevWaitCount := int64(0)
+	prevWaitDuration := time.Duration(0)
+	for {
+		st := store.PoolStats()
+		metrics.DBPoolOpenConns.Set(float64(st.OpenConnections))
+		metrics.DBPoolInUseConns.Set(float64(st.InUse))
+		metrics.DBPoolIdleConns.Set(float64(st.Idle))
+		if st.WaitCount > prevWaitCount {
+			metrics.DBPoolWaitCountTotal.Add(float64(st.WaitCount - prevWaitCount))
+		}
+		if st.WaitDuration > prevWaitDuration {
+			metrics.DBPoolWaitSecondsTotal.Add(st.WaitDuration.Seconds() - prevWaitDuration.Seconds())
+		}
+		prevWaitCount, prevWaitDuration = st.WaitCount, st.WaitDuration
+		time.Sleep(15 * time.Second)
+	}
+}
 
 func main() {
 	cfg := config.Load()
@@ -379,7 +439,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           mux,
+		Handler:           instrument(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -395,6 +455,29 @@ func main() {
 		}
 	}()
 
+	// Dedicated metrics listener — scrape traffic never shares the application
+	// listener, and /metrics stays out of the mux so it is never
+	// instrumented (which would double-count and recurse).
+	metricsServer := &http.Server{
+		Addr:              ":" + cfg.MetricsPort,
+		Handler:           metrics.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	go func() {
+		slog.Info("metrics listener starting", "port", cfg.MetricsPort)
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("metrics server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// The pool gauges run independently of request traffic, so a quiet
+	// deployment still shows whether the pool is healthily idle or queuing.
+	go postDBPoolStats(store)
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
 	<-stop
@@ -403,4 +486,5 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	server.Shutdown(ctx)
+	metricsServer.Shutdown(ctx)
 }

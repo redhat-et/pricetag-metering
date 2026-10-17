@@ -25,6 +25,11 @@ type Config struct {
 	// Port is the HTTP listen port.
 	Port string
 
+	// MetricsPort is the dedicated listen port for the /metrics endpoint.
+	// Served by its own http.Server so scrape traffic never shares the
+	// application listener.
+	MetricsPort string
+
 	// MonthlyTokenQuota caps per-user monthly token usage. Balance checks
 	// report no access once a user exceeds it.
 	MonthlyTokenQuota float64
@@ -251,6 +256,7 @@ func Load() Config {
 	return Config{
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		Port:              envDefault("PORT", "8080"),
+		MetricsPort:       envDefault("METRICS_PORT", "9902"),
 		MonthlyTokenQuota: envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
 		// The $600 safety net is on by default. Operators can still use the
 		// environment as a deployment-level kill switch while the policy's

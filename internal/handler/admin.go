@@ -14,6 +14,7 @@ import (
 	"github.com/redhat-et/pricetag-metering/internal/dashboard"
 	"github.com/redhat-et/pricetag-metering/internal/k8s"
 	"github.com/redhat-et/pricetag-metering/internal/maasapi"
+	"github.com/redhat-et/pricetag-metering/internal/metrics"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
@@ -610,6 +611,7 @@ func (h *AdminHandler) createKey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	metrics.KeysMintedTotal.Inc()
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, result)
 }

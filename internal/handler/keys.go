@@ -12,6 +12,7 @@ import (
 
 	"github.com/redhat-et/pricetag-metering/internal/config"
 	"github.com/redhat-et/pricetag-metering/internal/k8s"
+	"github.com/redhat-et/pricetag-metering/internal/metrics"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
@@ -129,6 +130,10 @@ func (h *KeysHandler) forward(w http.ResponseWriter, method, path string, hdrs m
 		return
 	}
 	defer resp.Body.Close()
+
+	if method == http.MethodPost && path == "/v1/api-keys" && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		metrics.KeysMintedTotal.Inc()
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)

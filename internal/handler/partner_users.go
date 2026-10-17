@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/redhat-et/pricetag-metering/internal/maasapi"
+	"github.com/redhat-et/pricetag-metering/internal/metrics"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
@@ -497,6 +498,7 @@ func (h *PartnerUsersHandler) mintKey(w http.ResponseWriter, r *http.Request, us
 		http.Error(w, "MaaS key mint failed", http.StatusBadGateway)
 		return
 	}
+	metrics.KeysMintedTotal.Inc()
 	if err := h.store.RecordPartnerUserKey(r.Context(), actor, user.UserID, key.ID, email, body.Name); err != nil {
 		// The key is live in MaaS but we cannot hand it out. Revoke it so it
 		// does not become an orphan; log the id (never the secret) either way.
