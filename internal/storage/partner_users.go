@@ -240,7 +240,11 @@ func (s *Store) GetPartnerRoleByUsername(ctx context.Context, username string) (
 		JOIN partner_users p ON p.user_id = l.user_id
 		WHERE LOWER(l.username) = LOWER($1) AND l.is_current AND p.active`, strings.TrimSpace(username)).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
-		return PartnerRoleUser, nil
+		// A missing directory record is different from an explicit user-role
+		// record. Callers use ErrPartnerUserNotFound to apply their configured
+		// break-glass admin/super-admin lists in environments whose partner
+		// directory has not been seeded yet (notably dogfood).
+		return "", ErrPartnerUserNotFound
 	}
 	return role, err
 }
