@@ -64,7 +64,7 @@ claude</pre></div>
     <div class="code"><button class="copy">copy</button><pre>"CLAUDE_CODE_AUTO_MODE_SERVER": "0"</pre></div>
     <div class="tool-info"><strong>Claude Code setting, not gateway routing.</strong><br>This changes where Claude Code decides auto-mode; it does not change EnMaaS model routing, authentication, or authorization. This is a user-reported fallback: verify it with your installed Claude Code version and remove it or restore your settings backup if it does not behave as expected.</div>
     <h4 class="setup-heading">2. Add hosted models to the <code>/model</code> picker</h4>
-  <p class="setup-copy">Claude Code’s picker filters model IDs, so discovery alone may not show hosted models. Add or merge these entries into <code>~/.claude/settings.json</code>. This requires Claude Code 2.1.242 or newer. The effort setting below applies only to Claude Code; other harnesses should use their native defaults unless their provider configuration explicitly supports an effort setting.</p>
+    <p class="setup-copy">Claude Code’s picker filters model IDs, so discovery alone may not show hosted models. Add or merge these entries into <code>~/.claude/settings.json</code>. This requires Claude Code 2.1.242 or newer. Claude Code will use the model’s native effort default; other harnesses should use their native defaults unless their provider configuration explicitly supports an effort setting.</p>
     <div class="code"><button class="copy">copy</button><pre># ~/.claude/settings.json — add
 {
   "modelPicker": {
@@ -74,13 +74,10 @@ claude</pre></div>
         "label": "GLM 5.3",
         "description": "Hosted via EnMaaS"
       }
-    ]
-  },
-  "modelSettings": {
-    "rits/zai-org/glm-5-3": { "effortLevel": "default" }
-  }
-}</pre></div>
-    <div class="warning"><span class="icon">!</span><div><strong>Use the exact hosted model ID and default effort.</strong><br>Run <code>/models</code> or <code>/model</code> after saving the settings. For GLM, use <code>rits/zai-org/glm-5-3</code> exactly and keep Claude Code’s <code>effortLevel</code> set to <code>default</code>. Do not copy this Claude Code setting into Codex, OpenCode, Pi, or other harness configurations.</div></div>
+     ]
+   }
+ }</pre></div>
+    <div class="warning"><span class="icon">!</span><div><strong>Use the exact hosted model ID and native effort default.</strong><br>Run <code>/models</code> or <code>/model</code> after saving the settings. For GLM, use <code>rits/zai-org/glm-5-3</code> exactly and do not add an <code>effortLevel</code> override unless your installed Claude Code version documents support for the specific value. Do not copy Claude Code settings into Codex, OpenCode, Pi, or other harness configurations.</div></div>
     <div class="warning fallback"><span class="icon">↩</span><div><strong>Rollback if EnMaaS is unavailable</strong><br>Exit Claude Code, restore your previous <code>~/.claude/settings.json</code> backup, or remove the EnMaaS <code>env</code> block and relaunch. Keep the previous provider configuration unchanged so you can switch back immediately during this beta period.</div></div>
   </div></div>
   <div class="tool" id="tool-codex"><div class="tool-icon codex-logo"><svg viewBox="0 0 64 64" role="img" aria-label="Codex logo"><path d="M32 6 53 18v24L32 54 11 42V18Z"/><path d="m24 24-8 8 8 8m16-16 8 8-8 8M36 20 28 44"/></svg></div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Codex</h3><p>Codex uses the OpenAI-compatible Responses API. Add EnMaaS as a provider and select it with a profile.</p>
