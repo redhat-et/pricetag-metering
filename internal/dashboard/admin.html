@@ -512,6 +512,7 @@ td .tag{white-space:nowrap}
 .ab-btn:hover{color:var(--t,#e2e6ec)}
 .ab-user{color:var(--grn,#3dcc6e);font-size:13px;font-weight:600}
 .ab-user .role{color:var(--t2,#8090a8);font-weight:400}
+.demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private #partner-users-list td:first-child,.demo-private #partner-users-list td:nth-child(2){filter:blur(3px);user-select:none}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
 .ab-out{color:var(--red,#e8554e);border:1px solid var(--bdr,#232b3b);border-radius:7px;padding:4px 11px;font-size:13px;text-decoration:none}
 .ab-out:hover{border-color:var(--red,#e8554e)}
 /* Pricing modal (shared rate card across all pages) */
@@ -2456,7 +2457,8 @@ fetch("/whoami").then(function(r){return r.json()}).then(function(d){
   var el=document.getElementById("abUser");
   if(d.user&&el){
     var name=d.display_name?d.display_name:d.user;
-    el.innerHTML=esc(name)+(d.isSuperAdmin?' <span class="role">(super admin)</span>':d.isAdmin?' <span class="role">(admin)</span>':'');
+     el.innerHTML='<span class="demo-pii">'+esc(name)+'</span>'+(d.isSuperAdmin?' <span class="role">(super admin)</span>':d.isAdmin?' <span class="role">(admin)</span>':'');
+     if(typeof initDemoPrivacy==='function')initDemoPrivacy(!!d.isSuperAdmin);
   }
   var mvb=document.getElementById("my-view-btn");
   if(mvb&&d.user){mvb.href="/admin/impersonate?as="+encodeURIComponent(d.user);}
@@ -2503,5 +2505,19 @@ function loadPricing(){
   }).catch(function(e){body.innerHTML='<div class="pm-sub" style="padding:14px 0;color:var(--red,#e8554e)">Could not load pricing ('+pmEsc(e.message)+').</div>';});
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closePricing();});
+<script>
+(function(){
+  var KEY='pricetag-demo-privacy';
+  window.initDemoPrivacy=function(isSuperAdmin){
+    var trigger=document.getElementById('abUser');
+    if(!isSuperAdmin||!trigger)return;
+    function apply(on){document.documentElement.classList.toggle('demo-private',on);trigger.classList.toggle('demo-privacy-active',on);try{localStorage.setItem(KEY,on?'1':'0')}catch(e){}}
+    if(trigger.dataset.demoPrivacyBound)return;
+    trigger.dataset.demoPrivacyBound='1';
+    try{apply(localStorage.getItem(KEY)==='1')}catch(e){apply(false)}
+    trigger.addEventListener('dblclick',function(){apply(!document.documentElement.classList.contains('demo-private'))});
+    window.addEventListener('storage',function(e){if(e.key===KEY)apply(e.newValue==='1')});
+  };
+})();
 </script></body>
 </html>
