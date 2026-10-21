@@ -47,6 +47,7 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 		"DeepSeek V4.1 Flash",
 		`"modalities": {`,
 		`"input": ["text", "image"]`,
+		`"output": 16384`,
 		"DeepSeek image input",
 		"OpenCode does not need a separate model-picker block",
 		"https://devservices.dpp.openshift.com/support/enmaas/",
