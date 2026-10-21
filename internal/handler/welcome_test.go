@@ -44,10 +44,13 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 		"modelPicker",
 		"rits/zai-org/glm-5-3",
 		"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
-		"DeepSeek V4.1 Flash",
 		`"modalities": {`,
 		`"input": ["text", "image"]`,
-		`"output": 16384`,
+		`"name": "DeepSeek V4.1 Flash",
+           "limit": {
+             "context": 1048576,
+             "output": 65536
+           },`,
 		"DeepSeek image input",
 		"OpenCode does not need a separate model-picker block",
 		"https://devservices.dpp.openshift.com/support/enmaas/",
