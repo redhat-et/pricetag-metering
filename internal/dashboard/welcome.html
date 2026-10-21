@@ -136,6 +136,11 @@ codex --profile enmaas</pre></div>
     }
   }
 }</pre></div>
+        <p class="tool-info"><strong>Claude Haiku 5.5 and Claude 5.x models:</strong> use OpenCode <strong>v2.0.25 or newer</strong> and set <code>compatibility.supportsThinkingBlockBinding</code> to <code>false</code> on the model entry. Older OpenCode versions send a beta field that the EnMaaS Vertex backend rejects with <code>thinking.adaptive.block_binding: Extra inputs are not permitted</code>. Claude Code is not affected.</p>
+        <div class="code"><button class="copy">copy</button><pre>"claude-haiku-5-5": {
+  "name": "Claude Haiku 5.5 (EnMaaS)",
+  "compatibility": { "supportsThinkingBlockBinding": false }
+}</pre></div>
         <h4 class="setup-heading">2. Run v2 against EnMaaS</h4>
         <p class="setup-copy">Isolate this test configuration and start v2 with <code>--standalone</code>, which runs a private server that suits an isolated setup. Then use <code>/models</code> inside OpenCode to inspect the gateway catalog.</p>
         <div class="code"><button class="copy">copy</button><pre># Isolate this test configuration
