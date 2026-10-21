@@ -56,9 +56,11 @@ MODEL_ID='exact-model-id'</pre></div></div><div class="card"><h3>Use the modelâ€
 }</pre></div>
     <div class="code"><button class="copy">copy</button><pre># Or use a shell session
 export ANTHROPIC_BASE_URL="{{GATEWAY_URL}}"
-export ANTHROPIC_API_KEY="$ENMAAS_KEY"
-export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
-claude</pre></div>
+    export ANTHROPIC_API_KEY="$ENMAAS_KEY"
+    export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
+    claude</pre></div>
+    <div class="warning"><span class="icon">!</span><div><strong>Disable Claude Codeâ€™s direct Vertex mode.</strong><br>Before starting Claude Code through EnMaaS, remove <code>CLAUDE_CODE_USE_VERTEX</code>, <code>ANTHROPIC_VERTEX_PROJECT_ID</code>, <code>ANTHROPIC_VERTEX_REGION</code>, and <code>CLOUD_ML_REGION</code> from your environment or <code>~/.claude/settings.json</code>. If <code>CLAUDE_CODE_USE_VERTEX=1</code> remains set, Claude Code bypasses the EnMaaS gateway and uses Vertex directly.</div></div>
+    <div class="code"><button class="copy">copy</button><pre>unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID ANTHROPIC_VERTEX_REGION CLOUD_ML_REGION</pre></div>
     <h4 class="setup-heading">Optional: use client-side auto-mode</h4>
     <p class="setup-copy">If server-side auto-mode is unavailable or you prefer Claude Code to make the auto-mode decision locally, add this to the same <code>env</code> block in <code>~/.claude/settings.json</code>.</p>
     <div class="code"><button class="copy">copy</button><pre>"CLAUDE_CODE_AUTO_MODE_SERVER": "0"</pre></div>
