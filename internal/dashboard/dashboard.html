@@ -1054,8 +1054,8 @@ fetch('/api/v1/whoami').then(function(r){return r.json()}).then(function(d){
     if(isSuperAdmin){
       document.querySelectorAll('.superadmin-only').forEach(function(el){el.style.display=el.dataset.show||'';});
     }
-    // Re-render once the role is known so per-row "view as" links appear.
-     if(isSuperAdmin)refresh();
+    // The initial refresh above is sufficient; do not issue a second full
+    // dashboard request merely because the caller is a super-admin.
      if(typeof initDemoPrivacy==='function')initDemoPrivacy(isSuperAdmin);
     // Pin every non-admin to their own rows so the first frame isn't a
     // fleet-wide flash. Managers are pinned too now — the Usage page shows
