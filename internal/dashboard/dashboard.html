@@ -638,21 +638,28 @@ function collapseUsageUsers(rows){
   return Array.from(byKey.values());
 }
 function mergeDirectoryUsers(usage,directory,includeDirectory,selectedUsers){
-  const byEmail=new Map((usage||[]).map(u=>[u.username,u]));
-  if(!includeDirectory)return Array.from(byEmail.values());
+  const merged=[];
+  const byUsername=new Map(), byUserId=new Map();
+  const indexEntry=function(entry){
+    if(entry.username&&!byUsername.has(entry.username))byUsername.set(entry.username,entry);
+    if(entry.user_id&&!byUserId.has(entry.user_id))byUserId.set(entry.user_id,entry);
+  };
+  (usage||[]).forEach(u=>{merged.push(u);indexEntry(u);});
+  if(!includeDirectory)return merged;
   const selected=new Set(selectedUsers||[]);
   (directory||[]).forEach(d=>{
     if(!d.username)return;
     if(selected.size&&!selected.has(d.username))return;
-    const existing=Array.from(byEmail.values()).find(function(u){return (d.user_id&&u.user_id===d.user_id)||u.username===d.username});
+    const existing=(d.user_id&&byUserId.get(d.user_id))||byUsername.get(d.username);
     if(existing){
       existing.user_id=d.user_id||existing.user_id;
       existing.tags=Object.assign({},d.tags||{},existing.tags||{});
     }else{
-      byEmail.set(d.user_id||d.username,Object.assign({requests:0,prompt_tokens:0,completion_tokens:0,total_tokens:0,cost_usd:0,saved_usd:0,group_name:''},d));
+      const entry=Object.assign({requests:0,prompt_tokens:0,completion_tokens:0,total_tokens:0,cost_usd:0,saved_usd:0,group_name:''},d);
+      merged.push(entry);indexEntry(entry);
     }
   });
-  return Array.from(byEmail.values());
+  return merged;
 }
 function renderGroupFilterBtns(data){}
 
