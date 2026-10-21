@@ -176,7 +176,7 @@ opencode --standalone
         <div class="code"><button class="copy">copy</button><pre>{
   "$schema": "https://opencode.ai/config.json",
   "model": "enmaas/rits/zai-org/glm-5-3",
-  // To test DeepSeek, use: enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
+  // To test DeepSeek (including image input), use: enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
   "provider": {
     "enmaas": {
       "npm": "@ai-sdk/openai-compatible",
@@ -194,7 +194,11 @@ opencode --standalone
            }
          },
          "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
-           "name": "DeepSeek V4.1 Flash"
+           "name": "DeepSeek V4.1 Flash",
+           "modalities": {
+             "input": ["text", "image"],
+             "output": ["text"]
+           }
          }
       }
     },
@@ -212,6 +216,7 @@ opencode --standalone
     }
   }
 }</pre></div>
+        <div class="tool-info"><strong>DeepSeek image input.</strong><br>OpenCode v1 sends images only when the selected model declares image input. The <code>modalities</code> block in this example enables vision for DeepSeek V4.1 Flash; GLM 5.3 is text-only, so do not add it there. Switch the pinned <code>model</code> to the DeepSeek ID to use vision.</div>
         <h4 class="setup-heading">2. Run v1 against EnMaaS</h4>
         <p class="setup-copy">Install the provider runtime next to the config once, then isolate the configuration and start the v1 TUI. Use <code>/models</code> inside OpenCode to inspect the gateway catalog.</p>
         <div class="code"><button class="copy">copy</button><pre># One-time: install the provider runtime next to the config
