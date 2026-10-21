@@ -142,7 +142,7 @@ codex --profile enmaas</pre></div>
       "models": {
          "rits/zai-org/glm-5-3": {
            "name": "GLM 5.3",
-           "limit": { "context": 1000000, "output": 65536 }
+           "limit": { "context": 1048576, "output": 65536 }
          },
          "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
            "name": "DeepSeek V4.1 Flash"
@@ -189,7 +189,7 @@ opencode --standalone
          "rits/zai-org/glm-5-3": {
            "name": "GLM 5.3",
            "limit": {
-             "context": 1000000,
+             "context": 1048576,
              "output": 65536
            }
          },
@@ -249,7 +249,7 @@ opencode
         "name": "GLM 5.3 (EnMaaS)",
         "reasoning": true,
         "input": ["text"],
-        "contextWindow": 1000000,
+         "contextWindow": 1048576,
         "maxTokens": 65536,
         "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
         "compat": {"supportsDeveloperRole": false},
@@ -305,7 +305,7 @@ pi --provider enmaas-glm-5-3 --model "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017"
   "models": [
     {
       "name": "rits/zai-org/glm-5-3",
-      "context_limit": 1000000,
+       "context_limit": 1048576,
       "input_token_cost": null,
       "output_token_cost": null,
       "currency": null,
