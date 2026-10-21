@@ -529,7 +529,10 @@ async function refresh(force){
     chartUsers=collapseUsageUsers(Array.isArray(chartUs)?chartUs:[]);
    renderKPI(ov);
    renderGroupFilterBtns(gr);
-   populateFilterDropdowns(modelCat, rosterCat);
+   // The usage roster is capped for dashboard performance. Merge it with the
+   // complete directory roster so users with no recent usage, or users beyond
+   // the usage limit, remain selectable in the filter dropdown.
+   populateFilterDropdowns(modelCat, mergeDirectoryUsers(collapseUsageUsers(rosterCat), directoryUsers, true, []));
   renderRecent(rc);
    renderModelChart();
    renderToolChart();
