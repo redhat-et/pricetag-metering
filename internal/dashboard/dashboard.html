@@ -455,7 +455,7 @@ let isSuperAdmin=false;   // operator tools: Routing/Compression/Admin nav + "vi
 let modelMetric='tokens', userPieMetric='cost';
 let savingsRef='claude-opus-4-8';
 let tokenChart=null, userCostChart=null, toolChart=null, savingsChart=null;
-let cachedGroups=[], cachedModels=[], cachedTools=[], chartUsers=[];
+let cachedGroups=[], cachedModels=[], cachedTools=[], chartUsers=[], directoryUsers=[];
 // Overview payload of the current refresh; it carries the server-computed
 // "Saved · Hosted Models" KPI (the sum of the user table's saved_usd
 // column), which is what the card shows — no client-side re-derivation.
@@ -508,16 +508,17 @@ async function refresh(force){
   // the list of things you can still pick.
   try {
     const chartSort=userPieMetric==='cost'?'cost_usd':userPieMetric==='requests'?'requests':'total_tokens';
-     const [ov,gr,chartUs,mo,tools,rc,rosterCat,modelCat]=await Promise.all([
+      const [ov,gr,chartUs,mo,tools,rc,rosterCat,modelCat,directory]=await Promise.all([
        api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
        api('/api/v1/dashboard/groups?'+filters,force),
         api('/api/v1/dashboard/users?'+filters+'&sort='+chartSort+'&order=desc&limit=10&offset=0&savings=false',force),
       api('/api/v1/dashboard/models?'+filters,force),
       api('/api/v1/dashboard/tools?'+filters,force),
       api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
-        api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200&savings=false',force),
+       api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200&savings=false',force),
        api('/api/v1/dashboard/models?'+rangeOnly,force),
-      ]);
+       api('/api/v1/dashboard/directory-users',force)
+       ]);
   cachedOverview=ov;
   cachedGroups=gr;
    cachedModels=modelFilter?mo.filter(function(m){return m.model===modelFilter}):mo;
@@ -525,8 +526,9 @@ async function refresh(force){
   // Unfiltered (range-only) model stats: used as the basis for the observed
   // cache ratio in renderSavings, so a user/group filter that contains no
   // paid traffic doesn't silently drop the cache assumption.
-  catalogModels=modelCat;
-    chartUsers=collapseUsageUsers(Array.isArray(chartUs)?chartUs:[]);
+   catalogModels=modelCat;
+     directoryUsers=directory||[];
+     chartUsers=collapseUsageUsers(Array.isArray(chartUs)?chartUs:[]);
    renderKPI(ov);
    renderGroupFilterBtns(gr);
    // The usage roster is capped for dashboard performance. Merge it with the
@@ -634,6 +636,23 @@ function collapseUsageUsers(rows){
     existing.tags=Object.assign(existing.tags||{},u.tags||{});
   });
   return Array.from(byKey.values());
+}
+function mergeDirectoryUsers(usage,directory,includeDirectory,selectedUsers){
+  const byEmail=new Map((usage||[]).map(u=>[u.username,u]));
+  if(!includeDirectory)return Array.from(byEmail.values());
+  const selected=new Set(selectedUsers||[]);
+  (directory||[]).forEach(d=>{
+    if(!d.username)return;
+    if(selected.size&&!selected.has(d.username))return;
+    const existing=Array.from(byEmail.values()).find(function(u){return (d.user_id&&u.user_id===d.user_id)||u.username===d.username});
+    if(existing){
+      existing.user_id=d.user_id||existing.user_id;
+      existing.tags=Object.assign({},d.tags||{},existing.tags||{});
+    }else{
+      byEmail.set(d.user_id||d.username,Object.assign({requests:0,prompt_tokens:0,completion_tokens:0,total_tokens:0,cost_usd:0,saved_usd:0,group_name:''},d));
+    }
+  });
+  return Array.from(byEmail.values());
 }
 function renderGroupFilterBtns(data){}
 
