@@ -128,8 +128,8 @@ codex --profile enmaas</pre></div>
         <p class="setup-copy">v2 uses the <code>providers</code> key (plural) and the bundled <code>@opencode/ai/providers/openai-compatible</code> runtime, so no npm packages are needed. Each provider reads its credential from <code>ENMAAS_KEY</code> via the <code>env</code> list, and <code>"update": "disable"</code> turns off update checks.</p>
         <div class="code"><button class="copy">copy</button><pre>{
   "$schema": "https://opencode.ai/config.json",
-  "model": "enmaas/rits/zai-org/glm-5-3",
-  // To test DeepSeek, use: enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
+  "model": "enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  // To use GLM instead, set: enmaas/rits/zai-org/glm-5-3
   "update": "disable",
   "providers": {
     "enmaas": {
@@ -175,8 +175,8 @@ opencode --standalone
         <p class="setup-copy">v1 uses the <code>provider</code> key (singular) and references the <code>@ai-sdk/openai-compatible</code> npm runtime, which must be installed next to the config for the custom <code>enmaas</code> provider to load. The credential is substituted inline from <code>ENMAAS_KEY</code> via <code>{env:ENMAAS_KEY}</code>.</p>
         <div class="code"><button class="copy">copy</button><pre>{
   "$schema": "https://opencode.ai/config.json",
-  "model": "enmaas/rits/zai-org/glm-5-3",
-  // To test DeepSeek, use: enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
+  "model": "enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  // To use GLM instead, set: enmaas/rits/zai-org/glm-5-3
   "provider": {
     "enmaas": {
       "npm": "@ai-sdk/openai-compatible",
@@ -227,7 +227,7 @@ opencode
 /models</pre></div>
       </div>
     </div>
-    <p>Use the provider matching the model's API dialect: Anthropic-compatible models use <code>/v1/messages</code>; OpenAI-compatible models use <code>/v1/responses</code> or <code>/v1/chat/completions</code>. The catalog is advisory and can omit models for some credential types; the local provider model entries and the pinned model are the source of truth for what this client can select.</p><p class="tool-info"><strong>OpenCode does not need a separate model-picker block. For DeepSeek, add <code>rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</code> to the pinned OpenAI-compatible provider model list.</strong> Its <code>/models</code> command may read the gateway catalog, but the catalog is not authoritative for every credential type. Pin the default model locally and use an exact supported model ID even when it is absent from the catalog.</p>
+    <p>Use the provider matching the model's API dialect: Anthropic-compatible models use <code>/v1/messages</code>; OpenAI-compatible models use <code>/v1/responses</code> or <code>/v1/chat/completions</code>. The catalog is advisory and can omit models for some credential types; the local provider model entries and the pinned model are the source of truth for what this client can select.</p><p class="tool-info"><strong>OpenCode does not need a separate model-picker block. Both examples pin DeepSeek as the default model; GLM 5.3 remains listed as an alternative.</strong> Its <code>/models</code> command may read the gateway catalog, but the catalog is not authoritative for every credential type. Pin the default model locally and use an exact supported model ID even when it is absent from the catalog.</p>
     <div class="warning fallback"><span class="icon">↩</span><div><strong>Rollback if EnMaaS is unavailable</strong><br>Close the standalone EnMaaS process and run your normal <code>opencode</code> command without the EnMaaS environment variables. Your normal <code>XDG_CONFIG_HOME</code> and <code>XDG_DATA_HOME</code> remain separate, so existing sessions and providers are preserved.</div></div>
   </div></div>
    <div class="tool" id="tool-pi"><div class="tool-icon">π</div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Pi</h3><p>Route all of Pi’s model families through EnMaaS with one key: OpenAI, Anthropic, and the hosted GLM and DeepSeek models. Merge the entries below into the <code>providers</code> object of your existing <code>~/.pi/agent/models.json</code>.</p>
