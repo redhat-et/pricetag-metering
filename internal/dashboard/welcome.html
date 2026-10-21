@@ -32,7 +32,18 @@ curl {{GATEWAY_URL}}/v1/messages \
     "model": "rits/zai-org/glm-5-3",
     "max_tokens": 128,
     "messages": [{"role":"user","content":"Reply with exactly OK."}]
-  }'</pre></div></div></section>
+  }'</pre></div></div><div class="card"><h3>DeepSeek smoke test</h3><p>DeepSeek V4.1 Flash supports the Anthropic Messages and OpenAI-compatible request paths through EnMaaS. Use the exact model ID below to verify either client configuration.</p><div class="code"><button class="copy">copy</button><pre># Anthropic Messages
+curl {{GATEWAY_URL}}/v1/messages \
+  -H "x-api-key: $ENMAAS_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{"model":"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017","max_tokens":128,"messages":[{"role":"user","content":"Reply with exactly OK."}]}'
+
+# OpenAI Chat Completions
+curl {{GATEWAY_URL}}/v1/chat/completions \
+  -H "Authorization: Bearer $ENMAAS_KEY" \
+  -H "content-type: application/json" \
+  -d '{"model":"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017","max_tokens":128,"messages":[{"role":"user","content":"Reply with exactly OK."}]}'</pre></div></div></section>
 <section id="model-guidance"><div class="head"><h2>Model discovery and limits</h2><p class="lede">The model catalog is useful, but it is not the complete source of truth for every credential type. Pin models in your client configuration when you need a model that is not listed.</p></div><div class="grid"><div class="card"><h3>Use the right authentication header</h3><p>Authentication belongs to the gateway key, not to the selected model. For Anthropic Messages, a native EnMaaS key uses <span class="mono">x-api-key</span> together with the required <span class="mono">anthropic-version</span> HTTP header. OpenAI-compatible clients commonly use <span class="mono">Authorization: Bearer</span>; some gateway credentials also accept Bearer on Messages. Follow the credential instructions for your key and never put either credential in the JSON body.</p><div class="code"><button class="copy">copy</button><pre>curl "{{GATEWAY_URL}}/v1/models" -H "x-api-key: $ENMAAS_KEY"; curl "{{GATEWAY_URL}}/v1/models" -H "Authorization: Bearer $ENMAAS_KEY"</pre></div></div><div class="card"><h3>Catalog limitations</h3><p>The <span class="mono">/v1/models</span> response can be credential-dependent and may omit hosted models even when inference works. Pi, OpenCode, and other clients should declare the exact hosted model ID locally when necessary:</p><div class="code"><button class="copy">copy</button><pre>rits/zai-org/glm-5-3
 rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</pre></div><p class="tool-info"><strong>Hosted models support both gateway dialects where configured.</strong> DeepSeek was verified through Messages, Chat Completions, and Responses. Do not copy GLM-specific context-window, penalty, or capability settings to DeepSeek.</p></div></div><div class="warning" style="margin-top:16px"><span class="icon">!</span><div><strong>Known hosted-model limits</strong><br><span class="mono">rits/zai-org/glm-5-3</span>: <strong>1,000,000-token context window</strong> and <strong>65,536-token maximum output</strong>. Client settings must not declare a larger context window. Other provider models have their own limits; use the provider’s documented model metadata when available.</div></div></section>
 <section id="routing"><div class="head"><h2>Route supported models through one gateway.</h2><p class="lede">Configure the EnMaaS base URL and key once, then select the exact model ID supported by the gateway. The gateway routes the request to the configured provider; it does not mean every upstream model is automatically available.</p></div><div class="grid"><div class="card"><h3>Keep the gateway settings; change the model</h3><p>For Claude Code, Codex, OpenCode, and Pi, keep the EnMaaS URL and key unchanged when switching models. Change the client’s model entry to an exact gateway model ID. If a model is not shown by <code>/v1/models</code>, pin it locally only after confirming that EnMaaS supports it.</p><div class="code"><button class="copy">copy</button><pre>export ENMAAS_KEY='your-key'
@@ -65,7 +76,7 @@ claude</pre></div>
     <div class="code"><button class="copy">copy</button><pre>"CLAUDE_CODE_AUTO_MODE_SERVER": "0"</pre></div>
     <div class="tool-info"><strong>Claude Code setting, not gateway routing.</strong><br>This changes where Claude Code decides auto-mode; it does not change EnMaaS model routing, authentication, or authorization. This is a user-reported fallback: verify it with your installed Claude Code version and remove it or restore your settings backup if it does not behave as expected.</div>
     <h4 class="setup-heading">2. Add hosted models to the <code>/model</code> picker</h4>
-    <p class="setup-copy">Claude Code’s picker filters model IDs, so discovery alone may not show hosted models. Add or merge these entries into <code>~/.claude/settings.json</code>. This requires Claude Code 2.1.242 or newer. Claude Code will use the model’s native effort default; other harnesses should use their native defaults unless their provider configuration explicitly supports an effort setting.</p>
+    <p class="setup-copy">Claude Code’s picker filters model IDs, so discovery alone may not show hosted models. EnMaaS exposes DeepSeek through <code>/v1/models</code> for Anthropic clients when requested with <code>x-api-key</code> and <code>anthropic-version</code>, but pinning the exact model locally keeps it visible in the picker. Add or merge these entries into <code>~/.claude/settings.json</code>. This requires Claude Code 2.1.242 or newer. Claude Code will use the model’s native effort default; other harnesses should use their native defaults unless their provider configuration explicitly supports an effort setting.</p>
     <div class="code"><button class="copy">copy</button><pre># ~/.claude/settings.json — add
 {
   "modelPicker": {
@@ -118,6 +129,7 @@ codex --profile enmaas</pre></div>
         <div class="code"><button class="copy">copy</button><pre>{
   "$schema": "https://opencode.ai/config.json",
   "model": "enmaas/rits/zai-org/glm-5-3",
+  // To test DeepSeek, use: enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
   "update": "disable",
   "providers": {
     "enmaas": {
@@ -164,6 +176,7 @@ opencode --standalone
         <div class="code"><button class="copy">copy</button><pre>{
   "$schema": "https://opencode.ai/config.json",
   "model": "enmaas/rits/zai-org/glm-5-3",
+  // To test DeepSeek, use: enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
   "provider": {
     "enmaas": {
       "npm": "@ai-sdk/openai-compatible",
