@@ -129,12 +129,26 @@ func IsPartnerAdmin(ctx context.Context, cfg config.Config, store *storage.Store
 	return IsPartnerAdminUsername(ctx, cfg, store, r.Header.Get(cfg.UserHeader))
 }
 
+// partnerRoleLookup is the subset of the Partner store used for role
+// resolution. Keeping it as an interface lets the authorization fallback be
+// tested without a live Postgres.
+type partnerRoleLookup interface {
+	GetPartnerRoleByUsername(ctx context.Context, username string) (string, error)
+}
+
 func IsPartnerAdminUsername(ctx context.Context, cfg config.Config, store *storage.Store, username string) bool {
+	if store == nil {
+		return isPartnerAdminUsername(ctx, cfg, nil, username)
+	}
+	return isPartnerAdminUsername(ctx, cfg, store, username)
+}
+
+func isPartnerAdminUsername(ctx context.Context, cfg config.Config, lookup partnerRoleLookup, username string) bool {
 	if strings.TrimSpace(username) == "" && cfg.AllowUnauthenticatedAdmin {
 		return true
 	}
-	if store != nil {
-		role, err := store.GetPartnerRoleByUsername(ctx, username)
+	if lookup != nil {
+		role, err := lookup.GetPartnerRoleByUsername(ctx, username)
 		if err == nil {
 			return role == storage.PartnerRoleAdmin || role == storage.PartnerRoleSuperAdmin
 		}
@@ -168,11 +182,18 @@ func IsPartnerSuperAdmin(ctx context.Context, cfg config.Config, store *storage.
 }
 
 func IsPartnerSuperAdminUsername(ctx context.Context, cfg config.Config, store *storage.Store, username string) bool {
+	if store == nil {
+		return isPartnerSuperAdminUsername(ctx, cfg, nil, username)
+	}
+	return isPartnerSuperAdminUsername(ctx, cfg, store, username)
+}
+
+func isPartnerSuperAdminUsername(ctx context.Context, cfg config.Config, lookup partnerRoleLookup, username string) bool {
 	if strings.TrimSpace(username) == "" && cfg.AllowUnauthenticatedAdmin {
 		return true
 	}
-	if store != nil {
-		role, err := store.GetPartnerRoleByUsername(ctx, username)
+	if lookup != nil {
+		role, err := lookup.GetPartnerRoleByUsername(ctx, username)
 		if err == nil {
 			return role == storage.PartnerRoleSuperAdmin
 		}
