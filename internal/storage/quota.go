@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+
+	"github.com/redhat-et/pricetag-metering/internal/metrics"
 )
 
 // Quota management: monthly dollar budgets per user, resolved through the
@@ -418,7 +420,12 @@ type quotaCacheEntry struct {
 // walk + usage scan on the critical latency path of every inference call.
 // Any quota mutation invalidates the whole cache (it holds at most a few
 // hundred entries; a map clear is cheaper than per-person bookkeeping).
-func (s *Store) QuotaDecisionCached(ctx context.Context, username string, exempt bool) (QuotaDecision, error) {
+// The bool reports whether the decision was served from the in-memory cache.
+// metering_quota_checks_total is incremented by the caller (GetMonthlyUsage)
+// against the FINAL access decision, not against the raw dollar gate here, so the
+// cached label stays meaningful without misclassifying token-cap or over-limit-model
+// exceptions.
+func (s *Store) QuotaDecisionCached(ctx context.Context, username string, exempt bool) (QuotaDecision, bool, error) {
 	key := username
 	if exempt {
 		key += "|x"
@@ -427,11 +434,11 @@ func (s *Store) QuotaDecisionCached(ctx context.Context, username string, exempt
 	e, ok := s.quotaCache[key]
 	s.quotaMu.Unlock()
 	if ok && time.Now().Before(e.expires) {
-		return e.decision, nil
+		return e.decision, true, nil
 	}
 	d, err := s.quotaDecision(ctx, username, exempt)
 	if err != nil {
-		return d, err
+		return d, false, err
 	}
 	s.quotaMu.Lock()
 	if s.quotaCache == nil {
@@ -439,7 +446,7 @@ func (s *Store) QuotaDecisionCached(ctx context.Context, username string, exempt
 	}
 	s.quotaCache[key] = quotaCacheEntry{decision: d, expires: time.Now().Add(quotaCacheTTL)}
 	s.quotaMu.Unlock()
-	return d, nil
+	return d, false, nil
 }
 
 func (s *Store) invalidateQuotaCache() {
@@ -493,7 +500,11 @@ func (s *Store) RecordQuotaDenial(ctx context.Context, username, model string) e
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	metrics.QuotaDenialsTotal.Inc()
+	return nil
 }
 
 // sumQuotaDenials counts this month's gateway refusals across a partner

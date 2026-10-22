@@ -115,6 +115,7 @@ body{background:var(--bg);color:var(--t);font-family:'Inter',-apple-system,sans-
 .ab-btn:hover{color:var(--t,#e2e6ec)}
 .ab-user{color:var(--grn,#3dcc6e);font-size:13px;font-weight:600}
 .ab-user .role{color:var(--t2,#8090a8);font-weight:400}
+.demo-pii{transition:filter .18s ease}.demo-private .demo-pii{filter:blur(3px);user-select:none}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
 .ab-out{color:var(--red,#e8554e);border:1px solid var(--bdr,#232b3b);border-radius:7px;padding:4px 11px;font-size:13px;text-decoration:none}
 .ab-out:hover{border-color:var(--red,#e8554e)}
 /* Pricing modal (shared rate card across all pages) */
@@ -400,7 +401,7 @@ function toast(m,t){var e=document.getElementById('toast');e.textContent=m;e.cla
 fetch('/api/v1/whoami').then(function(r){return r.json()}).then(function(d){
   if(!d||!d.user)return;
   var ab=document.getElementById('abUser');
-  ab.textContent=d.display_name||d.user;
+   ab.innerHTML='<span class="demo-pii">'+pmEsc(d.display_name||d.user)+'</span>';
   if(d.isSuperAdmin||d.isAdmin){
     var role=document.createElement('span');
     role.className='role';
@@ -413,7 +414,8 @@ fetch('/api/v1/whoami').then(function(r){return r.json()}).then(function(d){
   document.getElementById('tab-admin').style.display='';
   var mvb=document.getElementById('my-view-btn');
   mvb.href='/admin/impersonate?as='+encodeURIComponent(d.user);
-  mvb.style.display='';
+   mvb.style.display='';
+   if(typeof initDemoPrivacy==='function')initDemoPrivacy(!!d.isSuperAdmin);
 }).catch(function(){});
 
 window.addEventListener('resize',function(){if(selected)requestAnimationFrame(drawLines)});
@@ -459,6 +461,21 @@ function loadPricing(){
   }).catch(function(e){body.innerHTML='<div class="pm-sub" style="padding:14px 0;color:var(--red,#e8554e)">Could not load pricing ('+pmEsc(e.message)+').</div>';});
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closePricing();});
+</script>
+<script>
+(function(){
+  var KEY='pricetag-demo-privacy';
+  window.initDemoPrivacy=function(isSuperAdmin){
+    var trigger=document.getElementById('abUser');
+    if(!isSuperAdmin||!trigger)return;
+    function apply(on){document.documentElement.classList.toggle('demo-private',on);trigger.classList.toggle('demo-privacy-active',on);try{localStorage.setItem(KEY,on?'1':'0')}catch(e){}}
+    if(trigger.dataset.demoPrivacyBound)return;
+    trigger.dataset.demoPrivacyBound='1';
+    try{apply(localStorage.getItem(KEY)==='1')}catch(e){apply(false)}
+    trigger.addEventListener('dblclick',function(){apply(!document.documentElement.classList.contains('demo-private'))});
+    window.addEventListener('storage',function(e){if(e.key===KEY)apply(e.newValue==='1')});
+  };
+})();
 </script>
 </body>
 </html>

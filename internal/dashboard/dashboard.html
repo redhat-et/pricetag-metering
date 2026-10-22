@@ -179,6 +179,7 @@ tr.clickable{cursor:pointer}
 .ab-clock{font-size:11px;color:var(--text2,var(--t2,#8090a8));white-space:nowrap}
 .ab-user{font-size:12px;font-weight:700;color:#3dcc6e}
 .ab-user .role{color:var(--text2,var(--t2,#8090a8));font-weight:600;font-size:11px}
+.demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private .user-name,.demo-private .user-mail,.demo-private .person-name,.demo-private .det-name,.demo-private .det-who{filter:blur(3px);user-select:none}.demo-private #user-cost-chart{filter:blur(3px)}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
 .ab-out{color:#e8554e;border:1px solid var(--border,var(--bdr,#2e3848));padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none}
 .ab-out:hover{border-color:#e8554e}
 </style>
@@ -455,7 +456,7 @@ let isSuperAdmin=false;   // operator tools: Routing/Compression/Admin nav + "vi
 let modelMetric='tokens', userPieMetric='cost';
 let savingsRef='claude-opus-4-8';
 let tokenChart=null, userCostChart=null, toolChart=null, savingsChart=null;
-let cachedGroups=[], cachedModels=[], cachedTools=[], chartUsers=[];
+let cachedGroups=[], cachedModels=[], cachedTools=[], chartUsers=[], directoryUsers=[];
 // Overview payload of the current refresh; it carries the server-computed
 // "Saved · Hosted Models" KPI (the sum of the user table's saved_usd
 // column), which is what the card shows — no client-side re-derivation.
@@ -481,8 +482,8 @@ function countryFlag(code){
 function userCell(username,displayName,tags){
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const flag=countryFlag(tags&&tags.country);
-  if(displayName)return `<div class="user-name">${flag}${esc(displayName)}</div><div class="user-mail">${esc(username)}</div>`;
-  return flag+esc(username);
+  if(displayName)return `<div class="user-name demo-pii">${flag}${esc(displayName)}</div><div class="user-mail demo-pii">${esc(username)}</div>`;
+  return flag+'<span class="demo-pii">'+esc(username)+'</span>';
 }
 
 async function api(path, fresh){
@@ -508,16 +509,17 @@ async function refresh(force){
   // the list of things you can still pick.
   try {
     const chartSort=userPieMetric==='cost'?'cost_usd':userPieMetric==='requests'?'requests':'total_tokens';
-     const [ov,gr,chartUs,mo,tools,rc,rosterCat,modelCat]=await Promise.all([
+      const [ov,gr,chartUs,mo,tools,rc,rosterCat,modelCat,directory]=await Promise.all([
        api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
        api('/api/v1/dashboard/groups?'+filters,force),
         api('/api/v1/dashboard/users?'+filters+'&sort='+chartSort+'&order=desc&limit=10&offset=0&savings=false',force),
       api('/api/v1/dashboard/models?'+filters,force),
       api('/api/v1/dashboard/tools?'+filters,force),
       api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
-        api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200&savings=false',force),
+       api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200&savings=false',force),
        api('/api/v1/dashboard/models?'+rangeOnly,force),
-      ]);
+       api('/api/v1/dashboard/directory-users',force)
+       ]);
   cachedOverview=ov;
   cachedGroups=gr;
    cachedModels=modelFilter?mo.filter(function(m){return m.model===modelFilter}):mo;
@@ -525,11 +527,15 @@ async function refresh(force){
   // Unfiltered (range-only) model stats: used as the basis for the observed
   // cache ratio in renderSavings, so a user/group filter that contains no
   // paid traffic doesn't silently drop the cache assumption.
-  catalogModels=modelCat;
-    chartUsers=collapseUsageUsers(Array.isArray(chartUs)?chartUs:[]);
+   catalogModels=modelCat;
+     directoryUsers=directory||[];
+     chartUsers=collapseUsageUsers(Array.isArray(chartUs)?chartUs:[]);
    renderKPI(ov);
    renderGroupFilterBtns(gr);
-   populateFilterDropdowns(modelCat, rosterCat);
+   // The usage roster is capped for dashboard performance. Merge it with the
+   // complete directory roster so users with no recent usage, or users beyond
+   // the usage limit, remain selectable in the filter dropdown.
+   populateFilterDropdowns(modelCat, mergeDirectoryUsers(collapseUsageUsers(rosterCat), directoryUsers, true, []));
   renderRecent(rc);
    renderModelChart();
    renderToolChart();
@@ -631,6 +637,30 @@ function collapseUsageUsers(rows){
     existing.tags=Object.assign(existing.tags||{},u.tags||{});
   });
   return Array.from(byKey.values());
+}
+function mergeDirectoryUsers(usage,directory,includeDirectory,selectedUsers){
+  const merged=[];
+  const byUsername=new Map(), byUserId=new Map();
+  const indexEntry=function(entry){
+    if(entry.username&&!byUsername.has(entry.username))byUsername.set(entry.username,entry);
+    if(entry.user_id&&!byUserId.has(entry.user_id))byUserId.set(entry.user_id,entry);
+  };
+  (usage||[]).forEach(u=>{merged.push(u);indexEntry(u);});
+  if(!includeDirectory)return merged;
+  const selected=new Set(selectedUsers||[]);
+  (directory||[]).forEach(d=>{
+    if(!d.username)return;
+    if(selected.size&&!selected.has(d.username))return;
+    const existing=(d.user_id&&byUserId.get(d.user_id))||byUsername.get(d.username);
+    if(existing){
+      existing.user_id=d.user_id||existing.user_id;
+      existing.tags=Object.assign({},d.tags||{},existing.tags||{});
+    }else{
+      const entry=Object.assign({requests:0,prompt_tokens:0,completion_tokens:0,total_tokens:0,cost_usd:0,saved_usd:0,group_name:''},d);
+      merged.push(entry);indexEntry(entry);
+    }
+  });
+  return merged;
 }
 function renderGroupFilterBtns(data){}
 
@@ -1024,7 +1054,7 @@ fetch('/api/v1/whoami').then(function(r){return r.json()}).then(function(d){
     // Identity + role-gated tabs. The name renders green, the role in grey
     // beside it — the same convention every page's header now uses.
     var ab=document.getElementById('abUser');
-    ab.innerHTML=pmEsc(d.display_name||d.user)+(d.isSuperAdmin?' <span class="role">(super admin)</span>':d.isAdmin?' <span class="role">(admin)</span>':'');
+     ab.innerHTML='<span class="demo-pii">'+pmEsc(d.display_name||d.user)+'</span>'+(d.isSuperAdmin?' <span class="role">(super admin)</span>':d.isAdmin?' <span class="role">(admin)</span>':'');
     ab.style.display='';
     document.getElementById('abOut').style.display='';
     // "My team" shows for people who actually have a team to look at:
@@ -1053,8 +1083,9 @@ fetch('/api/v1/whoami').then(function(r){return r.json()}).then(function(d){
     if(isSuperAdmin){
       document.querySelectorAll('.superadmin-only').forEach(function(el){el.style.display=el.dataset.show||'';});
     }
-    // Re-render once the role is known so per-row "view as" links appear.
-    if(isSuperAdmin)refresh();
+    // The initial refresh above is sufficient; do not issue a second full
+    // dashboard request merely because the caller is a super-admin.
+     if(typeof initDemoPrivacy==='function')initDemoPrivacy(isSuperAdmin);
     // Pin every non-admin to their own rows so the first frame isn't a
     // fleet-wide flash. Managers are pinned too now — the Usage page shows
     // a person their own spend only, managers included (the server scopes
@@ -1269,6 +1300,25 @@ function refreshQuota(){
   .catch(function(){});
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeQuotaModal();});
+</script>
+<script>
+(function(){
+  var KEY='pricetag-demo-privacy';
+  window.initDemoPrivacy=function(isSuperAdmin){
+    var trigger=document.getElementById('abUser');
+    if(!isSuperAdmin||!trigger)return;
+    function apply(on){
+      document.documentElement.classList.toggle('demo-private',on);
+      trigger.classList.toggle('demo-privacy-active',on);
+      try{localStorage.setItem(KEY,on?'1':'0')}catch(e){}
+    }
+    if(trigger.dataset.demoPrivacyBound)return;
+    trigger.dataset.demoPrivacyBound='1';
+    try{apply(localStorage.getItem(KEY)==='1')}catch(e){apply(false)}
+    trigger.addEventListener('dblclick',function(){apply(!document.documentElement.classList.contains('demo-private'))});
+    window.addEventListener('storage',function(e){if(e.key===KEY)apply(e.newValue==='1')});
+  };
+})();
 </script>
 </body>
 </html>

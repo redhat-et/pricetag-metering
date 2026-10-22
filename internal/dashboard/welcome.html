@@ -20,9 +20,9 @@ section{padding:62px 0 0;scroll-margin-top:82px}.head{max-width:690px;margin-bot
 <body>
 <header class="hero" id="top"><canvas id="flow" aria-hidden="true"></canvas><div class="shell"><h1>Welcome to <span class="en">En</span><span class="maas">MaaS</span></h1><p>One key gives you access to a single gateway through which you can use frontier and hosted models, supporting Messages, Chat Completions, Responses, Conversations, and model discovery—with usage visibility built in.</p><div class="actions"><a class="btn" href="https://devservices.dpp.openshift.com/support/enmaas/" target="_blank" rel="noopener noreferrer">Get a key ↗ <small>(VPN required)</small></a><a class="btn alt" href="#quickstart">Try the API ↓</a></div></div></header>
  <main class="shell">
- <section id="about"><div class="head"><h2>About EnMaaS</h2><p class="lede">A common, governed front door for AI across Red Hat Engineering.</p></div><div class="about-grid"><div class="card"><h3>What is EnMaaS?</h3><p><span class="highlight-green">EnMaaS is Red Hat’s AI gateway for Engineering</span>, built on Red Hat AI Technologies and forward-looking components expected to become part of the Red Hat AI Portfolio. It provides a common way to access <span class="highlight-green">supported model providers</span>, including commercial and approved open-weight models, while simplifying model access and enabling a more consistent approach to <span class="highlight-green">governance, usage management, and future model enablement</span>.</p></div><div class="card"><h3>Why should I use EnMaaS?</h3><p>EnMaaS gives you a <span class="highlight-blue">single API key</span> for approved AI models across multiple providers, including <span class="highlight-blue">OpenAI and Anthropic</span>, without separate credentials or onboarding for each platform. That includes models such as <span class="highlight-blue">Opus 5.5</span> and approved open-weight options like <span class="highlight-blue">GLM 5.3</span>, which is available at no usage cost.</p></div></div></section>
+ <section id="about"><div class="head"><h2>About EnMaaS</h2><p class="lede">A common, governed front door for AI across Red Hat Engineering.</p></div><div class="about-grid"><div class="card"><h3>What is EnMaaS?</h3><p><span class="highlight-green">EnMaaS is Red Hat’s AI gateway for Engineering</span>, built on Red Hat AI Technologies and forward-looking components expected to become part of the Red Hat AI Portfolio. It provides a common way to access <span class="highlight-green">supported model providers</span>, including commercial and approved open-weight models, while simplifying model access and enabling a more consistent approach to <span class="highlight-green">governance, usage management, and future model enablement</span>.</p></div><div class="card"><h3>Why should I use EnMaaS?</h3><p>EnMaaS gives you a <span class="highlight-blue">single API key</span> for approved AI models across multiple providers, including <span class="highlight-blue">OpenAI and Anthropic</span>, without separate credentials or onboarding for each platform. That includes models such as <span class="highlight-blue">Opus 5.5</span> and approved open-weight options like <span class="highlight-blue">GLM 5.3</span> and <span class="highlight-blue">DeepSeek V4.1 Flash</span>, available at no usage cost.</p></div></div></section>
  <section id="access"><div class="head"><h2>Access is managed through Atlas.</h2><p class="lede">Use the Atlas onboarding flow to request, receive, and manage your EnMaaS key. The Atlas page requires the corporate VPN.</p></div><div class="grid"><div class="card accent"><h3>Get a key</h3><p>Atlas will handle key generation and onboarding. Please do not send key requests directly to individual operators.</p><a class="btn" href="https://devservices.dpp.openshift.com/support/enmaas/" target="_blank" rel="noopener noreferrer">Open Atlas onboarding ↗ <small>(VPN required)</small></a></div><div class="card blue"><h3>Ask questions</h3><p>Feedback, questions, and onboarding support are welcome in the EnMaaS Slack channel.</p><a class="btn alt" href="https://redhat.enterprise.slack.com/archives/C0C5WRT1VJP">#forum-enmaas ↗</a></div></div></section>
-<section id="quickstart"><div class="head"><h2>Let’s test your connection.</h2><p class="lede">Run this curl smoke test to verify that your key reaches the live EnMaaS gateway. Keep your key in a secret manager or protected environment variable.</p></div><div class="card"><h3>Connection smoke test</h3><p>This test sends one small request through the Anthropic Messages API using the hosted GLM model.</p><div class="code"><button class="copy">copy</button><pre>export ENMAAS_KEY='your-key'
+<section id="quickstart"><div class="head"><h2>Let’s test your connection.</h2><p class="lede">Run this curl smoke test to verify that your key reaches the live EnMaaS gateway. Keep your key in a secret manager or protected environment variable.</p></div><div class="card"><h3>Connection smoke test</h3><p>This test sends one small request through the Anthropic Messages API using the hosted GLM model. For DeepSeek, use the OpenAI-compatible Chat Completions endpoint and the exact model ID <code>rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</code>.</p><div class="code"><button class="copy">copy</button><pre>export ENMAAS_KEY='your-key'
 
 curl {{GATEWAY_URL}}/v1/messages \
   -H "x-api-key: $ENMAAS_KEY" \
@@ -32,8 +32,20 @@ curl {{GATEWAY_URL}}/v1/messages \
     "model": "rits/zai-org/glm-5-3",
     "max_tokens": 128,
     "messages": [{"role":"user","content":"Reply with exactly OK."}]
-  }'</pre></div></div></section>
-<section id="model-guidance"><div class="head"><h2>Model discovery and limits</h2><p class="lede">The model catalog is useful, but it is not the complete source of truth for every credential type. Pin models in your client configuration when you need a model that is not listed.</p></div><div class="grid"><div class="card"><h3>Use the right authentication header</h3><p>Authentication belongs to the gateway key, not to the selected model. For Anthropic Messages, a native EnMaaS key uses <span class="mono">x-api-key</span> together with the required <span class="mono">anthropic-version</span> HTTP header. OpenAI-compatible clients commonly use <span class="mono">Authorization: Bearer</span>; some gateway credentials also accept Bearer on Messages. Follow the credential instructions for your key and never put either credential in the JSON body.</p><div class="code"><button class="copy">copy</button><pre>curl "{{GATEWAY_URL}}/v1/models" -H "x-api-key: $ENMAAS_KEY"; curl "{{GATEWAY_URL}}/v1/models" -H "Authorization: Bearer $ENMAAS_KEY"</pre></div></div><div class="card"><h3>Catalog limitations</h3><p>The <span class="mono">/v1/models</span> response can be credential-dependent and may omit hosted models such as <strong>GLM 5.3</strong> even when inference works. Pi, OpenCode, and other clients should declare the exact model ID locally when necessary:</p><div class="code"><button class="copy">copy</button><pre>rits/zai-org/glm-5-3</pre></div><p class="tool-info"><strong>GLM 5.3 is text-only.</strong> Images in the request or conversation history return HTTP 400.</p></div></div><div class="warning" style="margin-top:16px"><span class="icon">!</span><div><strong>Known hosted-model limits</strong><br><span class="mono">rits/zai-org/glm-5-3</span>: <strong>1,000,000-token context window</strong> and <strong>65,536-token maximum output</strong>. Client settings must not declare a larger context window. Other provider models have their own limits; use the provider’s documented model metadata when available.</div></div></section>
+  }'</pre></div></div><div class="card"><h3>DeepSeek smoke test</h3><p>DeepSeek V4.1 Flash supports the Anthropic Messages and OpenAI-compatible request paths through EnMaaS. Use the exact model ID below to verify either client configuration.</p><div class="code"><button class="copy">copy</button><pre># Anthropic Messages
+curl {{GATEWAY_URL}}/v1/messages \
+  -H "x-api-key: $ENMAAS_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{"model":"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017","max_tokens":128,"messages":[{"role":"user","content":"Reply with exactly OK."}]}'
+
+# OpenAI Chat Completions
+curl {{GATEWAY_URL}}/v1/chat/completions \
+  -H "Authorization: Bearer $ENMAAS_KEY" \
+  -H "content-type: application/json" \
+  -d '{"model":"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017","max_tokens":128,"messages":[{"role":"user","content":"Reply with exactly OK."}]}'</pre></div></div></section>
+<section id="model-guidance"><div class="head"><h2>Model discovery and limits</h2><p class="lede">The model catalog is useful, but it is not the complete source of truth for every credential type. Pin models in your client configuration when you need a model that is not listed.</p></div><div class="grid"><div class="card"><h3>Use the right authentication header</h3><p>Authentication belongs to the gateway key, not to the selected model. For Anthropic Messages, a native EnMaaS key uses <span class="mono">x-api-key</span> together with the required <span class="mono">anthropic-version</span> HTTP header. OpenAI-compatible clients commonly use <span class="mono">Authorization: Bearer</span>; some gateway credentials also accept Bearer on Messages. Follow the credential instructions for your key and never put either credential in the JSON body.</p><div class="code"><button class="copy">copy</button><pre>curl "{{GATEWAY_URL}}/v1/models" -H "x-api-key: $ENMAAS_KEY"; curl "{{GATEWAY_URL}}/v1/models" -H "Authorization: Bearer $ENMAAS_KEY"</pre></div></div><div class="card"><h3>Catalog limitations</h3><p>The <span class="mono">/v1/models</span> response can be credential-dependent and may omit hosted models even when inference works. Pi, OpenCode, and other clients should declare the exact hosted model ID locally when necessary:</p><div class="code"><button class="copy">copy</button><pre>rits/zai-org/glm-5-3
+rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</pre></div><p class="tool-info"><strong>Hosted models support both gateway dialects where configured.</strong> DeepSeek was verified through Messages, Chat Completions, and Responses. Do not copy GLM-specific context-window, penalty, or capability settings to DeepSeek.</p></div></div><div class="warning" style="margin-top:16px"><span class="icon">!</span><div><strong>Known hosted-model limits</strong><br><span class="mono">rits/zai-org/glm-5-3</span>: <strong>1,000,000-token context window</strong> and <strong>65,536-token maximum output</strong>. Client settings must not declare a larger context window. Other provider models have their own limits; use the provider’s documented model metadata when available.</div></div></section>
 <section id="routing"><div class="head"><h2>Route supported models through one gateway.</h2><p class="lede">Configure the EnMaaS base URL and key once, then select the exact model ID supported by the gateway. The gateway routes the request to the configured provider; it does not mean every upstream model is automatically available.</p></div><div class="grid"><div class="card"><h3>Keep the gateway settings; change the model</h3><p>For Claude Code, Codex, OpenCode, and Pi, keep the EnMaaS URL and key unchanged when switching models. Change the client’s model entry to an exact gateway model ID. If a model is not shown by <code>/v1/models</code>, pin it locally only after confirming that EnMaaS supports it.</p><div class="code"><button class="copy">copy</button><pre>export ENMAAS_KEY='your-key'
 # Keep this gateway base URL for every supported model
 export ENMAAS_BASE_URL='{{GATEWAY_URL}}/v1'
@@ -42,7 +54,7 @@ MODEL_ID='exact-model-id'</pre></div></div><div class="card"><h3>Use the model�
 -H "x-api-key: $ENMAAS_KEY" -H "anthropic-version: 2023-06-01"
 
 # OpenAI-compatible APIs
--H "Authorization: Bearer $ENMAAS_KEY"</pre></div></div></div><div class="tool-info"><strong>Tool-specific model settings:</strong> Claude Code changes the model through <code>/model</code> or <code>modelPicker</code>; Codex changes <code>model</code> in its EnMaaS profile; OpenCode changes its pinned provider model; Pi adds the model under the matching provider entry. Do not copy a GLM-only context window or capability setting to another model.</div></section>
+-H "Authorization: Bearer $ENMAAS_KEY"</pre></div></div></div><div class="tool-info"><strong>Tool-specific model settings:</strong> Claude Code changes the model through <code>/model</code> or <code>modelPicker</code>; Codex changes <code>model</code> in its EnMaaS profile; OpenCode changes its pinned provider model; Pi adds the model under the matching provider entry. GLM and DeepSeek are separate hosted models: do not copy GLM-only context-window, penalty, or capability settings to DeepSeek.</div></section>
  <section id="tools"><div class="head"><h2>Use the tools you already know.</h2><p class="lede">EnMaaS supports <a href="#tool-claude">Claude Code</a>, <a href="#tool-codex">Codex</a>, <a href="#tool-opencode">OpenCode</a>, <a href="#tool-pi">Pi</a>, and <a href="#tool-goose">Goose</a>. More tools and recipes are coming soon. Keep your existing AI access available while EnMaaS is in beta.</p></div><div class="card">
   <div class="tool" id="tool-claude"><div class="tool-icon claude-logo"><svg viewBox="0 0 64 64" role="img" aria-label="Claude logo"><path d="M32 4 38 26 60 32 38 38 32 60 26 38 4 32 26 26Z"/></svg></div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Claude Code</h3><p>Route Claude Code through EnMaaS, then use <span class="mono">/model</span> or model discovery to choose an available model.</p>
     <h4 class="setup-heading">1. Connect Claude Code to EnMaaS</h4>
@@ -64,7 +76,7 @@ claude</pre></div>
     <div class="code"><button class="copy">copy</button><pre>"CLAUDE_CODE_AUTO_MODE_SERVER": "0"</pre></div>
     <div class="tool-info"><strong>Claude Code setting, not gateway routing.</strong><br>This changes where Claude Code decides auto-mode; it does not change EnMaaS model routing, authentication, or authorization. This is a user-reported fallback: verify it with your installed Claude Code version and remove it or restore your settings backup if it does not behave as expected.</div>
     <h4 class="setup-heading">2. Add hosted models to the <code>/model</code> picker</h4>
-    <p class="setup-copy">Claude Code’s picker filters model IDs, so discovery alone may not show hosted models. Add or merge these entries into <code>~/.claude/settings.json</code>. This requires Claude Code 2.1.242 or newer. Claude Code will use the model’s native effort default; other harnesses should use their native defaults unless their provider configuration explicitly supports an effort setting.</p>
+    <p class="setup-copy">Claude Code’s picker filters model IDs, so discovery alone may not show hosted models. EnMaaS exposes DeepSeek through <code>/v1/models</code> for Anthropic clients when requested with <code>x-api-key</code> and <code>anthropic-version</code>, but pinning the exact model locally keeps it visible in the picker. Add or merge these entries into <code>~/.claude/settings.json</code>. This requires Claude Code 2.1.242 or newer. Claude Code will use the model’s native effort default; other harnesses should use their native defaults unless their provider configuration explicitly supports an effort setting.</p>
     <div class="code"><button class="copy">copy</button><pre># ~/.claude/settings.json — add
 {
   "modelPicker": {
@@ -73,14 +85,20 @@ claude</pre></div>
         "model": "rits/zai-org/glm-5-3",
         "label": "GLM 5.3",
         "description": "Hosted via EnMaaS"
+      },
+      {
+        "model": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+        "label": "DeepSeek V4.1 Flash",
+        "description": "Hosted via EnMaaS"
       }
      ]
    }
  }</pre></div>
-    <div class="warning"><span class="icon">!</span><div><strong>Use the exact hosted model ID and native effort default.</strong><br>Run <code>/models</code> or <code>/model</code> after saving the settings. For GLM, use <code>rits/zai-org/glm-5-3</code> exactly and do not add an <code>effortLevel</code> override unless your installed Claude Code version documents support for the specific value. Do not copy Claude Code settings into Codex, OpenCode, Pi, or other harness configurations.</div></div>
+    <div class="warning"><span class="icon">!</span><div><strong>Use the exact hosted model ID and native effort default.</strong><br>Run <code>/models</code> or <code>/model</code> after saving the settings. For GLM, use <code>rits/zai-org/glm-5-3</code> exactly and do not add an <code>effortLevel</code> override unless your installed Claude Code version documents support for the specific value.</div></div>
+    <div class="tool-info"><strong>DeepSeek is available through Claude Code.</strong><br>EnMaaS exposes DeepSeek V4.1 Flash through the Anthropic Messages API as well as OpenAI-compatible Chat Completions/Responses. Use the exact model ID above; do not copy GLM-only context-window, penalty, or capability settings to DeepSeek.</div>
     <div class="warning fallback"><span class="icon">↩</span><div><strong>Rollback if EnMaaS is unavailable</strong><br>Exit Claude Code, restore your previous <code>~/.claude/settings.json</code> backup, or remove the EnMaaS <code>env</code> block and relaunch. Keep the previous provider configuration unchanged so you can switch back immediately during this beta period.</div></div>
   </div></div>
-  <div class="tool" id="tool-codex"><div class="tool-icon codex-logo"><svg viewBox="0 0 64 64" role="img" aria-label="Codex logo"><path d="M32 6 53 18v24L32 54 11 42V18Z"/><path d="m24 24-8 8 8 8m16-16 8 8-8 8M36 20 28 44"/></svg></div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Codex</h3><p>Codex uses the OpenAI-compatible Responses API. Add EnMaaS as a provider and select it with a profile.</p>
+  <div class="tool" id="tool-codex"><div class="tool-icon codex-logo"><svg viewBox="0 0 64 64" role="img" aria-label="Codex logo"><path d="M32 6 53 18v24L32 54 11 42V18Z"/><path d="m24 24-8 8 8 8m16-16 8 8-8 8M36 20 28 44"/></svg></div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Codex</h3><p>Codex uses the OpenAI-compatible Responses API. DeepSeek Responses was verified with EnMaaS. Add EnMaaS as a provider and select it with a profile. To use DeepSeek, set the profile model to <code>rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</code> after confirming the model is available.</p>
     <div class="code"><button class="copy">copy</button><pre># ~/.codex/config.toml
 [model_providers.enmaas]
 name = "EnMaaS"
@@ -90,6 +108,7 @@ wire_api = "responses"
 
 # ~/.codex/enmaas.config.toml
 model = "rits/zai-org/glm-5-3"
+# Or use: rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
 model_provider = "enmaas"
 
 # Use the EnMaaS profile
@@ -110,6 +129,7 @@ codex --profile enmaas</pre></div>
         <div class="code"><button class="copy">copy</button><pre>{
   "$schema": "https://opencode.ai/config.json",
   "model": "enmaas/rits/zai-org/glm-5-3",
+  // To test DeepSeek, use: enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
   "update": "disable",
   "providers": {
     "enmaas": {
@@ -120,10 +140,13 @@ codex --profile enmaas</pre></div>
         "baseURL": "{{GATEWAY_URL}}/v1"
       },
       "models": {
-        "rits/zai-org/glm-5-3": {
-          "name": "GLM 5.3",
-          "limit": { "context": 1000000, "output": 65536 }
-        }
+         "rits/zai-org/glm-5-3": {
+           "name": "GLM 5.3",
+           "limit": { "context": 1048576, "output": 65536 }
+         },
+         "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+           "name": "DeepSeek V4.1 Flash"
+         }
       }
     },
     "openai": {
@@ -153,6 +176,7 @@ opencode --standalone
         <div class="code"><button class="copy">copy</button><pre>{
   "$schema": "https://opencode.ai/config.json",
   "model": "enmaas/rits/zai-org/glm-5-3",
+  // To test DeepSeek (including image input), use: enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
   "provider": {
     "enmaas": {
       "npm": "@ai-sdk/openai-compatible",
@@ -162,13 +186,24 @@ opencode --standalone
         "apiKey": "{env:ENMAAS_KEY}"
       },
       "models": {
-        "rits/zai-org/glm-5-3": {
-          "name": "GLM 5.3",
-          "limit": {
-            "context": 1000000,
-            "output": 65536
-          }
-        }
+         "rits/zai-org/glm-5-3": {
+           "name": "GLM 5.3",
+           "limit": {
+             "context": 1048576,
+             "output": 65536
+           }
+         },
+         "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+           "name": "DeepSeek V4.1 Flash",
+           "limit": {
+             "context": 1048576,
+             "output": 65536
+           },
+           "modalities": {
+             "input": ["text", "image"],
+             "output": ["text"]
+           }
+         }
       }
     },
     "openai": {
@@ -185,6 +220,7 @@ opencode --standalone
     }
   }
 }</pre></div>
+        <div class="tool-info"><strong>DeepSeek image input.</strong><br>OpenCode v1 sends images only when the selected model declares image input. The <code>modalities</code> block in this example enables vision for DeepSeek V4.1 Flash; GLM 5.3 is text-only, so do not add it there. Switch the pinned <code>model</code> to the DeepSeek ID to use vision.</div>
         <h4 class="setup-heading">2. Run v1 against EnMaaS</h4>
         <p class="setup-copy">Install the provider runtime next to the config once, then isolate the configuration and start the v1 TUI. Use <code>/models</code> inside OpenCode to inspect the gateway catalog.</p>
         <div class="code"><button class="copy">copy</button><pre># One-time: install the provider runtime next to the config
@@ -200,12 +236,12 @@ opencode
 /models</pre></div>
       </div>
     </div>
-    <p>Use the provider matching the model's API dialect: Anthropic-compatible models use <code>/v1/messages</code>; OpenAI-compatible models use <code>/v1/responses</code> or <code>/v1/chat/completions</code>. The catalog is advisory and can omit models for some credential types; the local provider model entries and the pinned model are the source of truth for what this client can select.</p><p class="tool-info"><strong>OpenCode does not need a separate model-picker block.</strong> Its <code>/models</code> command may read the gateway catalog, but the catalog is not authoritative for every credential type. Pin the default model locally and use an exact supported model ID even when it is absent from the catalog.</p>
+    <p>Use the provider matching the model's API dialect: Anthropic-compatible models use <code>/v1/messages</code>; OpenAI-compatible models use <code>/v1/responses</code> or <code>/v1/chat/completions</code>. The catalog is advisory and can omit models for some credential types; the local provider model entries and the pinned model are the source of truth for what this client can select.</p><p class="tool-info"><strong>OpenCode does not need a separate model-picker block. For DeepSeek, add <code>rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</code> to the pinned OpenAI-compatible provider model list.</strong> Its <code>/models</code> command may read the gateway catalog, but the catalog is not authoritative for every credential type. Pin the default model locally and use an exact supported model ID even when it is absent from the catalog.</p>
     <div class="warning fallback"><span class="icon">↩</span><div><strong>Rollback if EnMaaS is unavailable</strong><br>Close the standalone EnMaaS process and run your normal <code>opencode</code> command without the EnMaaS environment variables. Your normal <code>XDG_CONFIG_HOME</code> and <code>XDG_DATA_HOME</code> remain separate, so existing sessions and providers are preserved.</div></div>
   </div></div>
-   <div class="tool" id="tool-pi"><div class="tool-icon">π</div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Pi</h3><p>Route all of Pi’s model families through EnMaaS with one key: OpenAI, Anthropic, and the hosted GLM model. Merge the entries below into the <code>providers</code> object of your existing <code>~/.pi/agent/models.json</code>.</p>
+   <div class="tool" id="tool-pi"><div class="tool-icon">π</div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Pi</h3><p>Route all of Pi’s model families through EnMaaS with one key: OpenAI, Anthropic, and the hosted GLM and DeepSeek models. Merge the entries below into the <code>providers</code> object of your existing <code>~/.pi/agent/models.json</code>.</p>
     <h4 class="setup-heading">1. Route Pi’s providers through EnMaaS</h4>
-    <p class="setup-copy">The <code>openai</code> and <code>anthropic</code> entries override Pi’s built-in providers without a <code>models</code> list, so their full catalogues (<span class="mono">gpt-*</span>, <span class="mono">claude-*</span>) stay available while routing through the gateway. The base URLs match Pi’s built-in defaults: <code>openai</code> keeps the <code>/v1</code> suffix, <code>anthropic</code> stays bare because Pi appends <code>/v1/messages</code> itself. The <code>enmaas-glm-5-3</code> entry pins the hosted GLM model.</p>
+    <p class="setup-copy">The <code>openai</code> and <code>anthropic</code> entries override Pi’s built-in providers without a <code>models</code> list, so their full catalogues (<span class="mono">gpt-*</span>, <span class="mono">claude-*</span>) stay available while routing through the gateway. The base URLs match Pi’s built-in defaults: <code>openai</code> keeps the <code>/v1</code> suffix, <code>anthropic</code> stays bare because Pi appends <code>/v1/messages</code> itself. The <code>enmaas-glm-5-3</code> entry pins both hosted OpenAI-compatible models: GLM 5.3 and DeepSeek V4.1 Flash.</p>
     <div class="code"><button class="copy">copy</button><pre>{
   "providers": {
     "openai": {
@@ -222,12 +258,19 @@ opencode
         "name": "GLM 5.3 (EnMaaS)",
         "reasoning": true,
         "input": ["text"],
-        "contextWindow": 1000000,
+         "contextWindow": 1048576,
         "maxTokens": 65536,
         "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
         "compat": {"supportsDeveloperRole": false},
-        "samplingParams": {"frequency_penalty": 0, "presence_penalty": 0}
-      }]
+         "samplingParams": {"frequency_penalty": 0, "presence_penalty": 0}
+       },
+       {
+         "id": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+         "name": "DeepSeek V4.1 Flash (EnMaaS)",
+         "input": ["text"],
+         "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+         "compat": {"supportsDeveloperRole": false}
+       }]
     }
   }
 }</pre></div>
@@ -250,9 +293,11 @@ opencode
 }
 
 # Smoke test
-pi --provider enmaas-glm-5-3 --model "rits/zai-org/glm-5-3" -p "Reply with exactly: OK"</pre></div>
+pi --provider enmaas-glm-5-3 --model "rits/zai-org/glm-5-3" -p "Reply with exactly: OK"
+# DeepSeek uses the same OpenAI-compatible pinned provider
+pi --provider enmaas-glm-5-3 --model "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017" -p "Reply with exactly: OK"</pre></div>
     <p>Frontier models appear in <code>/model</code> with their usual Pi catalogue entries; select any of them and the request routes through EnMaaS. Use the provider matching the model family — <code>openai/*</code> and <code>enmaas-glm-5-3/*</code> speak OpenAI dialects, <code>anthropic/*</code> uses Messages.</p>
-    <div class="warning"><span class="icon">!</span><div><strong>Pin the GLM model directly.</strong><br>The <code>/v1/models</code> response is not authoritative for every credential type, so GLM may not appear in Pi’s model search even when inference works. The pinned entry above keeps it available in <code>/model</code>. Its <code>samplingParams</code> pin both penalties to <code>0</code> (off); penalties can make GLM drift into Chinese.</div></div>
+    <div class="warning"><span class="icon">!</span><div><strong>Pin hosted models directly.</strong><br>The <code>/v1/models</code> response is not authoritative for every credential type, so GLM or DeepSeek may not appear in Pi’s model search even when inference works. The pinned entries above keep them available in <code>/model</code>. Keep the GLM <code>samplingParams</code> penalties at <code>0</code>; those penalties can make GLM drift into Chinese.</div></div>
     <div class="warning fallback"><span class="icon">↩</span><div><strong>Rollback if EnMaaS is unavailable</strong><br>Restore your backed-up <code>~/.pi/agent/models.json</code>, or remove the EnMaaS entries so <code>openai</code> and <code>anthropic</code> return to their built-in endpoints, and relaunch Pi. Keeping the backup makes rollback immediate while the service is being scaled and stabilized.</div></div>
    </div></div>
    <div class="tool" id="tool-goose"><div class="tool-icon goose-logo">G</div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Goose</h3><p>Goose is an open-source, extensible AI agent available as an RPM in Fedora and RHEL. Add EnMaaS as a custom provider, then configure its API key from Goose.</p>
@@ -269,7 +314,15 @@ pi --provider enmaas-glm-5-3 --model "rits/zai-org/glm-5-3" -p "Reply with exact
   "models": [
     {
       "name": "rits/zai-org/glm-5-3",
-      "context_limit": 1000000,
+       "context_limit": 1048576,
+      "input_token_cost": null,
+      "output_token_cost": null,
+      "currency": null,
+      "supports_cache_control": null,
+      "reasoning": false
+    },
+    {
+      "name": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
       "input_token_cost": null,
       "output_token_cost": null,
       "currency": null,
@@ -294,12 +347,12 @@ pi --provider enmaas-glm-5-3 --model "rits/zai-org/glm-5-3" -p "Reply with exact
     <h4 class="setup-heading">2. Configure the API key in Goose</h4>
     <p class="setup-copy">Run Goose, select <strong>Configure Providers</strong>, search for <code>enmaas</code>, and configure the API key when prompted. Goose uses the <code>CUSTOM_ENMAAS_API_KEY</code> variable declared in the provider file.</p>
     <div class="code"><button class="copy">copy</button><pre>goose configure</pre></div>
-    <div class="tool-info"><strong>The provider file contains no secret.</strong><br>Keep the API key private and use the exact model ID <code>rits/zai-org/glm-5-3</code>.</div>
+    <div class="tool-info"><strong>The provider file contains no secret.</strong><br>Keep the API key private and use the exact model ID <code>rits/zai-org/glm-5-3</code> or <code>rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</code>.</div>
    </div></div>
    <div class="soon"><span>＋</span><span><b>More tools coming soon.</b> Tell us what you want supported in <a href="https://redhat.enterprise.slack.com/archives/C0C5WRT1VJP">#forum-enmaas</a>.</span></div>
 </div></section>
-<section id="models"><div class="head"><h2>Hosted models, starting with GLM.</h2><p class="lede">GLM 5.3 is the hosted model available in this environment: fast, capable, and text-focused. More hosted models are coming soon.</p></div><div class="card accent"><div class="model-line"><span class="model-id">rits/zai-org/glm-5-3</span><span class="model-note">GLM 5.3 · hosted</span></div><div class="grid" style="margin-top:14px"><p><strong>1M</strong><br><span class="mono">context window</span></p><p><strong>Text-first</strong><br><span class="mono">best for engineering work</span></p></div></div></section>
-<section id="spend"><div class="head"><h2>Your dashboard is coming soon.</h2><p class="lede">The EnMaaS dashboard is being prepared. Until it is available, use the existing AI Budget Help tool to view your spend until the new EnMaaS dashboard is ready.</p></div><div class="card blue dashboard-card"><div class="preview-tag">Illustrative preview · not live data</div><div class="dashboard"><div class="pie-grid"><div class="mini-pie-card"><div class="mini-pie pie-hosted"><div class="mini-pie-label">hosted<br>68%</div></div><span>Hosted vs frontier</span></div><div class="mini-pie-card"><div class="mini-pie pie-models"><div class="mini-pie-label">model<br>spend</div></div><span>Model mix</span></div><div class="mini-pie-card"><div class="mini-pie pie-tokens"><div class="mini-pie-label">token<br>mix</div></div><span>Token types</span></div></div><div class="bars"><div class="bar-row"><span class="bar-name">Claude Sonnet — output</span><div class="bar-track"><div class="bar-fill" data-width="84"></div></div><span class="bar-amount">$42.80</span></div><div class="bar-row"><span class="bar-name">GPT-5.6 — output</span><div class="bar-track"><div class="bar-fill blue" data-width="62"></div></div><span class="bar-amount">$31.40</span></div><div class="bar-row"><span class="bar-name">GLM 5.3 — output</span><div class="bar-track"><div class="bar-fill amber" data-width="37"></div></div><span class="bar-amount">$18.60</span></div></div></div></div><div class="temporary-note"><strong>Temporary spend access while the dashboard is being built</strong><span>The EnMaaS dashboard is not live yet. Until it launches, use the existing AI Budget Help tool to view your spend.</span><a class="btn" href="https://source.redhat.com/departments/products_and_global_engineering/pge_cloud_ops/wiki~2/onboarding_checklist_for_openshift_engineering__qe/ai_budget_help" target="_blank" rel="noopener noreferrer">Open AI Budget Help for now ↗</a></div></section>
+   <section id="models"><div class="head"><h2>Hosted models, now including DeepSeek.</h2><p class="lede">EnMaaS currently provides approved hosted open-weight models for engineering use, including GLM 5.3 and DeepSeek V4.1 Flash.</p></div><div class="card accent"><div class="model-line"><span class="model-id">rits/zai-org/glm-5-3</span><span class="model-note">GLM 5.3 · hosted</span></div><div class="grid" style="margin-top:14px"><p><strong>1M</strong><br><span class="mono">context window</span></p><p><strong>Text-first</strong><br><span class="mono">best for engineering work</span></p></div><div class="model-line" style="margin-top:18px"><span class="model-id">rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</span><span class="model-note">DeepSeek V4.1 Flash · hosted</span></div><p style="margin-top:10px">Use this exact model ID through an OpenAI-compatible Chat Completions client.</p></div></section>
+<section id="spend"><div class="head"><h2>Your dashboard is coming soon.</h2><p class="lede">The EnMaaS dashboard is being prepared. Until it is available, use the existing AI Budget Help tool to view your spend until the new EnMaaS dashboard is ready.</p></div><div class="card blue dashboard-card"><div class="preview-tag">Illustrative preview · not live data</div><div class="dashboard"><div class="pie-grid"><div class="mini-pie-card"><div class="mini-pie pie-hosted"><div class="mini-pie-label">hosted<br>68%</div></div><span>Hosted vs frontier</span></div><div class="mini-pie-card"><div class="mini-pie pie-models"><div class="mini-pie-label">model<br>spend</div></div><span>Model mix</span></div><div class="mini-pie-card"><div class="mini-pie pie-tokens"><div class="mini-pie-label">token<br>mix</div></div><span>Token types</span></div></div><div class="bars"><div class="bar-row"><span class="bar-name">Claude Sonnet — output</span><div class="bar-track"><div class="bar-fill" data-width="84"></div></div><span class="bar-amount">$42.80</span></div><div class="bar-row"><span class="bar-name">GPT-5.6 — output</span><div class="bar-track"><div class="bar-fill blue" data-width="62"></div></div><span class="bar-amount">$31.40</span></div><div class="bar-row"><span class="bar-name">GLM 5.3 / DeepSeek — output</span><div class="bar-track"><div class="bar-fill amber" data-width="37"></div></div><span class="bar-amount">$18.60</span></div></div></div></div><div class="temporary-note"><strong>Temporary spend access while the dashboard is being built</strong><span>The EnMaaS dashboard is not live yet. Until it launches, use the existing AI Budget Help tool to view your spend.</span><a class="btn" href="https://source.redhat.com/departments/products_and_global_engineering/pge_cloud_ops/wiki~2/onboarding_checklist_for_openshift_engineering__qe/ai_budget_help" target="_blank" rel="noopener noreferrer">Open AI Budget Help for now ↗</a></div></section>
 <section id="availability"><div class="head"><h2>Know what to expect.</h2><p class="lede">EnMaaS is being scaled out and tuned. We want you to know how to keep working while it evolves.</p></div><div class="warning"><span class="icon">!</span><div><strong>Availability and model stability</strong><br>Models, capacity, and routing are still being expanded. Short service interruptions or model availability changes may occur during updates and scaling.</div></div><div class="warning fallback"><span class="icon">↩</span><div><strong>Keep a fallback ready</strong><br>For important work, retain your previous provider configuration and workflow. If EnMaaS is temporarily unavailable, switch back to that workflow and retry later.</div></div></section>
 <div style="height:20px"></div>
 </main>

@@ -4,7 +4,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/redhat-et/pricetag-metering/internal/metrics"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
@@ -20,6 +22,10 @@ func NewUsageReportHandler(store *storage.Store) *UsageReportHandler {
 // username. Unlike the entitlement check, polling this endpoint does not
 // create quota-denial ledger rows.
 func (h *UsageReportHandler) HandleUserUsage(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	defer func() {
+		metrics.UsageReportDurationSeconds.Observe(time.Since(start).Seconds())
+	}()
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
