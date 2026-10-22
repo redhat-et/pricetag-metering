@@ -18,6 +18,8 @@ import (
 	"github.com/redhat-et/pricetag-metering/internal/metrics"
 	"github.com/redhat-et/pricetag-metering/internal/pricing"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
+	"github.com/redhat-et/pricetag-metering/internal/tracing"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // statusRecorder captures the response status code so the metrics middleware can
@@ -80,6 +82,12 @@ func postDBPoolStats(store *storage.Store) {
 
 func main() {
 	cfg := config.Load()
+	shutdown, err := tracing.Init(context.Background(), "pricetag-metering", "dev")
+	if err != nil {
+		slog.Error("tracing init failed", "err", err)
+		os.Exit(1)
+	}
+	defer func() { _ = shutdown(context.Background()) }()
 	if cfg.DatabaseURL == "" {
 		slog.Error("DATABASE_URL is required")
 		os.Exit(1)
@@ -437,9 +445,19 @@ func main() {
 	mux.HandleFunc("/api/v1/org/charts", dashboardAPI(orgHandler.HandleOrgCharts))
 	mux.HandleFunc("/api/v1/org/person", dashboardAPI(orgHandler.HandleOrgPerson))
 
+	// Prometheus metrics wrap the mux; when tracing is enabled, otelhttp wraps
+	// that so a request span encloses the metrics-instrumented handler.
+	var handler http.Handler = instrument(mux)
+	if tracing.Enabled() {
+		handler = otelhttp.NewHandler(handler, "",
+			otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
+				return r.Method + " " + r.URL.Path
+			}),
+		)
+	}
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           instrument(mux),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
