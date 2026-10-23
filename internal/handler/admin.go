@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -124,20 +125,55 @@ func RequireAdminAPI(cfg config.Config, next http.HandlerFunc) http.HandlerFunc 
 }
 
 // IsPartnerAdmin makes partner_users.role the normal authorization source. The
-// configured lists are used only when the Partner store is unavailable, so a
-// role change in partner_users can demote a previously listed identity.
+// configured lists are used only when the Partner store is unavailable, or
+// when PARTNER_MISSING_USER_BREAK_GLASS is explicitly enabled for an unseeded
+// dogfood/test directory. A role change in partner_users can always demote a
+// previously listed identity.
 func IsPartnerAdmin(ctx context.Context, cfg config.Config, store *storage.Store, r *http.Request) bool {
 	return IsPartnerAdminUsername(ctx, cfg, store, r.Header.Get(cfg.UserHeader))
 }
 
+// partnerRoleLookup is the subset of the Partner store used for role
+// resolution. Keeping it as an interface lets the authorization fallback be
+// tested without a live Postgres.
+type partnerRoleLookup interface {
+	GetPartnerRoleByUsername(ctx context.Context, username string) (string, error)
+}
+
+// partnerRoleFallbackAllowed reports whether a failed role lookup may use the
+// configured break-glass lists. Missing rows are opt-in for dogfood/test;
+// inactive users are always denied. Other errors mean the store itself could
+// not be read, which is the original break-glass outage contract.
+func partnerRoleFallbackAllowed(cfg config.Config, err error) bool {
+	switch {
+	case errors.Is(err, storage.ErrPartnerUserInactive):
+		return false
+	case errors.Is(err, storage.ErrPartnerUserNotFound):
+		return cfg.PartnerMissingUserBreakGlass
+	default:
+		return true
+	}
+}
+
 func IsPartnerAdminUsername(ctx context.Context, cfg config.Config, store *storage.Store, username string) bool {
+	if store == nil {
+		return isPartnerAdminUsername(ctx, cfg, nil, username)
+	}
+	return isPartnerAdminUsername(ctx, cfg, store, username)
+}
+
+func isPartnerAdminUsername(ctx context.Context, cfg config.Config, lookup partnerRoleLookup, username string) bool {
 	if strings.TrimSpace(username) == "" && cfg.AllowUnauthenticatedAdmin {
 		return true
 	}
-	if store != nil {
-		role, err := store.GetPartnerRoleByUsername(ctx, username)
+	if lookup != nil {
+		role, err := lookup.GetPartnerRoleByUsername(ctx, username)
 		if err == nil {
 			return role == storage.PartnerRoleAdmin || role == storage.PartnerRoleSuperAdmin
+		}
+		if !partnerRoleFallbackAllowed(cfg, err) {
+			slog.Warn("Partner role lookup denied; not using break-glass authorization", "error", err)
+			return false
 		}
 		slog.Warn("Partner role lookup failed; using break-glass authorization", "error", err)
 	}
@@ -169,13 +205,24 @@ func IsPartnerSuperAdmin(ctx context.Context, cfg config.Config, store *storage.
 }
 
 func IsPartnerSuperAdminUsername(ctx context.Context, cfg config.Config, store *storage.Store, username string) bool {
+	if store == nil {
+		return isPartnerSuperAdminUsername(ctx, cfg, nil, username)
+	}
+	return isPartnerSuperAdminUsername(ctx, cfg, store, username)
+}
+
+func isPartnerSuperAdminUsername(ctx context.Context, cfg config.Config, lookup partnerRoleLookup, username string) bool {
 	if strings.TrimSpace(username) == "" && cfg.AllowUnauthenticatedAdmin {
 		return true
 	}
-	if store != nil {
-		role, err := store.GetPartnerRoleByUsername(ctx, username)
+	if lookup != nil {
+		role, err := lookup.GetPartnerRoleByUsername(ctx, username)
 		if err == nil {
 			return role == storage.PartnerRoleSuperAdmin
+		}
+		if !partnerRoleFallbackAllowed(cfg, err) {
+			slog.Warn("Partner super-admin role lookup denied; not using break-glass authorization", "error", err)
+			return false
 		}
 		slog.Warn("Partner super-admin role lookup failed; using break-glass authorization", "error", err)
 	}
