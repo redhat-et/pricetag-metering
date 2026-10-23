@@ -19,14 +19,14 @@ func (l staticPartnerRoleLookup) GetPartnerRoleByUsername(context.Context, strin
 }
 
 // The partner directory is authoritative when it has a row. A missing row is
-// different from an explicit user role: it falls through to the configured
-// break-glass lists so dogfood/test environments work before the directory is
-// seeded. See the ErrPartnerUserNotFound branch in
-// GetPartnerRoleByUsername.
+// different from an explicit user role: when the dogfood/test opt-in is set it
+// falls through to the configured break-glass lists. See the
+// ErrPartnerUserNotFound branch in GetPartnerRoleByUsername.
 func TestPartnerAdminFallbackWhenDirectoryRowMissing(t *testing.T) {
 	cfg := config.Config{
-		AdminUsers:      []string{"admin@example.com"},
-		SuperAdminUsers: []string{"super@example.com"},
+		AdminUsers:                   []string{"admin@example.com"},
+		SuperAdminUsers:              []string{"super@example.com"},
+		PartnerMissingUserBreakGlass: true,
 	}
 	missing := staticPartnerRoleLookup{err: storage.ErrPartnerUserNotFound}
 	ctx := context.Background()
@@ -51,6 +51,44 @@ func TestPartnerAdminFallbackWhenDirectoryRowMissing(t *testing.T) {
 				t.Errorf("isPartnerSuperAdminUsername(%q) = %v, want %v", tc.username, got, tc.super)
 			}
 		})
+	}
+}
+
+// Production keeps the documented contract: a missing directory row does not
+// turn a configured identity into an admin. Operators must opt in explicitly.
+func TestPartnerMissingRowDoesNotFallbackByDefault(t *testing.T) {
+	cfg := config.Config{
+		AdminUsers:      []string{"admin@example.com"},
+		SuperAdminUsers: []string{"super@example.com"},
+	}
+	missing := staticPartnerRoleLookup{err: storage.ErrPartnerUserNotFound}
+	ctx := context.Background()
+
+	if isPartnerAdminUsername(ctx, cfg, missing, "admin@example.com") {
+		t.Fatal("missing directory row must not grant admin without the opt-in")
+	}
+	if isPartnerSuperAdminUsername(ctx, cfg, missing, "super@example.com") {
+		t.Fatal("missing directory row must not grant super-admin without the opt-in")
+	}
+}
+
+// Deactivation must revoke access even when the identity remains in the
+// configured lists and the missing-row fallback is enabled. The storage layer
+// returns ErrPartnerUserInactive for this case, which never falls back.
+func TestPartnerInactiveUserNeverFallsBack(t *testing.T) {
+	cfg := config.Config{
+		AdminUsers:                   []string{"admin@example.com"},
+		SuperAdminUsers:              []string{"super@example.com"},
+		PartnerMissingUserBreakGlass: true,
+	}
+	inactive := staticPartnerRoleLookup{err: errors.Join(storage.ErrPartnerUserInactive, errors.New("deactivated"))}
+	ctx := context.Background()
+
+	if isPartnerAdminUsername(ctx, cfg, inactive, "admin@example.com") {
+		t.Fatal("inactive directory user must not regain admin from configured lists")
+	}
+	if isPartnerSuperAdminUsername(ctx, cfg, inactive, "super@example.com") {
+		t.Fatal("inactive directory user must not regain super-admin from configured lists")
 	}
 }
 

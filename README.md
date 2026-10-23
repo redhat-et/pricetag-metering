@@ -57,8 +57,9 @@ kubectl apply -f deploy/
 | `DASHBOARD_USE_ROLLUPS` | No | `false` | Serve aggregate dashboard panels from `usage_hourly` after backfill and parity are green. The raw path remains the rollback switch. |
 | `LIVE_ROLLUPS_ENABLED` | No | follows `DASHBOARD_USE_ROLLUPS` | Maintain `usage_hourly` synchronously during ingestion. With raw reads and the default `false`, this avoids the hour-wide advisory lock. Explicit `false` with rollup reads makes dashboard data eventually consistent. |
 | `ROLLUP_REFRESH_SECONDS` | No | `300` | Maintenance interval for recent-hour rebuilds and standing parity checks. Monitor `/api/v1/admin/rollups` for refresh lag when live writes are disabled. |
-| `ADMIN_USERS` | No | — | Break-glass admin identities used only when the Partner identity store cannot be read. This does not grant access to an unprovisioned or demoted user while the store is healthy. |
-| `SUPERADMIN_USERS` | No | — | Break-glass operator identities used only when the Partner identity store cannot be read. Seed an active `super_admin` row in `partner_users` before first protected deployment. |
+| `ADMIN_USERS` | No | — | Break-glass admin identities used when the Partner identity store cannot be read, or when `PARTNER_MISSING_USER_BREAK_GLASS=true` and the identity has no directory row at all. This never grants access to an inactive, demoted, or non-current user while the store is healthy. |
+| `SUPERADMIN_USERS` | No | — | Break-glass operator identities used when the Partner identity store cannot be read, or when `PARTNER_MISSING_USER_BREAK_GLASS=true` and the identity has no directory row at all. Seed an active `super_admin` row in `partner_users` before first protected deployment. |
+| `PARTNER_MISSING_USER_BREAK_GLASS` | No | `false` | Dogfood/test only: allow `ADMIN_USERS`/`SUPERADMIN_USERS` when the Partner directory has no row for the identity. Leave unset in production. It does not apply to deactivated or non-current users. |
 
 ## CloudEvents Format
 

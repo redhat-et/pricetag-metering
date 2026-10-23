@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -55,6 +56,55 @@ func TestPartnerRoleOverridesBreakGlassWhenStoreIsAvailable(t *testing.T) {
 	}
 	if !IsPartnerAdmin(ctx, cfg, store, req) || !IsPartnerSuperAdmin(ctx, cfg, store, req) {
 		t.Fatal("stored super-admin role must grant both admin levels")
+	}
+}
+
+// Deactivation must revoke authorization even when the identity is still in
+// ADMIN_USERS/SUPERADMIN_USERS and the dogfood/test missing-row fallback is
+// enabled. This exercises the SQL p.active path that the fake lookup cannot.
+func TestDeactivatedPartnerUserDoesNotRegainBreakGlassAccess(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set — Partner role authorization integration test needs a Postgres")
+	}
+	store := openFreshStore(t, dsn)
+	ctx := context.Background()
+	const (
+		userID = "123e4567-e89b-12d3-a456-426614174021"
+		email  = "deactivated@example.com"
+	)
+	if _, err := store.CreatePartnerUser(ctx, "partner-m2m", userID, map[string]any{
+		"email": email, "first_name": "Deactivated", "last_name": "User",
+	}); err != nil {
+		t.Fatalf("CreatePartnerUser: %v", err)
+	}
+	if _, err := store.UpdatePartnerUserAccess(ctx, "partner-m2m", userID, storage.PartnerRoleSuperAdmin, nil); err != nil {
+		t.Fatalf("UpdatePartnerUserAccess super-admin: %v", err)
+	}
+
+	cfg := config.Config{
+		UserHeader:                   "X-Forwarded-User",
+		AdminUsers:                   []string{email},
+		SuperAdminUsers:              []string{email},
+		PartnerMissingUserBreakGlass: true,
+	}
+	req := httptest.NewRequest(http.MethodGet, "/whoami", nil)
+	req.Header.Set(cfg.UserHeader, email)
+	if !IsPartnerAdmin(ctx, cfg, store, req) || !IsPartnerSuperAdmin(ctx, cfg, store, req) {
+		t.Fatal("active super-admin should have both admin levels")
+	}
+
+	if _, err := store.BeginPartnerUserDeactivation(ctx, "partner-m2m", userID); err != nil {
+		t.Fatalf("BeginPartnerUserDeactivation: %v", err)
+	}
+	if IsPartnerAdmin(ctx, cfg, store, req) {
+		t.Fatal("deactivated user must not regain admin from configured lists")
+	}
+	if IsPartnerSuperAdmin(ctx, cfg, store, req) {
+		t.Fatal("deactivated user must not regain super-admin from configured lists")
+	}
+	if _, err := store.GetPartnerRoleByUsername(ctx, email); !errors.Is(err, storage.ErrPartnerUserInactive) {
+		t.Fatalf("GetPartnerRoleByUsername after deactivation = %v, want ErrPartnerUserInactive", err)
 	}
 }
 

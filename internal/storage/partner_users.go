@@ -233,20 +233,33 @@ func (s *Store) GetPartnerUser(ctx context.Context, userID string) (PartnerUser,
 }
 
 func (s *Store) GetPartnerRoleByUsername(ctx context.Context, username string) (string, error) {
-	var role string
+	var (
+		role    string
+		active  bool
+		current bool
+	)
 	err := s.db.QueryRowContext(ctx, `
-		SELECT p.role
+		SELECT p.role, p.active, l.is_current
 		FROM partner_user_logins l
 		JOIN partner_users p ON p.user_id = l.user_id
-		WHERE LOWER(l.username) = LOWER($1) AND l.is_current AND p.active`, strings.TrimSpace(username)).Scan(&role)
+		WHERE LOWER(l.username) = LOWER($1)`, strings.TrimSpace(username)).Scan(&role, &active, &current)
 	if errors.Is(err, sql.ErrNoRows) {
-		// A missing directory record is different from an explicit user-role
-		// record. Callers use ErrPartnerUserNotFound to apply their configured
-		// break-glass admin/super-admin lists in environments whose partner
-		// directory has not been seeded yet (notably dogfood).
+		// No login mapping at all. Callers may opt into their configured
+		// break-glass lists for this case in unseeded dogfood/test
+		// environments; production denies it by default.
 		return "", ErrPartnerUserNotFound
 	}
-	return role, err
+	if err != nil {
+		return "", err
+	}
+	if !active || !current {
+		// The directory knows this identity but it is deactivated or no longer
+		// the current login mapping. This must never trigger break-glass
+		// authorization, otherwise deactivation would not revoke admin access
+		// for an identity that remains in ADMIN_USERS/SUPERADMIN_USERS.
+		return "", ErrPartnerUserInactive
+	}
+	return role, nil
 }
 
 func (s *Store) ListAllPartnerUsers(ctx context.Context) ([]PartnerUser, error) {
