@@ -29,3 +29,20 @@ func TestManagerPickerReviewGuards(t *testing.T) {
 		}
 	}
 }
+
+func TestManagerTimelineRanksByUsage(t *testing.T) {
+	data, err := FS.ReadFile("manager.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"const ranked=[...totals.entries()].filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);",
+		"const top=ranked.slice(0,7).map(([n])=>n);",
+		"const tail=ranked.slice(7).map(([n])=>n);",
+		"tail.length?['__other__']",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("manager timeline no longer contains %q", want)
+		}
+	}
+}

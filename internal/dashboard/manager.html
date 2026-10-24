@@ -882,13 +882,32 @@ const privacyLegendBlur={
 };
 
 function renderTimeline(buckets){
-  const byDay={}, names=new Set();
+  const byDay={}, totals=new Map();
   const val=b=>tlMetric==='cost'?(b.total_cost_usd||0):(b.total_tokens||0);
-  for(const b of buckets){const d=b.bucket.slice(0,10);byDay[d]=byDay[d]||{};byDay[d][b.series]=val(b);names.add(b.series);}
+  for(const b of buckets){
+    const d=b.bucket.slice(0,10),v=val(b);
+    byDay[d]=byDay[d]||{};
+    byDay[d][b.series]=(byDay[d][b.series]||0)+v;
+    totals.set(b.series,(totals.get(b.series)||0)+v);
+  }
   const days=Object.keys(byDay).sort();
   const palette=['#4da0f8','#3dcc6e','#eba830','#a88cf8','#38d4c2','#e8554e','#8090a8'];
-  const ds=[...names].slice(0,7).map((n,i)=>({label:n,data:days.map(d=>byDay[d][n]||0),
-    borderColor:palette[i%7],backgroundColor:palette[i%7]+'22',tension:.3,fill:false,pointRadius:2,borderWidth:2}));
+  // Rank by the selected metric over the whole window. The old code took
+  // the first seven series in query order, which surfaced zero-use models
+  // and hid real traffic (for example DeepSeek) further down the alphabet.
+  const ranked=[...totals.entries()].filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  const top=ranked.slice(0,7).map(([n])=>n);
+  const tail=ranked.slice(7).map(([n])=>n);
+  const series=top.concat(tail.length?['__other__']:[]);
+  const dataFor=(day,n)=>n==='__other__'
+    ? tail.reduce((sum,x)=>sum+((byDay[day]&&byDay[day][x])||0),0)
+    : ((byDay[day]&&byDay[day][n])||0);
+  const ds=series.map((n,i)=>{
+    const other=n==='__other__';
+    const color=other?'#5b6b82':palette[i%palette.length];
+    return {label:other?'Other':n,data:days.map(d=>dataFor(d,n)),
+      borderColor:color,backgroundColor:color+'22',tension:.3,fill:false,pointRadius:2,borderWidth:2};
+  });
   if(tlChart)tlChart.destroy();
   tlChart=new Chart(document.getElementById('tl'),{type:'line',
     data:{labels:days,datasets:ds},
