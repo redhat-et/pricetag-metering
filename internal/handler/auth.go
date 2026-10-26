@@ -2,21 +2,25 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/redhat-et/pricetag-metering/internal/config"
 	"github.com/redhat-et/pricetag-metering/internal/dashboard"
+	"github.com/redhat-et/pricetag-metering/internal/maasapi"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
@@ -43,17 +47,26 @@ type AuthHandler struct {
 	cfg        config.Config
 	secret     []byte
 	httpClient *http.Client
+	oidc       *oidcProvider
 	// orgStore backs the post-login manager redirect: people whose directory
 	// record has reports land on /manager, the view they actually came for.
 	// Optional — a nil store (or a lookup failure) keeps the old behaviour
 	// and lands everyone on /dashboard.
 	orgStore *storage.Store
+	// maasClient is only used by the temporary dev-login reset: the
+	// "first-time user" persona must not inherit keys from an earlier run.
+	// Nil is safe and disables the key reset.
+	maasClient *maasapi.Client
 }
 
 // SetOrgStore wires the directory lookup used by the login redirect. Kept a
 // setter so login stays constructible without a database (tests, lite
 // deployments).
 func (h *AuthHandler) SetOrgStore(s *storage.Store) { h.orgStore = s }
+
+// SetMaaSClient wires the key-service client used by the dev-login reset.
+// Production login never calls it.
+func (h *AuthHandler) SetMaaSClient(c *maasapi.Client) { h.maasClient = c }
 
 func NewAuthHandler(cfg config.Config) *AuthHandler {
 	secret := []byte(os.Getenv("SESSION_SECRET"))
@@ -99,7 +112,7 @@ func (h *AuthHandler) setCookie(w http.ResponseWriter, username string, groups [
 		Path:     "/",
 		MaxAge:   int(cookieMaxAge.Seconds()),
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.cfg.SessionCookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -136,6 +149,28 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, "login page not found", http.StatusInternalServerError)
 			return
+		}
+		if h.oidc != nil {
+			data = bytes.Replace(data, []byte("<!-- OIDC_LOGIN -->"), []byte(`<a class="sso-button" href="/oauth/login">Sign in with Red Hat SSO</a>`), 1)
+		} else {
+			data = bytes.Replace(data, []byte("<!-- OIDC_LOGIN -->"), nil, 1)
+		}
+		// Local/demo shortcuts only. The production SSO link above is never
+		// modified; this is a separate, env-gated section below it. When the
+		// direct dev identities are configured they replace this mock-IdP
+		// picker; the mock picker is still reachable through the SSO button.
+		if h.oidc != nil && h.cfg.OIDC.TestLogin && len(h.cfg.DevLoginUsers) == 0 {
+			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), testLoginPanel, 1)
+		} else {
+			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), nil, 1)
+		}
+		// Deployment-scoped test identities. Unlike the mock-IdP personas
+		// above, these issue a local session directly and are only enabled by
+		// an explicit allowlist plus a dev_test tag on the directory row.
+		if panel := h.devLoginPanel(r); len(panel) > 0 {
+			data = bytes.Replace(data, []byte("<!-- DEV_LOGIN -->"), panel, 1)
+		} else {
+			data = bytes.Replace(data, []byte("<!-- DEV_LOGIN -->"), nil, 1)
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -194,26 +229,241 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("user logged in", "username", result.Username)
 	h.setCookie(w, result.Username, result.Groups, "")
-	http.Redirect(w, r, h.loginDestination(r, result.Username), http.StatusFound)
+	http.Redirect(w, r, h.loginDestination(r, result.Username, result.Groups), http.StatusFound)
+}
+
+// devLoginPanel renders the explicitly allowlisted test identities. It is
+// empty unless DEV_LOGIN_USERS is set, so the login page is unchanged in
+// every normal deployment.
+func (h *AuthHandler) devLoginPanel(r *http.Request) []byte {
+	if len(h.cfg.DevLoginUsers) == 0 {
+		return nil
+	}
+	var b strings.Builder
+	b.WriteString(`<div class="test-login">
+  <div class="divider"><span>Dev test sign-in</span></div>
+  <p>Development environment only. Seeded demo accounts with sample usage.</p>
+  <div class="persona-grid">`)
+	for _, username := range h.cfg.DevLoginUsers {
+		label, detail := username, username
+		if h.orgStore != nil {
+			if pu, err := h.orgStore.PartnerUserByMaaSUsername(r.Context(), username); err == nil {
+				first, _ := pu.Tags["first_name"].(string)
+				last, _ := pu.Tags["last_name"].(string)
+				if name := strings.TrimSpace(first + " " + last); name != "" {
+					label = name
+				}
+				if role, _ := pu.Tags["dev_label"].(string); role != "" {
+					detail = role
+				}
+			}
+		}
+		fmt.Fprintf(&b, `<a class="persona" href="/dev-login?as=%s" title="%s"><strong>%s</strong><span>%s</span></a>`,
+			url.QueryEscape(username), html.EscapeString(username), html.EscapeString(label), html.EscapeString(detail))
+	}
+	b.WriteString(`</div></div>`)
+	return []byte(b.String())
+}
+
+// HandleDevLogin opens a local session for an explicitly configured test
+// identity. It is disabled unless DEV_LOGIN_USERS is set, and the target must
+// both appear in that allowlist and carry dev_test=true in the partner
+// directory. It never issues a session for an admin or an untagged account.
+func (h *AuthHandler) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
+	if len(h.cfg.DevLoginUsers) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	target := strings.TrimSpace(r.URL.Query().Get("as"))
+	allowed := false
+	for _, username := range h.cfg.DevLoginUsers {
+		if strings.EqualFold(username, target) {
+			allowed = true
+			break
+		}
+	}
+	if target == "" || !allowed {
+		http.Error(w, "not a dev login user", http.StatusForbidden)
+		return
+	}
+	if h.orgStore == nil {
+		http.Error(w, "dev login requires the partner directory", http.StatusServiceUnavailable)
+		return
+	}
+	pu, err := h.orgStore.PartnerUserByMaaSUsername(r.Context(), target)
+	if err != nil || !pu.Active {
+		http.Error(w, "unknown or inactive dev user", http.StatusForbidden)
+		return
+	}
+	if !isDevTestUser(pu.Tags) {
+		http.Error(w, "user is not enabled for dev login", http.StatusForbidden)
+		return
+	}
+	// A direct login has no IdP claim set. Use the groups recorded on the
+	// seeded directory row so the same access gates run as they would after
+	// SSO; an empty list deliberately exercises the no-group gate.
+	groups := devLoginGroups(pu.Tags)
+	// The "new user" persona must start the first-run flow again on every
+	// click, exactly like the local mock IdP does. Driven by a directory tag
+	// so no test address is hardcoded here.
+	if isDevResetUser(pu.Tags) {
+		if err := h.orgStore.ResetAgreement(r.Context(), pu.UserID, "terms", h.cfg.Onboarding.TermsVersion); err != nil {
+			slog.Warn("dev test persona reset failed", "username", target, "error", err)
+		}
+		h.revokeDevKeys(r.Context(), target, groups)
+	}
+	slog.Warn("dev test login used", "username", target, "remote", r.RemoteAddr)
+	h.setCookie(w, target, groups, "")
+	// The access gate forces "enforce" for these dev identities, so the
+	// country/group/terms failures are visible without flipping the whole
+	// deployment to ONBOARDING_MODE=enforce, which would affect real users.
+	http.Redirect(w, r, h.loginDestination(r, target, groups), http.StatusFound)
+}
+
+// revokeDevKeys removes the keys an earlier dev-login run created for the
+// reset persona. MaaS keeps revoked keys for its own record, so the dev-only
+// key list filter hides them from this persona to reproduce a truly new
+// account. Failures are logged and never block the login.
+func (h *AuthHandler) revokeDevKeys(ctx context.Context, username string, groups []string) {
+	if h.maasClient == nil || len(groups) == 0 {
+		return
+	}
+	revoked := 0
+	seen := make(map[string]struct{})
+	for _, group := range groups {
+		keys, err := h.maasClient.ListUserAPIKeys(ctx, username, group)
+		if err != nil {
+			slog.Warn("dev test key list failed", "username", username, "group", group, "error", err)
+			continue
+		}
+		for _, key := range keys {
+			if key.ID == "" || strings.EqualFold(strings.TrimSpace(key.Status), "revoked") {
+				continue
+			}
+			if _, ok := seen[key.ID]; ok {
+				continue
+			}
+			seen[key.ID] = struct{}{}
+			status, err := h.maasClient.RevokeUserAPIKey(ctx, key.ID, username, group)
+			if err != nil {
+				slog.Warn("dev test key revoke failed", "username", username, "key", key.ID, "error", err)
+				continue
+			}
+			if status >= http.StatusBadRequest && status != http.StatusNotFound && status != http.StatusForbidden {
+				slog.Warn("dev test key revoke rejected", "username", username, "key", key.ID, "status", status)
+				continue
+			}
+			revoked++
+		}
+	}
+	if revoked > 0 {
+		slog.Info("dev test keys revoked", "username", username, "count", revoked)
+	}
+}
+
+// devResetIdentity reports whether a caller is an allowlisted dev_test user
+// whose first-run state is reset on every dev login.
+func devResetIdentity(ctx context.Context, cfg config.Config, store *storage.Store, username string) bool {
+	if len(cfg.DevLoginUsers) == 0 || store == nil {
+		return false
+	}
+	allowed := false
+	for _, candidate := range cfg.DevLoginUsers {
+		if strings.EqualFold(strings.TrimSpace(candidate), username) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return false
+	}
+	pu, err := store.PartnerUserByMaaSUsername(ctx, username)
+	if err != nil {
+		return false
+	}
+	return isDevTestUser(pu.Tags) && isDevResetUser(pu.Tags)
+}
+
+func isDevResetUser(tags map[string]any) bool {
+	value, ok := tags["dev_reset_on_login"]
+	if !ok {
+		return false
+	}
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(v, "true")
+	}
+	return false
+}
+
+// devLoginGroups reads the optional dev_groups tag (JSON array or
+// comma-separated string) used to stand in for IdP group claims.
+func devLoginGroups(tags map[string]any) []string {
+	value, ok := tags["dev_groups"]
+	if !ok {
+		return nil
+	}
+	switch v := value.(type) {
+	case []any:
+		groups := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				groups = append(groups, strings.TrimSpace(s))
+			}
+		}
+		return groups
+	case []string:
+		return v
+	case string:
+		var groups []string
+		for _, s := range strings.Split(v, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				groups = append(groups, s)
+			}
+		}
+		return groups
+	}
+	return nil
+}
+
+func isDevTestUser(tags map[string]any) bool {
+	value, ok := tags["dev_test"]
+	if !ok {
+		return false
+	}
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(v, "true")
+	}
+	return false
 }
 
 // loginDestination is where a successful login lands. Admins keep the Usage
 // page; a manager (someone with direct reports in partner_users) goes straight
 // to their team view. The legacy org directory is intentionally not consulted:
-// partner_users is the single identity source. Users only in the legacy
-// directory land on /dashboard (their own usage). Fails closed to /dashboard.
-func (h *AuthHandler) loginDestination(r *http.Request, username string) string {
+// partner_users is the single identity source. Users without a partner role
+// land on /account. Fails closed to /dashboard.
+func (h *AuthHandler) loginDestination(r *http.Request, username string, groups []string) string {
 	if h.orgStore == nil {
 		return "/dashboard"
 	}
 	if IsPartnerAdminUsername(r.Context(), h.cfg, h.orgStore, username) {
 		return "/dashboard"
 	}
+	// Incomplete onboarding always wins over the role-based landing page:
+	// nothing else is usable until the three gates pass.
+	if NewAccessGate(h.cfg, h.orgStore).NeedsOnboarding(r.Context(), username, groups) {
+		return "/onboarding"
+	}
 	// Manager routing is derived from the partner hierarchy only.
 	if _, isManager, err := h.orgStore.PartnerManagerScope(r.Context(), username); err == nil && isManager {
 		return "/manager"
 	}
-	return "/dashboard"
+	return "/account"
 }
 
 // HandleImpersonate lets a super-admin open another user's view. With
@@ -263,7 +513,7 @@ func (h *AuthHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.cfg.SessionCookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/login", http.StatusFound)

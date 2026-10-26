@@ -279,8 +279,19 @@ func main() {
 
 	adminHandler := handler.NewAdminHandler(k8sClient, maasClient, cfg)
 	adminHandler.SetStore(store)
+	accessGate := handler.NewAccessGate(cfg, store)
+	onboardingHandler := handler.NewOnboardingHandler(accessGate, store)
+	meUsageHandler := handler.NewMeUsageHandler(store, cfg)
 	authHandler := handler.NewAuthHandler(cfg)
+	if cfg.OIDC.Enabled {
+		if err := authHandler.InitOIDC(ctx); err != nil {
+			slog.Error("OIDC is enabled but provider initialization failed", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("OIDC dashboard login enabled", "issuer", cfg.OIDC.IssuerURL, "client_id", cfg.OIDC.ClientID)
+	}
 	authHandler.SetOrgStore(store) // managers land on /manager after login
+	authHandler.SetMaaSClient(maasClient) // dev-login persona reset only
 	keysHandler := handler.NewKeysHandler(k8sClient, cfg, store)
 	usageReportHandler := handler.NewUsageReportHandler(store)
 	partnerUsersHandler := handler.NewPartnerUsersHandler(store, maasClient, cfg.PartnerUserKeyGroup)
@@ -317,6 +328,11 @@ func main() {
 
 	// Auth endpoints — unauthenticated by definition
 	mux.HandleFunc("/login", authHandler.HandleLogin)
+	// Explicit, env-gated test identities for development deployments. The
+	// handler 404s unless DEV_LOGIN_USERS is configured.
+	mux.HandleFunc("/dev-login", authHandler.HandleDevLogin)
+	mux.HandleFunc("/oauth/login", authHandler.HandleOIDCLogin)
+	mux.HandleFunc("/oauth/callback", authHandler.HandleOIDCCallback)
 	mux.HandleFunc("/logout", authHandler.HandleLogout)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
@@ -336,6 +352,10 @@ func main() {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
+
+	// Public Terms document. The authenticated acceptance flow lives under
+	// /api/v1/me/onboarding and is recorded per version in user_agreements.
+	mux.HandleFunc("/legal/terms", onboardingHandler.ServeTerms)
 
 	// Public onboarding page — no session by design: it is the link you
 	// send someone before they have a key. Its gateway URLs are substituted
@@ -357,6 +377,17 @@ func main() {
 	mux.HandleFunc("/me", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusMovedPermanently)
 	})
+	// Authenticated onboarding + account surface. /onboarding must stay
+	// reachable for users who fail a gate; /account is gate-protected.
+	mux.HandleFunc("/onboarding", auth(onboardingHandler.ServeOnboarding))
+	mux.HandleFunc("/account", auth(accessGate.RequireAccount(onboardingHandler.ServeAccount)))
+	mux.HandleFunc("/api/v1/me/onboarding", auth(onboardingHandler.HandleState))
+	mux.HandleFunc("/api/v1/me/onboarding/accept", auth(onboardingHandler.HandleAcceptTerms))
+	mux.HandleFunc("/api/v1/me/usage/summary", auth(accessGate.RequireOnboardedAPI(meUsageHandler.HandleSummary)))
+	mux.HandleFunc("/api/v1/me/usage/models", auth(accessGate.RequireOnboardedAPI(meUsageHandler.HandleModels)))
+	mux.HandleFunc("/api/v1/me/usage/recent", auth(accessGate.RequireOnboardedAPI(meUsageHandler.HandleRecent)))
+	mux.HandleFunc("/api/v1/me/keys", auth(accessGate.RequireOnboardedAPI(adminHandler.HandleMyKeys)))
+	mux.HandleFunc("/api/v1/me/keys/", auth(accessGate.RequireOnboardedAPI(adminHandler.HandleMyKeys)))
 	mux.HandleFunc("/me/keys", auth(keysHandler.HandleKeys))
 	mux.HandleFunc("/me/keys/", auth(keysHandler.HandleKeys))
 	mux.HandleFunc("/me/whoami", auth(keysHandler.HandleWhoAmI))
@@ -370,7 +401,15 @@ func main() {
 	// resolved scope).
 	dashCache := handler.NewDashboardCache(cfg, store)
 	dashboardPage := func(next http.HandlerFunc) http.HandlerFunc {
-		return auth(handler.RequirePartnerAdminPage(cfg, store, next, dashboardHandler.ServeComingSoon))
+		return auth(func(w http.ResponseWriter, r *http.Request) {
+			if !handler.IsPartnerAdmin(r.Context(), cfg, store, r) {
+				// Regular users now have a real account page; the old
+				// "coming soon" dead end is retired.
+				http.Redirect(w, r, "/account", http.StatusFound)
+				return
+			}
+			next(w, r)
+		})
 	}
 	dashboardAPI := func(next http.HandlerFunc) http.HandlerFunc {
 		return auth(handler.RequirePartnerAdminAPI(cfg, store, next))
@@ -387,7 +426,7 @@ func main() {
 
 	// Pricing modal rate card — readable by any logged-in user: the rates
 	// are the same numbers every request is billed at, no user data.
-	mux.HandleFunc("/api/v1/pricing", dashboardAPI(handler.NewPricingRefreshHandler(store).HandleList))
+	mux.HandleFunc("/api/v1/pricing", auth(handler.NewPricingRefreshHandler(store).HandleList))
 
 	// Operator pages (admin console, routing) are SUPER-ADMIN
 	// only. Regular admins get the org-wide Usage view on /dashboard and
@@ -395,6 +434,7 @@ func main() {
 	// pages below mutate platform state. Gated server-side, not just in the
 	// nav, so deep links and direct API calls are refused too.
 	mux.HandleFunc("/admin", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeAdmin)))
+	mux.HandleFunc("/admin/access", auth(handler.RequirePartnerSuperAdmin(cfg, store, onboardingHandler.ServeAccessPolicyPage)))
 	mux.HandleFunc("/routing", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeRouting)))
 	mux.HandleFunc("/admin2", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeRouting)))
 	// Admin APIs are gated by RequirePartnerSuperAdmin (auth() alone is not enough —
@@ -422,6 +462,9 @@ func main() {
 	// the caller's own keys. The handlers scope non-admins to their own
 	// identity, so a regular user can only ever see or create their own keys.
 	mux.HandleFunc("/api/v1/admin/keys", auth(adminHandler.HandleKeys))
+	// Country/group access policy — super-admin only. Changes take effect on
+	// the next gate evaluation, without a redeploy.
+	mux.HandleFunc("/api/v1/admin/access-policy", auth(handler.RequirePartnerSuperAdmin(cfg, store, onboardingHandler.HandleAccessPolicy)))
 	mux.HandleFunc("/api/v1/admin/keys/", auth(adminHandler.HandleKeys))
 	// Admin "view as user" — the handler checks admin against the real
 	// session identity, not the swapped header, so it also clears itself.
@@ -431,11 +474,12 @@ func main() {
 	// scope (plain user sees self, manager sees subtree, super-admin sees
 	// all). Backed entirely by partner_users.
 	orgHandler := handler.NewPartnerOrgHandler(store, cfg)
-	mux.HandleFunc("/manager", dashboardPage(orgHandler.ServeManager))
-	mux.HandleFunc("/api/v1/org/scope", dashboardAPI(orgHandler.HandleScope))
-	mux.HandleFunc("/api/v1/org/usage", dashboardAPI(orgHandler.HandleOrgUsage))
-	mux.HandleFunc("/api/v1/org/charts", dashboardAPI(orgHandler.HandleOrgCharts))
-	mux.HandleFunc("/api/v1/org/person", dashboardAPI(orgHandler.HandleOrgPerson))
+	managerAuth := func(next http.HandlerFunc) http.HandlerFunc { return auth(next) }
+	mux.HandleFunc("/manager", managerAuth(orgHandler.ServeManager))
+	mux.HandleFunc("/api/v1/org/scope", managerAuth(orgHandler.HandleScope))
+	mux.HandleFunc("/api/v1/org/usage", managerAuth(orgHandler.HandleOrgUsage))
+	mux.HandleFunc("/api/v1/org/charts", managerAuth(orgHandler.HandleOrgCharts))
+	mux.HandleFunc("/api/v1/org/person", managerAuth(orgHandler.HandleOrgPerson))
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

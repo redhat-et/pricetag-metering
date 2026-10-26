@@ -72,6 +72,8 @@ type Config struct {
 	// header is present. Convenient for local development, unsafe once
 	// the service is exposed.
 	AllowUnauthenticatedAdmin bool
+	// SessionCookieSecure defaults true. Disable only for local HTTP testing.
+	SessionCookieSecure bool
 
 	// DefaultGroup is attributed to callers whose group cannot be
 	// resolved from a header or from the Kubernetes adapter.
@@ -163,6 +165,74 @@ type Config struct {
 	KeyService KeyService
 	Kubernetes Kubernetes
 	Welcome    Welcome
+	OIDC       OIDC
+	Onboarding Onboarding
+	Access     Access
+
+	// DevLoginUsers enables an explicit, non-SSO test login on /login.
+	// Empty (the default) disables the feature entirely, including the
+	// endpoint. Every listed username must also resolve to an active
+	// partner user tagged dev_test=true, so a misconfigured list cannot
+	// expose a real account.
+	DevLoginUsers []string
+}
+
+// Onboarding modes. The feature ships disabled: shipping the code must not
+// change who can reach the account page or create keys.
+const (
+	OnboardingOff     = "off"
+	OnboardingObserve = "observe"
+	OnboardingEnforce = "enforce"
+)
+
+// Onboarding controls the self-service first-run experience and Terms
+// acceptance. Mode is off|observe|enforce. Observe evaluates the gates and
+// records the would-be decision but never blocks, which is how a deployment
+// validates IdP groups and country data before enforcement.
+type Onboarding struct {
+	Mode                  string
+	TermsVersion          string
+	TermsURL              string
+	DefaultKeyExpiryHours int
+	MaxKeyExpiryHours     int
+	AllowNoExpiry         bool
+}
+
+// Access is the country/group gating policy. The database-backed policy
+// (managed by a super admin in the console) overrides these env values when
+// present, so opening or closing access does not require a redeploy.
+type Access struct {
+	// AllowedGroups is the group allowlist. Matching is case-insensitive.
+	// An empty list accepts any non-technical group.
+	AllowedGroups []string
+	// BlockedCountries is the ISO 3166-1 alpha-3 blocklist.
+	BlockedCountries []string
+	// AllowUnknownCountry decides the outcome when neither the directory nor
+	// the IdP supplies a country. Default is false (deny).
+	AllowUnknownCountry bool
+}
+
+// OIDC contains the optional corporate SSO configuration. It is deliberately
+// disabled by default: shipping OIDC code must not change the production login
+// path until the provider, redirect URI, and rollout have been reviewed.
+type OIDC struct {
+	Enabled     bool
+	ClaimsDebug bool
+	// TestLogin exposes local persona shortcuts on the login page and forwards
+	// a persona hint to the identity provider. It exists purely for the local
+	// mock IdP; leave it false everywhere else.
+	TestLogin             bool
+	IssuerURL             string
+	ClientID              string
+	ClientSecret          string
+	RedirectURL           string
+	PostLogoutRedirectURL string
+	Scopes                []string
+}
+
+func (o OIDC) EnabledAndConfigured() bool {
+	return o.Enabled && o.IssuerURL != "" && o.ClientID != "" &&
+		o.ClientSecret != "" && o.RedirectURL != ""
 }
 
 // Welcome holds the public gateway endpoints surfaced on the
@@ -294,6 +364,7 @@ func Load() Config {
 		// ALLOW_UNAUTHENTICATED_ADMIN=true deliberately for local
 		// development only.
 		AllowUnauthenticatedAdmin: envBool("ALLOW_UNAUTHENTICATED_ADMIN", false),
+		SessionCookieSecure:       envBool("SESSION_COOKIE_SECURE", true),
 		DefaultGroup:              envDefault("DEFAULT_GROUP", "default"),
 		MonthSpendEnabled:         envBool("MONTH_SPEND_ENABLED", false),
 		MonthSpendWrites:          envBool("MONTH_SPEND_WRITE_ENABLED", false),
@@ -332,6 +403,33 @@ func Load() Config {
 			GatewayURL:   strings.TrimSuffix(os.Getenv("WELCOME_GATEWAY_URL"), "/"),
 			DashboardURL: strings.TrimSuffix(os.Getenv("WELCOME_DASHBOARD_URL"), "/"),
 		},
+		OIDC: OIDC{
+			Enabled:               envBool("OIDC_ENABLED", false),
+			ClaimsDebug:           envBool("OIDC_CLAIMS_DEBUG", false),
+			TestLogin:             envBool("OIDC_TEST_LOGIN", false),
+			IssuerURL:             strings.TrimSuffix(os.Getenv("OIDC_ISSUER_URL"), "/"),
+			ClientID:              os.Getenv("OIDC_CLIENT_ID"),
+			ClientSecret:          os.Getenv("OIDC_CLIENT_SECRET"),
+			RedirectURL:           os.Getenv("OIDC_REDIRECT_URL"),
+			PostLogoutRedirectURL: os.Getenv("OIDC_POST_LOGOUT_REDIRECT_URL"),
+			Scopes:                envListDefault("OIDC_SCOPES", []string{"openid", "profile", "email", "groups"}),
+		},
+		Onboarding: Onboarding{
+			Mode:                  strings.ToLower(envDefault("ONBOARDING_MODE", OnboardingOff)),
+			TermsVersion:          envDefault("ONBOARDING_TERMS_VERSION", "draft-tbd"),
+			TermsURL:              envDefault("ONBOARDING_TERMS_URL", "/legal/terms"),
+			DefaultKeyExpiryHours: envInt("DEFAULT_KEY_EXPIRY_HOURS", 90*24),
+			MaxKeyExpiryHours:     envInt("MAX_KEY_EXPIRY_HOURS", 365*24),
+			AllowNoExpiry:         envBool("ALLOW_NO_EXPIRY", false),
+		},
+		Access: Access{
+			AllowedGroups:       envList("ACCESS_ALLOWED_GROUPS"),
+			BlockedCountries:    envListUpper("ACCESS_BLOCKED_COUNTRIES"),
+			AllowUnknownCountry: envBool("ACCESS_UNKNOWN_COUNTRY_ALLOW", false),
+		},
+		// Dev-only test identities on /login. Off unless DEV_LOGIN_USERS is
+		// explicitly set; also requires a matching dev_test=true partner tag.
+		DevLoginUsers: envList("DEV_LOGIN_USERS"),
 		Kubernetes: Kubernetes{
 			Namespace:                  envDefault("K8S_NAMESPACE", "default"),
 			ModelGroup:                 modelGroup,
@@ -382,6 +480,15 @@ func envList(key string) []string {
 	return result
 }
 
+// envListUpper is envList with every entry upper-cased, for ISO country codes.
+func envListUpper(key string) []string {
+	values := envList(key)
+	for i, v := range values {
+		values[i] = strings.ToUpper(v)
+	}
+	return values
+}
+
 func envSecrets(keys ...string) []string {
 	var result []string
 	seen := make(map[string]struct{})
@@ -394,6 +501,14 @@ func envSecrets(keys ...string) []string {
 		}
 	}
 	return result
+}
+
+func envListDefault(key string, fallback []string) []string {
+	values := envList(key)
+	if len(values) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return values
 }
 
 func envInt(key string, fallback int) int {

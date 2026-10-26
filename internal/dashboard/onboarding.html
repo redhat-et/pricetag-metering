@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Welcome to EnMaaS</title>
+<meta name="description" content="Finish setting up your EnMaaS access — one key for frontier and hosted models.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#080b0e;--panel:#11161b;--panel2:#151b21;--ink:#e6edf3;--muted:#94a3b1;--dim:#66727e;
+    --line:#242c34;--line2:#2d3741;
+    --en:#3fb950;--en-soft:rgba(63,185,80,.12);--en-line:rgba(63,185,80,.34);
+    --maas:#58a6ff;--maas-soft:rgba(88,166,255,.1);--maas-line:rgba(88,166,255,.3);
+    --amber:#d29922;--amber-soft:rgba(210,153,34,.1);
+    --red:#f85149;--red-soft:rgba(248,81,73,.1);
+    --shadow:0 22px 55px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;color:var(--ink);background:radial-gradient(1100px 520px at 50% -240px,rgba(63,185,80,.07),transparent 70%),var(--bg);font:16px/1.65 "IBM Plex Sans",sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:var(--maas)}
+  .shell{max-width:1000px;margin:auto;padding:0 28px}
+  .page-flow{position:relative;overflow:hidden}
+  .page-flow>header,.page-flow>main{position:relative;z-index:1}
+
+  /* ---------- top bar ---------- */
+  .top{position:sticky;top:0;z-index:20;background:rgba(8,11,14,.88);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .top .shell{height:64px;display:flex;align-items:center;gap:20px}
+  .brand{color:var(--ink);text-decoration:none;font:800 24px "Bricolage Grotesque",sans-serif;letter-spacing:-.04em}
+  .brand .en{color:var(--en)}
+  .brand .maas{color:var(--maas)}
+  .who{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--muted);font-size:13px;white-space:nowrap}
+  .who b{color:var(--ink);font-weight:600}
+  .who .out{color:var(--muted);text-decoration:none;border:1px solid var(--line2);border-radius:7px;padding:5px 11px;font-size:12px}
+  .who .out:hover{color:var(--maas);border-color:var(--maas-line)}
+
+  /* ---------- hero ---------- */
+  .hero{position:relative;overflow:hidden;border-bottom:0;background:radial-gradient(900px 420px at 72% 15%,rgba(88,166,255,.055),transparent 68%)}
+  #flow{position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:0;transition:opacity .4s ease}
+  #flow.flow-ready{opacity:.55}
+  .floaters{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+  .floater{position:absolute;color:rgba(63,185,80,.3);font:500 15px "IBM Plex Mono",monospace;animation:float 11s ease-in-out infinite;white-space:nowrap}
+  .floater:nth-child(3n){color:rgba(88,166,255,.22);animation-duration:14s}
+  .floater:nth-child(3n+1){color:rgba(210,153,34,.22);animation-duration:12s}
+  @keyframes float{0%,100%{transform:translate3d(0,8px,0) rotate(-2deg);opacity:.25}50%{transform:translate3d(10px,-14px,0) rotate(2deg);opacity:.7}}
+  .hero .shell{position:relative;padding:56px 28px 58px}
+  .hero-inner{max-width:780px}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--en);background:var(--en-soft);border:1px solid var(--en-line);border-radius:99px;padding:5px 12px;text-transform:uppercase;letter-spacing:.13em;font:600 10.5px "IBM Plex Mono",monospace}
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--en);box-shadow:0 0 0 3px rgba(63,185,80,.14)}
+  h1,h2,h3{font-family:"Bricolage Grotesque",sans-serif;line-height:1.06;margin:0}
+  h1{max-width:760px;margin-top:18px;font-size:clamp(40px,5.6vw,60px);letter-spacing:-.05em}
+  h1 .name{color:var(--en)}
+  .hero p{max-width:620px;color:var(--muted);font-size:16.5px;margin:17px 0 0}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
+  .chip{padding:4px 10px;border:1px solid var(--line2);border-radius:99px;color:var(--muted);background:rgba(17,22,27,.72);font:500 11px "IBM Plex Mono",monospace;backdrop-filter:blur(4px)}
+  .chip b{color:var(--en);font-weight:600}
+
+  /* ---------- main ---------- */
+  main.shell{padding-top:30px;padding-bottom:6px;max-width:860px}
+  .panel{background:linear-gradient(180deg,var(--panel),#0f1418);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:28px 30px}
+  .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:4px}
+  .kicker{display:block;color:var(--en);font:600 10px "IBM Plex Mono",monospace;letter-spacing:.13em;text-transform:uppercase;margin-bottom:7px}
+  .panel h2{font-size:clamp(22px,3vw,28px);letter-spacing:-.035em}
+  .panel .lede{color:var(--muted);font-size:14px;margin:8px 0 0;max-width:54ch}
+
+  /* progress */
+  .progress{flex:0 0 auto;text-align:right;min-width:122px}
+  .progress b{display:block;font:800 24px "Bricolage Grotesque",sans-serif;letter-spacing:-.03em;color:var(--ink)}
+  .progress b i{font-style:normal;color:var(--dim);font-size:15px;font-weight:600}
+  .progress span{font:600 10px "IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .progress .track{height:6px;border-radius:99px;background:#1b2229;overflow:hidden;margin-top:9px;width:150px}
+  .progress .fill{height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--en),#7ee787);transition:width .55s cubic-bezier(.2,.8,.2,1)}
+
+  /* checklist */
+  .checks{display:flex;flex-direction:column;height:192px;margin-top:18px}
+  .check{display:flex;align-items:flex-start;gap:14px;height:64px;padding:16px 0;border-top:1px solid rgba(255,255,255,.055);transition:opacity .25s;overflow:hidden}
+  .check:first-child{border-top:0}
+  .check.queued{opacity:.72}
+  .check.locked{opacity:.42}
+  .check.pass{animation:rowIn .45s ease both}
+  .ck{position:relative;flex:0 0 30px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#0d1216;border:1px solid var(--line2);margin-top:1px;transition:background .25s,border-color .25s,box-shadow .25s}
+  .ck svg{width:17px;height:17px;fill:none;stroke:#06130a;stroke-width:2.7;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+  .ck svg path{stroke-dasharray:1;stroke-dashoffset:1}
+  .check.pass .ck{background:var(--en);border-color:var(--en);box-shadow:0 0 0 5px rgba(63,185,80,.11)}
+  .check.pass .ck svg{opacity:1}
+  .check.pass .ck svg path{animation:draw .42s ease .03s forwards}
+  .check.checking .ck{border-color:var(--maas-line);background:var(--maas-soft)}
+  .check.checking .ck:after{content:"";position:absolute;left:50%;top:50%;width:12px;height:12px;border:2px solid rgba(88,166,255,.2);border-top-color:var(--maas);border-radius:50%;transform:translate(-50%,-50%);animation:spin .65s linear infinite}
+  .check.pending .ck{border-color:rgba(210,153,34,.45);background:var(--amber-soft);color:var(--amber)}
+  .check.fail .ck{border-color:rgba(248,81,73,.45);background:var(--red-soft);color:var(--red)}
+  .check.locked .ck{border-color:var(--line);background:#0c1014;color:var(--dim)}
+  .ck .glyph{position:absolute;inset:0;display:grid;place-items:center;font:800 12px "IBM Plex Sans",sans-serif;line-height:1}
+  .check.pass .ck .glyph,.check.checking .ck .glyph{display:none}
+  .check-body{flex:1;min-width:0}
+  .check-label{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .check-detail{font-size:12.5px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .check-action{font-size:12px;color:var(--maas);text-decoration:none;margin-left:auto;white-space:nowrap;padding-top:3px}
+  .check-action:hover{text-decoration:underline}
+  .badge{display:inline-block;border-radius:99px;padding:1px 8px;font:600 9.5px "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;background:#192128;color:var(--dim);border:1px solid var(--line2)}
+  .badge:empty{display:none}
+  .badge.checking{background:var(--maas-soft);color:var(--maas);border-color:var(--maas-line)}
+  .badge.pending{background:var(--amber-soft);color:var(--amber);border-color:rgba(210,153,34,.35)}
+  .badge.fail{background:var(--red-soft);color:var(--red);border-color:rgba(248,81,73,.35)}
+  .badge.locked{background:#151a1f;color:var(--dim);border-color:var(--line)}
+  .check-skel{display:flex;gap:14px;height:64px;padding:16px 0;align-items:center;box-sizing:border-box;overflow:hidden}
+  .skel-dot{width:30px;height:30px;border-radius:50%;background:#171e24;animation:pulse 1.4s infinite}
+  .skel-lines{flex:1}
+  .skel-line{height:10px;border-radius:5px;background:#171e24;animation:pulse 1.4s infinite}
+  .skel-line.short{width:38%;margin-top:7px}
+  @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+  @keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+  @keyframes draw{to{stroke-dashoffset:0}}
+  @keyframes rowIn{0%{background:rgba(63,185,80,.06)}100%{background:transparent}}
+
+  /* terms / status panels */
+  .terms-panel{border-color:var(--en-line);border-top:3px solid var(--en)}
+  .terms-copy{color:var(--muted);font-size:13.5px;margin:9px 0 16px}
+  .consent{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line2);border-radius:11px;background:#0d1216;padding:14px 15px;cursor:pointer;transition:border-color .18s,background .18s}
+  .consent:hover{border-color:var(--en-line);background:#0f1519}
+  .consent input{position:absolute;opacity:0;pointer-events:none}
+  .box{flex:0 0 20px;width:20px;height:20px;border-radius:6px;border:1.5px solid #3b4753;background:#0b0f13;display:grid;place-items:center;margin-top:1px;transition:.18s}
+  .box svg{width:12px;height:12px;fill:none;stroke:#06130a;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;opacity:0;transform:scale(.6);transition:.18s}
+  .consent input:checked + .box{background:var(--en);border-color:var(--en)}
+  .consent input:checked + .box svg{opacity:1;transform:none}
+  .consent input:focus-visible + .box{outline:3px solid rgba(63,185,80,.22);outline-offset:2px}
+  .consent-text{font-size:13px;line-height:1.55}
+  .consent-text a{font-weight:600}
+  .version{display:inline-block;margin-left:5px;font:600 10px "IBM Plex Mono",monospace;color:var(--muted);background:#192128;border:1px solid var(--line2);border-radius:99px;padding:1px 7px;vertical-align:1px}
+  .cta-row{display:flex;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:8px;padding:11px 18px;background:var(--maas);color:#04121f;font:600 14px "IBM Plex Sans",sans-serif;text-decoration:none;cursor:pointer;transition:filter .16s,transform .16s,box-shadow .16s}
+  .btn:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 8px 20px rgba(88,166,255,.18)}
+  .btn:disabled{opacity:.34;cursor:not-allowed;box-shadow:none;transform:none}
+  .btn.green{background:var(--en);color:#04140a}
+  .btn.green:hover:not(:disabled){box-shadow:0 8px 20px rgba(63,185,80,.2)}
+  .btn.ghost{background:#11171c;border:1px solid var(--line2);color:var(--maas)}
+  .btn.ghost:hover{box-shadow:0 6px 16px rgba(0,0,0,.22)}
+  .err{color:var(--red);font-size:12.5px;min-height:19px;margin-top:9px}
+  .hint{color:var(--dim);font-size:11.5px;margin-top:10px}
+
+  /* full terms overlay */
+  .terms-link{background:none;border:0;padding:0;color:var(--maas);font:inherit;font-weight:600;cursor:pointer;text-decoration:none}
+  .terms-link:hover{text-decoration:underline}
+  .terms-overlay{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(2,5,8,.78);backdrop-filter:blur(6px)}
+  .terms-overlay.show{display:flex}
+  .terms-modal{position:relative;display:flex;flex-direction:column;width:100%;max-width:780px;max-height:90vh;overflow:hidden;background:linear-gradient(180deg,var(--panel),#0d1216);border:1px solid var(--line2);border-radius:16px;box-shadow:0 28px 80px rgba(0,0,0,.65)}
+  .terms-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:22px 26px 18px;border-bottom:1px solid var(--line)}
+  .terms-modal-head h2{font-size:22px;letter-spacing:-.03em}
+  .terms-modal-head .kicker{margin-bottom:5px}
+  .terms-close{flex:0 0 auto;width:34px;height:34px;border:1px solid var(--line2);border-radius:8px;background:#11171c;color:var(--muted);font-size:20px;line-height:1;cursor:pointer}
+  .terms-close:hover{color:var(--ink);border-color:var(--line2);background:#171e24}
+  .terms-modal-body{padding:20px 26px 8px;overflow:auto;color:var(--muted);font-size:14px;line-height:1.7}
+  .terms-modal-body h1{font-size:22px;margin:0 0 4px;color:var(--ink)}
+  .terms-modal-body h2{font-size:15px;margin:24px 0 6px;color:var(--maas)}
+  .terms-modal-body p,.terms-modal-body li{color:#c3cbd8}
+  .terms-modal-body .draft{margin:16px 0;border:1px solid rgba(210,153,34,.35);background:var(--amber-soft);color:var(--amber);border-radius:9px;padding:11px 14px;font-size:12.5px;line-height:1.55}
+  .terms-modal-body .meta{color:var(--dim);font-size:11.5px}
+  .terms-modal-body .back{display:none}
+  .terms-loading{padding:22px 0;color:var(--muted);font-size:13px}
+  .terms-modal-foot{display:flex;justify-content:flex-end;padding:14px 26px 18px;border-top:1px solid var(--line)}
+  body.modal-open{overflow:hidden}
+  @media(max-width:720px){
+    .terms-overlay{padding:10px}
+    .terms-modal{max-height:94vh;border-radius:13px}
+    .terms-modal-head{padding:18px 18px 14px}
+    .terms-modal-head h2{font-size:19px}
+    .terms-modal-body{padding:16px 18px 6px;font-size:13px}
+    .terms-modal-foot{padding:12px 18px 14px}
+  }
+
+  .status-panel{border-top:3px solid var(--amber)}
+  .status-panel.bad{border-top-color:var(--red)}
+  .status-ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:var(--amber-soft);color:var(--amber);font:800 20px "Bricolage Grotesque",sans-serif;margin-bottom:12px}
+  .status-panel.bad .status-ic{background:var(--red-soft);color:var(--red)}
+  .status-panel p{color:var(--muted);font-size:13.5px;margin:8px 0 0}
+  .status-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:17px}
+  .next-steps{margin:16px 0 0;padding:14px 16px;border-radius:10px;background:#0d1216;border:1px solid var(--line2);font-size:12px;color:var(--muted)}
+  .next-steps b{display:block;color:var(--ink);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-family:"IBM Plex Mono",monospace;margin-bottom:6px}
+  .next-steps ul{margin:0;padding-left:16px}
+  .next-steps li{margin:3px 0}
+
+  .ready-panel{border-color:var(--en-line);border-top:3px solid var(--en)}
+  .ready-panel .status-ic{background:var(--en-soft);color:var(--en)}
+  .ready-panel .cta-row{margin-top:18px}
+
+  footer{margin:34px 0 30px;padding-top:17px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;display:flex;gap:14px;flex-wrap:wrap}
+  footer a{color:var(--dim);text-decoration:none}
+  footer a:hover{color:var(--maas)}
+  footer .sp{margin-left:auto}
+
+  .hidden{display:none!important}
+  .reveal{animation:rise .6s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  @media(max-width:720px){
+    .shell{padding:0 18px}
+    .top .shell{height:60px}
+    .who{gap:8px}
+    .who span.w{display:none}
+    .hero .shell{padding:42px 18px 46px}
+    h1{font-size:clamp(36px,10vw,46px)}
+    .panel{padding:22px 20px}
+    .panel-head{flex-direction:column;gap:10px}
+    .progress{text-align:left}
+    .progress .track{width:100%}
+    .check-action{margin-left:0;padding-top:0;width:100%}
+    .floater:nth-child(n+7){display:none}
+  }
+  @media(min-width:721px) and (max-height:1100px){
+    .top .shell{height:52px}
+    .hero .shell{padding-top:25px;padding-bottom:27px}
+    h1{font-size:clamp(38px,4.8vw,50px);margin-top:12px}
+    .hero p{font-size:14px;line-height:1.45;margin-top:11px;max-width:760px}
+    main.shell{padding-top:17px}
+    .panel{padding:18px 22px;border-radius:13px}
+    .panel-head{margin-bottom:0}
+    .panel h2{font-size:23px}
+    .panel .lede{font-size:12.5px;margin-top:5px}
+    .checks{margin-top:8px}
+    .checks{height:132px}
+    .check{height:44px;padding:8px 0;gap:11px}
+    .check-skel{height:44px;padding:8px 0;gap:11px}
+    .check .ck{width:26px;height:26px;flex-basis:26px}
+    .check-label{font-size:13px}
+    .check-detail{font-size:11px;margin-top:1px}
+    .terms-panel{margin-top:12px!important}
+    .terms-copy{font-size:12px;margin:6px 0 10px}
+    .consent{padding:9px 11px}
+    .consent-text{font-size:11.5px}
+    .cta-row{margin-top:10px}
+    .hint{font-size:10.5px}
+    footer{margin:16px 0 18px;padding-top:10px;font-size:10px}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="shell">
+    <a class="brand" href="/welcome"><span class="en">En</span><span class="maas">MaaS</span></a>
+    <div class="who">
+      <span class="w">Signed in as <b id="who">…</b></span>
+      <a class="out" href="/logout">Sign out</a>
+    </div>
+  </div>
+</header>
+
+<div class="page-flow">
+<canvas id="flow" aria-hidden="true"></canvas>
+<header class="hero">
+  <div class="floaters" aria-hidden="true">
+    <span class="floater" style="left:5%;top:22%">$0.47</span>
+    <span class="floater" style="left:14%;top:70%">tok</span>
+    <span class="floater" style="left:28%;top:14%">$0.02</span>
+    <span class="floater" style="left:47%;top:78%">{ }</span>
+    <span class="floater" style="left:62%;top:16%">$15</span>
+    <span class="floater" style="left:78%;top:62%">ƒ(x)</span>
+    <span class="floater" style="left:90%;top:30%">$1.20</span>
+    <span class="floater" style="left:38%;top:44%">1010</span>
+    <span class="floater" style="left:70%;top:86%">$0.016</span>
+  </div>
+  <div class="shell">
+    <div class="hero-inner reveal">
+      <span class="eyebrow"><span class="dot"></span> Welcome to EnMaaS</span>
+      <h1 id="title">Welcome <span class="name" id="hero-name">there</span> to EnMaaS</h1>
+      <p id="subtitle">EnMaaS gives you one key to access hosted and frontier models from any tool, through one governed gateway — with consistent APIs, centralized access, and clear usage visibility.</p>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <section class="panel reveal" aria-labelledby="setup-title">
+    <div class="panel-head">
+      <div>
+        <span class="kicker">Your access</span>
+        <h2 id="setup-title">A few quick checks</h2>
+        <p class="lede" id="setup-lede">We verify your identity, group, and region automatically. You only need to accept the terms.</p>
+      </div>
+      <div class="progress" id="progress" aria-live="polite">
+        <b><span id="progress-count">0</span><i>/ <span id="progress-total">4</span></i></b>
+        <span>checks complete</span>
+        <div class="track"><div class="fill" id="progress-fill"></div></div>
+      </div>
+    </div>
+    <div class="checks" id="checks">
+      <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+      <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+      <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+    </div>
+  </section>
+
+  <section class="panel terms-panel hidden" id="terms-card" aria-labelledby="terms-title" style="margin-top:18px">
+    <span class="kicker">One last step</span>
+    <h2 id="terms-title">Terms &amp; Conditions</h2>
+    <p class="terms-copy">Please read and accept the EnMaaS terms. We keep them short: acceptable use, keeping keys safe, how usage is metered, and what data is appropriate for each model.</p>
+    <label class="consent" for="accept">
+      <input type="checkbox" id="accept">
+      <span class="box" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2.5 8.5 6 12l7.5-8"/></svg></span>
+      <span class="consent-text">I have read and accept the EnMaaS Terms &amp; Conditions <span class="version" id="terms-version">draft-tbd</span>.<br><a href="/legal/terms" class="terms-link" id="terms-open" aria-haspopup="dialog" aria-controls="terms-overlay">Read the full terms</a></span>
+    </label>
+    <div class="err" id="err"></div>
+    <div class="cta-row">
+      <button class="btn green" id="start" disabled>Accept &amp; open my account →</button>
+      <span class="hint">Your acceptance is recorded with the date and version.</span>
+    </div>
+  </section>
+
+  <section class="panel status-panel hidden" id="blocked-card" aria-labelledby="blocked-title" style="margin-top:18px">
+    <div class="status-ic">!</div>
+    <span class="kicker">Access status</span>
+    <h2 id="blocked-title">You're signed in, but not enabled yet.</h2>
+    <p id="blocked-copy"></p>
+    <div class="next-steps">
+      <b>What to do next</b>
+      <ul id="next-steps">
+        <li>Ask your manager or the EnMaaS team to add you to an authorized group.</li>
+        <li>Contact the EnMaaS team if you believe your profile or region is wrong.</li>
+      </ul>
+    </div>
+    <div class="status-actions">
+      <button class="btn ghost" id="retry">Check again</button>
+      <a class="btn ghost" href="/welcome">About EnMaaS</a>
+    </div>
+  </section>
+
+  <section class="panel ready-panel hidden" id="ready-card" aria-labelledby="ready-title" style="margin-top:18px">
+    <div class="status-ic">✓</div>
+    <span class="kicker">All set</span>
+    <h2 id="ready-title">You're in.</h2>
+    <p>Your access is approved. Create your first API key, then point Claude Code, Codex, OpenCode, or curl at the gateway.</p>
+    <div class="cta-row">
+      <a class="btn green" id="continue" href="/account?tab=keys&amp;first=1">Create my first key →</a>
+      <a class="btn ghost" href="/account?tab=usage">Explore usage</a>
+    </div>
+  </section>
+
+  <footer>
+    <span>EnMaaS · Engineering AI access</span>
+    <a href="/welcome">About the service</a>
+    <a href="/legal/terms" class="terms-link" data-terms-open>Terms</a>
+    <a class="sp" href="/logout">Sign out</a>
+  </footer>
+</main>
+</div>
+
+<div class="terms-overlay" id="terms-overlay" role="dialog" aria-modal="true" aria-labelledby="terms-modal-title" aria-hidden="true">
+  <div class="terms-modal">
+    <div class="terms-modal-head">
+      <div>
+        <span class="kicker">Legal</span>
+        <h2 id="terms-modal-title">Terms &amp; Conditions <span class="version" id="terms-modal-version"></span></h2>
+      </div>
+      <button class="terms-close" id="terms-close" type="button" aria-label="Close terms">×</button>
+    </div>
+    <div class="terms-modal-body" id="terms-modal-body">
+      <div class="terms-loading">Loading terms…</div>
+    </div>
+    <div class="terms-modal-foot">
+      <button class="btn ghost" id="terms-close-btn" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var state = null;
+  var labels = {identity:'Red Hat identity', group:'EnMaaS access group', country:'Region eligibility', terms:'Terms & Conditions'};
+  var badgeText = {pass:'', queued:'queued', checking:'checking', pending:'action needed', fail:'blocked', locked:'locked', skipped:'skipped'};
+  var CHECK_DETAILS = {
+    identity: 'Verifying your Red Hat identity…',
+    group: 'Looking up your EnMaaS groups…',
+    country: 'Checking your region against the access policy…',
+    terms: 'Checking your current acceptance…'
+  };
+  var GATE_IDS = ['identity', 'group', 'country'];
+
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function firstName(name){ return String(name || '').trim().split(/\s+/)[0] || 'there'; }
+
+  var termsHtmlLoaded = false;
+  var termsFetching = false;
+  var termsReturnFocus = null;
+
+  function syncTermsVersion() {
+    if (state && state.terms && state.terms.version) {
+      $('terms-modal-version').textContent = state.terms.version;
+    }
+  }
+
+  function openTerms(e) {
+    if (e) e.preventDefault();
+    termsReturnFocus = document.activeElement;
+    syncTermsVersion();
+    var overlay = $('terms-overlay');
+    overlay.classList.add('show');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    $('terms-close').focus();
+    if (termsHtmlLoaded || termsFetching) return;
+
+    termsFetching = true;
+    var body = $('terms-modal-body');
+    body.innerHTML = '<div class="terms-loading">Loading terms…</div>';
+    fetch('/legal/terms', {credentials:'same-origin'}).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (html) {
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+      var main = doc.querySelector('main');
+      if (!main) throw new Error('Terms content unavailable');
+      var back = main.querySelector('.back');
+      if (back) back.remove();
+      var heading = main.querySelector('h1');
+      if (heading) heading.remove();
+      var meta = main.querySelector('.meta');
+      if (meta) meta.remove();
+      body.innerHTML = main.innerHTML;
+      termsHtmlLoaded = true;
+    }).catch(function () {
+      body.innerHTML = '<p>Could not load the terms here. <a href="/legal/terms">Open the terms page</a>.</p>';
+    }).then(function () {
+      termsFetching = false;
+    });
+  }
+
+  function closeTerms() {
+    var overlay = $('terms-overlay');
+    overlay.classList.remove('show');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+    if (termsReturnFocus && termsReturnFocus.focus) termsReturnFocus.focus();
+  }
+
+  function setSubtitle() {
+    $('subtitle').textContent = "EnMaaS gives you one key to access hosted and frontier models from any tool, through one governed gateway — with consistent APIs, centralized access, and clear usage visibility.";
+  }
+
+  function buildRows(order, results) {
+    $('checks').innerHTML = order.map(function (id) {
+      var action = '';
+      return '<div class="check queued" data-id="' + esc(id) + '">' +
+        '<span class="ck" aria-hidden="true"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5.4 12.5l4.3 4.3L18.7 7.4"/></svg><span class="glyph"></span></span>' +
+        '<div class="check-body"><div class="check-label">' + esc(results[id].label || labels[id] || id) + ' <span class="badge"></span></div><div class="check-detail"></div></div>' +
+        action + '</div>';
+    }).join('');
+    $('progress-total').textContent = order.length || 4;
+  }
+
+  function row(id) { return $('checks').querySelector('[data-id="' + id + '"]'); }
+
+  function setCheck(id, status, detail) {
+    var el = row(id);
+    if (!el) return;
+    el.className = 'check ' + status;
+    var glyph = el.querySelector('.glyph');
+    glyph.textContent = status === 'fail' ? '✕' : status === 'pending' ? '!' : (status === 'queued' || status === 'locked' || status === 'skipped') ? '·' : '';
+    var badge = el.querySelector('.badge');
+    badge.className = 'badge ' + status;
+    badge.textContent = badgeText[status] || '';
+    el.querySelector('.check-detail').textContent = detail || '';
+  }
+
+  function syncProgress() {
+    var rows = $('checks').querySelectorAll('.check');
+    var passed = $('checks').querySelectorAll('.check.pass').length;
+    var total = rows.length || 4;
+    $('progress-count').textContent = passed;
+    $('progress-total').textContent = total;
+    $('progress-fill').style.width = Math.round(passed / total * 100) + '%';
+    $('progress').setAttribute('aria-label', passed + ' of ' + total + ' checks complete');
+  }
+
+  function hidePanels() {
+    ['terms-card', 'blocked-card', 'ready-card'].forEach(function (id) { $(id).classList.add('hidden'); });
+  }
+
+  function showStatus() {
+    hidePanels();
+    if (state.state === 'blocked') {
+      var blocked = $('blocked-card');
+      blocked.classList.remove('hidden');
+      blocked.classList.toggle('bad', state.blocked_reason !== 'directory_unavailable');
+      $('blocked-copy').textContent = blockedCopy(state.blocked_reason);
+      var steps = $('next-steps');
+      if (state.blocked_reason === 'group_required') {
+        steps.innerHTML = '<li>Ask your manager or the EnMaaS team to add you to an authorized group.</li><li>Sign out and back in so your groups claim refreshes.</li><li>Use “Check again” below.</li>';
+      } else if (state.blocked_reason === 'country_blocked' || state.blocked_reason === 'country_unknown') {
+        steps.innerHTML = '<li>Contact the EnMaaS team if you believe your region is recorded incorrectly.</li><li>Include your Red Hat username and the country on your employee profile.</li>';
+      } else {
+        steps.innerHTML = '<li>Confirm you are signed in with your Red Hat identity.</li><li>Contact the EnMaaS team if this persists.</li>';
+      }
+    } else if (state.state === 'needs_terms') {
+      $('terms-card').classList.remove('hidden');
+      $('terms-version').textContent = state.terms.version;
+      $('start').disabled = !$('accept').checked;
+      $('err').textContent = '';
+    } else {
+      $('ready-card').classList.remove('hidden');
+    }
+  }
+
+  function render() {
+    var name = state.display_name || state.username || 'there';
+    syncTermsVersion();
+    $('who').textContent = name;
+    $('hero-name').textContent = firstName(name);
+    setSubtitle();
+
+    var results = {};
+    (state.checks || []).forEach(function (c) { results[c.id] = c; });
+    var order = GATE_IDS.filter(function (id) { return results[id]; });
+    if (!order.length) order = (state.checks || []).map(function (c) { return c.id; });
+
+    buildRows(order, results);
+    hidePanels();
+    syncProgress();
+    $('setup-lede').textContent = 'We verify your identity, group, and region automatically.';
+
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var gates = GATE_IDS.filter(function (id) { return results[id]; });
+
+    function afterGates() {
+      var allPass = gates.length > 0 && gates.every(function (id) { return results[id].status === 'pass'; });
+      if (!allPass) {
+        $('setup-lede').textContent = 'One of the checks above needs attention.';
+        showStatus();
+        return;
+      }
+
+      var terms = results.terms;
+      if (!terms) { showStatus(); return; }
+
+      if (terms.status === 'pass') {
+        setCheck('terms', 'checking', CHECK_DETAILS.terms);
+        var finish = function () {
+          setCheck('terms', 'pass', terms.detail || 'Accepted');
+          syncProgress();
+          setTimeout(showStatus, 220);
+        };
+        if (reduced) finish(); else setTimeout(finish, 520);
+        return;
+      }
+
+      setCheck('terms', 'pending', terms.detail || 'Accept the terms below to finish.');
+      $('setup-lede').textContent = 'Three checks passed. Accept the terms to open your account.';
+      showStatus();
+    }
+
+    function nextGate(i) {
+      if (i >= gates.length) { afterGates(); return; }
+      var id = gates[i];
+      var result = results[id];
+      if (reduced) {
+        setCheck(id, result.status, result.detail);
+        syncProgress();
+        nextGate(i + 1);
+        return;
+      }
+      setCheck(id, 'checking', CHECK_DETAILS[id] || 'Checking…');
+      setTimeout(function () {
+        setCheck(id, result.status, result.detail);
+        syncProgress();
+        setTimeout(function () { nextGate(i + 1); }, 170);
+      }, 640);
+    }
+    nextGate(0);
+  }
+
+  function blockedCopy(reason) {
+    switch (reason) {
+      case 'group_required':
+        return 'Your account is not in an authorized EnMaaS group. Access is granted by group, so the EnMaaS team needs to add you before you can continue.';
+      case 'country_blocked':
+        return "EnMaaS isn't available in your region. Contact the EnMaaS team if you believe this is a mistake.";
+      case 'country_unknown':
+        return 'We could not verify your region. Contact the EnMaaS team to have your employee profile corrected.';
+      case 'inactive':
+        return 'This account is not active. Contact the EnMaaS team if you believe this is a mistake.';
+      case 'not_provisioned':
+        return 'This Red Hat identity is not provisioned in EnMaaS yet. Access is created from the employee directory; contact the EnMaaS team if this persists.';
+      case 'directory_unavailable':
+        return 'The user directory is temporarily unavailable. Try again in a moment.';
+      default:
+        return 'Access is not available for this account right now. Contact the EnMaaS team.';
+    }
+  }
+
+  function load() {
+    fetch('/api/v1/me/onboarding', {credentials:'same-origin'})
+      .then(function (r) { if (r.status === 401) { location.href = '/login'; throw new Error('auth'); } return r.json(); })
+      .then(function (j) { state = j; render(); })
+      .catch(function () {});
+  }
+
+  document.querySelectorAll('#terms-open, [data-terms-open]').forEach(function (link) {
+    link.addEventListener('click', openTerms);
+  });
+  $('terms-close').addEventListener('click', closeTerms);
+  $('terms-close-btn').addEventListener('click', closeTerms);
+  $('terms-overlay').addEventListener('click', function (e) {
+    if (e.target === this) closeTerms();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && $('terms-overlay').classList.contains('show')) closeTerms();
+  });
+
+  $('accept').addEventListener('change', function () {
+    $('start').disabled = !this.checked;
+  });
+
+  $('start').addEventListener('click', function () {
+    var btn = this;
+    btn.disabled = true;
+    $('err').textContent = '';
+    fetch('/api/v1/me/onboarding/accept', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({version: state.terms.version, accepted: true})
+    }).then(function (r) {
+      return r.json().then(function (j) { return {ok: r.ok, body: j}; });
+    }).then(function (res) {
+      if (!res.ok) {
+        $('err').textContent = (res.body && res.body.error) || 'Could not record acceptance.';
+        btn.disabled = false;
+        return;
+      }
+      setCheck('terms', 'pass', 'Accepted. Opening your account…');
+      syncProgress();
+      setTimeout(function () {
+        location.href = (res.body && res.body.redirect) || '/account?tab=keys&first=1';
+      }, 620);
+    }).catch(function () {
+      $('err').textContent = 'Network error. Try again.';
+      btn.disabled = false;
+    });
+  });
+
+  $('retry').addEventListener('click', load);
+  load();
+
+  // Animated "cost flow" borrowed from the public welcome page, tuned for a
+  // dark surface: tokens drift toward the gateway and pick up a price as they
+  // cross it.
+  var cv = document.getElementById('flow');
+  if (!cv || !cv.getContext) return;
+  var ctx = cv.getContext('2d'), dpr = Math.min(window.devicePixelRatio || 1, 2), W = 0, H = 0, cx = 0, tokens = [], running = true;
+  var GLYPHS = ['0x7f3a','tok','ƒ(x)','⧉','{ }','42','1010','>>','$?','…'];
+  var PRICES = ['$0.15','$0.47','$0.016','$3','$15','$0.60','$0.02','$1.20'];
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function resize(){
+    var r = cv.parentElement.getBoundingClientRect();
+    W = r.width; H = r.height;
+    cv.width = W * dpr; cv.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx = Math.min(W - 24, Math.max(24, W * .68));
+  }
+  function spawn(){
+    return {x:-30, y:16 + Math.random() * Math.max(30, H - 32), vx:.4 + Math.random() * .8,
+      g:GLYPHS[(Math.random() * GLYPHS.length) | 0], priced:false,
+      stamp:PRICES[(Math.random() * PRICES.length) | 0], born:0, alpha:0};
+  }
+  resize();
+  addEventListener('resize', resize);
+  addEventListener('load', resize);
+  if ('ResizeObserver' in window) new ResizeObserver(resize).observe(cv.parentElement);
+  for (var i = 0; i < 26; i++) { var t = spawn(); t.x = 24 + Math.random() * Math.max(24, cx - 48); t.y = 18 + ((i + .5) / 26) * Math.max(20, H - 36); tokens.push(t); }
+  cv.classList.add('flow-ready');
+  function frame(ts){
+    ctx.clearRect(0, 0, W, H);
+    var grad = ctx.createLinearGradient(cx - 42, 0, cx + 42, 0);
+    grad.addColorStop(0, 'rgba(63,185,80,0)');
+    grad.addColorStop(.5, 'rgba(63,185,80,.13)');
+    grad.addColorStop(1, 'rgba(63,185,80,0)');
+    ctx.fillStyle = grad; ctx.fillRect(cx - 42, 0, 84, H);
+    ctx.strokeStyle = 'rgba(63,185,80,.34)';
+    ctx.setLineDash([3, 5]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+    ctx.setLineDash([]); ctx.textBaseline = 'middle';
+    for (var i = 0; i < tokens.length; i++) {
+      var t = tokens[i];
+      if (!t.priced && t.x >= cx) { t.priced = true; t.born = ts; }
+      t.x += t.vx * (t.priced ? .35 : 1);
+      t.alpha = Math.min(t.alpha + .03, 1);
+      if (!t.priced) {
+        ctx.font = '500 12px "IBM Plex Mono",monospace';
+        ctx.fillStyle = 'rgba(148,163,177,.62)';
+        ctx.globalAlpha = t.alpha;
+        ctx.fillText(t.g, t.x, t.y);
+      } else {
+        var age = ts - t.born, fade = age > 2400 ? Math.max(0, 1 - (age - 2400) / 1600) : 1, pop = age < 180 ? 1 + .35 * (1 - age / 180) : 1;
+        ctx.globalAlpha = t.alpha * fade;
+        ctx.fillStyle = '#3fb950';
+        ctx.font = '600 ' + (12 * pop).toFixed(1) + 'px "IBM Plex Mono",monospace';
+        ctx.fillText(t.stamp, t.x, t.y);
+      }
+      ctx.globalAlpha = 1;
+      if ((t.priced && (ts - t.born) > 4200) || t.x > W + 60) tokens[i] = spawn();
+    }
+    if (!reduced && running) requestAnimationFrame(frame);
+  }
+  if (reduced) frame(0); else requestAnimationFrame(frame);
+  if (!reduced && 'IntersectionObserver' in window) new IntersectionObserver(function(es){
+    es.forEach(function(e){ if (e.isIntersecting && !running) { running = true; requestAnimationFrame(frame); } else if (!e.isIntersecting) running = false; });
+  }, {threshold:.01}).observe(cv);
+})();
+</script>
+</body>
+</html>
