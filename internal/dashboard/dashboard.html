@@ -332,10 +332,14 @@ tr.clickable{cursor:pointer}
     </div>
   </div>
   <div class="chart-box">
-    <h2>By Tool (Tokens)</h2>
+    <h2>By Tool (<span id="tool-metric-label">Tokens</span>)</h2>
     <canvas id="tool-chart" width="220" height="220"></canvas>
     <div id="tool-legend" class="pie-legend single-col"></div>
-    <div class="chart-control-spacer" aria-hidden="true"></div>
+    <div class="tl-toggle" id="tool-metric-toggle">
+      <button data-tm="tokens" class="active">Tokens</button>
+      <button data-tm="requests">Requests</button>
+      <button data-tm="users">Users</button>
+    </div>
   </div>
   <div class="chart-box">
     <h2>By User (Top 5)</h2>
@@ -453,7 +457,7 @@ tr.clickable{cursor:pointer}
 let range='mtd', groupFilter='', userFilter=[], modelFilter='';
 let isAdmin=false;        // org-wide Usage view (all users)
 let isSuperAdmin=false;   // operator tools: Routing/Compression/Admin nav + "view as"
-let modelMetric='tokens', userPieMetric='cost';
+let modelMetric='tokens', userPieMetric='cost', toolMetric='tokens';
 let savingsRef='claude-opus-4-8';
 let tokenChart=null, userCostChart=null, toolChart=null, savingsChart=null;
 let cachedGroups=[], cachedModels=[], cachedTools=[], chartUsers=[], directoryUsers=[];
@@ -1041,19 +1045,24 @@ async function refreshUserChartOnly(){
 
 function renderToolChart(){
   const toolRows=cachedTools||[];
-  const existingOther=toolRows.filter(function(d){return d.tool==='Other';}).reduce(function(sum,d){return sum+(d.total_tokens||0);},0);
-  const data=topFiveItems(toolRows.filter(function(d){return d.tool!=='Other';}),function(d){return d.total_tokens||0;},function(d){return d.tool;},5);
+  const metric=toolMetric;
+  const value=d=>metric==='users'?(d.users||0):metric==='requests'?(d.requests||0):(d.total_tokens||0);
+  const unit=metric==='users'?' users':metric==='requests'?' requests':' tokens';
+  const existingOther=toolRows.filter(d=>d.tool==='Other').reduce((sum,d)=>sum+value(d),0);
+  const data=topFiveItems(toolRows.filter(d=>d.tool!=='Other'&&value(d)>0),value,function(d){return d.tool;},5);
   var otherItem=data.length&&data[data.length-1].label==='Other'?data.pop():{item:null,label:'Other',value:0};
   otherItem.value+=existingOther;
   if(otherItem.value>0)data.push(otherItem);
   const vals=data.map(d=>d.value);
   const labels=data.map(d=>`${d.label} — ${fmtN(d.value)}`);
-  const colors=data.map((d,i)=>d.item?toolColor(d.item.tool):COLORS[i%COLORS.length]);
+  const colors=data.map(d=>d.item?toolColor(d.item.tool):'#5b6b82');
+  const label=document.getElementById('tool-metric-label');
+  if(label)label.textContent=metric==='users'?'Users':metric==='requests'?'Requests':'Tokens';
   if(toolChart)toolChart.destroy();
   toolChart=new Chart(document.getElementById('tool-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
     options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const pct=metric==='users'?'':' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';return data[ctx.dataIndex].label+': '+fmtN(ctx.raw)+unit+pct;}}}
     }}
   });
   renderPieLegend('tool-legend',labels,colors);
@@ -1079,6 +1088,13 @@ document.getElementById('model-metric-toggle').addEventListener('click',e=>{
   e.target.classList.add('active');
   modelMetric=e.target.dataset.mm;
   renderModelChart();
+});
+
+document.getElementById('tool-metric-toggle').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('#tool-metric-toggle button').forEach(x=>x.classList.toggle('active',x===b));
+  toolMetric=b.dataset.tm;
+  renderToolChart();
 });
 
 document.getElementById('user-metric-toggle').addEventListener('click',e=>{
