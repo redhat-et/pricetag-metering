@@ -504,39 +504,19 @@ pi --provider enmaas-glm-5-3 --model "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017"
   "display_name": "enmaas",
   "description": "Custom enmaas provider",
   "api_key_env": "CUSTOM_ENMAAS_API_KEY",
-  "base_url": "https://api.enmaas.devshift.net/v1",
+  "base_url": "https://api.enmaas.devshift.net/v1/chat/completions",
   "models": [
     {
       "name": "rits/zai-org/glm-5-3",
-       "context_limit": 1048576,
-      "input_token_cost": null,
-      "output_token_cost": null,
-      "currency": null,
-      "supports_cache_control": null,
-      "reasoning": false
+      "context_limit": 1048576
     },
     {
       "name": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
-      "input_token_cost": null,
-      "output_token_cost": null,
-      "currency": null,
-      "supports_cache_control": null,
-      "reasoning": false
+      "context_limit": 1048576
     }
   ],
-  "headers": null,
-  "timeout_seconds": null,
   "supports_streaming": true,
-  "requires_auth": true,
-  "catalog_provider_id": null,
-  "base_path": "v1/chat/completions",
-  "env_vars": null,
-  "dynamic_models": null,
-  "skip_canonical_filtering": false,
-  "model_doc_link": null,
-  "setup_steps": [],
-  "fast_model": null,
-  "preserves_thinking": true
+  "requires_auth": true
 }</pre></div>
     <h4 class="setup-heading">2. Configure the API key in Goose</h4>
     <p class="setup-copy">Run Goose, select <strong>Configure Providers</strong>, search for <code>enmaas</code>, and configure the API key when prompted. Goose uses the <code>CUSTOM_ENMAAS_API_KEY</code> variable declared in the provider file.</p>
