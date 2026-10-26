@@ -68,6 +68,14 @@ type Config struct {
 	// partner_users.role; membership here does not override a stored demotion.
 	SuperAdminUsers []string
 
+	// PartnerMissingUserBreakGlass applies ADMIN_USERS/SUPERADMIN_USERS when
+	// an identity has no partner_user_logins row at all. It exists for
+	// dogfood/test environments before the Partner directory is seeded.
+	// Default false preserves the production contract: configured lists apply
+	// only when the store cannot be read. An inactive or non-current
+	// directory row never uses this fallback.
+	PartnerMissingUserBreakGlass bool
+
 	// AllowUnauthenticatedAdmin grants admin access when no identity
 	// header is present. Convenient for local development, unsafe once
 	// the service is exposed.
@@ -289,6 +297,9 @@ func Load() Config {
 		// env var (comma/space separated); empty means no one holds the
 		// super-admin surfaces, so the deployment must set it explicitly.
 		SuperAdminUsers: envList("SUPERADMIN_USERS"),
+		// Dogfood/test only. Production leaves this false so a missing
+		// directory row cannot become an admin through the configured lists.
+		PartnerMissingUserBreakGlass: envBool("PARTNER_MISSING_USER_BREAK_GLASS", false),
 		// Default false: since the org/manager feature this service decides
 		// who may see whose spend, so an anonymous caller is nobody. Set
 		// ALLOW_UNAUTHENTICATED_ADMIN=true deliberately for local

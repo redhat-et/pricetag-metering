@@ -85,6 +85,19 @@ func TestEnvList_Separators(t *testing.T) {
 	}
 }
 
+// The missing-row break-glass path is opt-in for dogfood/test only. Shipping
+// the build must not change the production authorization boundary.
+func TestPartnerMissingUserBreakGlassDefaultsOff(t *testing.T) {
+	t.Setenv("PARTNER_MISSING_USER_BREAK_GLASS", "")
+	if Load().PartnerMissingUserBreakGlass {
+		t.Fatal("PartnerMissingUserBreakGlass must default false")
+	}
+	t.Setenv("PARTNER_MISSING_USER_BREAK_GLASS", "true")
+	if !Load().PartnerMissingUserBreakGlass {
+		t.Fatal("PARTNER_MISSING_USER_BREAK_GLASS=true must enable the dogfood/test fallback")
+	}
+}
+
 // The read switch follows the cache-flag rule (PR #19 review, part B
 // condition 1): deploying a build and enabling behavior are separate
 // decisions, so the read default is OFF / 300s. Live writes follow the read
