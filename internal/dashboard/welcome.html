@@ -46,7 +46,7 @@ curl {{GATEWAY_URL}}/v1/chat/completions \
   -H "content-type: application/json" \
   -d '{"model":"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017","max_tokens":128,"messages":[{"role":"user","content":"Reply with exactly OK."}]}'</pre></div></div></section>
 <section id="model-guidance"><div class="head"><h2>Model discovery and limits</h2><p class="lede">The model catalog is useful, but it is not the complete source of truth for every credential type. Pin models in your client configuration when you need a model that is not listed.</p></div><div class="grid"><div class="card"><h3>Use the right authentication header</h3><p>Authentication belongs to the gateway key, not to the selected model. For Anthropic Messages, a native EnMaaS key uses <span class="mono">x-api-key</span> together with the required <span class="mono">anthropic-version</span> HTTP header. OpenAI-compatible clients commonly use <span class="mono">Authorization: Bearer</span>; some gateway credentials also accept Bearer on Messages. Follow the credential instructions for your key and never put either credential in the JSON body.</p><div class="code"><button class="copy">copy</button><pre>curl "{{GATEWAY_URL}}/v1/models" -H "x-api-key: $ENMAAS_KEY"; curl "{{GATEWAY_URL}}/v1/models" -H "Authorization: Bearer $ENMAAS_KEY"</pre></div></div><div class="card"><h3>Catalog limitations</h3><p>The <span class="mono">/v1/models</span> response can be credential-dependent and may omit hosted models even when inference works. Pi, OpenCode, and other clients should declare the exact hosted model ID locally when necessary:</p><div class="code"><button class="copy">copy</button><pre>rits/zai-org/glm-5-3
-rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</pre></div><p class="tool-info"><strong>Hosted models support both gateway dialects where configured.</strong> DeepSeek was verified through Messages, Chat Completions, and Responses. Do not copy GLM-specific context-window, penalty, or capability settings to DeepSeek.</p></div></div><div class="warning" style="margin-top:16px"><span class="icon">!</span><div><strong>Known hosted-model limits</strong><br><span class="mono">rits/zai-org/glm-5-3</span>: <strong>1,000,000-token context window</strong> and <strong>65,536-token maximum output</strong>. Client settings must not declare a larger context window. Hosted models are served by vLLM: Responses API custom tools with a grammar format return HTTP 400, and built-in hosted tools such as web search are not executed. Other provider models have their own limits; use the provider’s documented model metadata when available.</div></div></section>
+rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</pre></div><p class="tool-info"><strong>Hosted models support both gateway dialects where configured.</strong> DeepSeek was verified through Messages, Chat Completions, and Responses. DeepSeek has its own <strong>1,000,000-token context window</strong>; do not copy GLM-only penalty or capability settings to DeepSeek.</p></div></div><div class="warning" style="margin-top:16px"><span class="icon">!</span><div><strong>Known hosted-model limits</strong><br><span class="mono">rits/zai-org/glm-5-3</span> and <span class="mono">rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</span>: <strong>1,000,000-token context window</strong> and <strong>65,536-token maximum output</strong>. Client settings must not declare a larger context window. Hosted models are served by vLLM: Responses API custom tools with a grammar format return HTTP 400, and built-in hosted tools such as web search are not executed. Other provider models have their own limits; use the provider’s documented model metadata when available.</div></div></section>
 <section id="routing"><div class="head"><h2>Route supported models through one gateway.</h2><p class="lede">Configure the EnMaaS base URL and key once, then select the exact model ID supported by the gateway. The gateway routes the request to the configured provider; it does not mean every upstream model is automatically available.</p></div><div class="grid"><div class="card"><h3>Keep the gateway settings; change the model</h3><p>For Claude Code, Codex, OpenCode, and Pi, keep the EnMaaS URL and key unchanged when switching models. Change the client’s model entry to an exact gateway model ID. If a model is not shown by <code>/v1/models</code>, pin it locally only after confirming that EnMaaS supports it.</p><div class="code"><button class="copy">copy</button><pre>export ENMAAS_KEY='your-key'
 # Keep this gateway base URL for every supported model
 export ENMAAS_BASE_URL='{{GATEWAY_URL}}/v1'
@@ -55,7 +55,7 @@ MODEL_ID='exact-model-id'</pre></div></div><div class="card"><h3>Use the model�
 -H "x-api-key: $ENMAAS_KEY" -H "anthropic-version: 2023-06-01"
 
 # OpenAI-compatible APIs
--H "Authorization: Bearer $ENMAAS_KEY"</pre></div></div></div><div class="tool-info"><strong>Tool-specific model settings:</strong> Claude Code changes the model through <code>/model</code> or <code>modelPicker</code>; Codex changes <code>model</code> in its EnMaaS profile; OpenCode changes its pinned provider model; Pi adds the model under the matching provider entry. GLM and DeepSeek are separate hosted models: do not copy GLM-only context-window, penalty, or capability settings to DeepSeek.</div></section>
+-H "Authorization: Bearer $ENMAAS_KEY"</pre></div></div></div><div class="tool-info"><strong>Tool-specific model settings:</strong> Claude Code changes the model through <code>/model</code> or <code>modelPicker</code>; Codex changes <code>model</code> in its EnMaaS profile; OpenCode changes its pinned provider model; Pi adds the model under the matching provider entry. GLM and DeepSeek are separate hosted models. Both declare a <strong>1,000,000-token context window</strong>, but do not copy GLM-only penalty or capability settings to DeepSeek.</div></section>
  <section id="tools"><div class="head"><h2>Use the tools you already know.</h2><p class="lede">EnMaaS supports <a href="#tool-claude">Claude Code</a>, <a href="#tool-codex">Codex</a>, <a href="#tool-opencode">OpenCode</a>, <a href="#tool-pi">Pi</a>, and <a href="#tool-goose">Goose</a>. More tools and recipes are coming soon. Keep your existing AI access available while EnMaaS is in beta.</p></div><div class="card">
   <div class="tool" id="tool-claude"><div class="tool-icon claude-logo"><svg viewBox="0 0 64 64" role="img" aria-label="Claude logo"><path d="M32 4 38 26 60 32 38 38 32 60 26 38 4 32 26 26Z"/></svg></div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Claude Code</h3><p>Route Claude Code through EnMaaS, then use <span class="mono">/model</span> or model discovery to choose an available model.</p>
     <h4 class="setup-heading">1. Connect Claude Code to EnMaaS</h4>
@@ -92,13 +92,13 @@ export ANTHROPIC_BASE_URL="{{GATEWAY_URL}}"
       {
         "model": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
         "label": "DeepSeek V4.1 Flash",
-        "description": "Hosted via EnMaaS"
+        "description": "Hosted via EnMaaS · 1M-token context"
       }
      ]
    }
  }</pre></div>
     <div class="warning"><span class="icon">!</span><div><strong>Use the exact hosted model ID and native effort default.</strong><br>Run <code>/models</code> or <code>/model</code> after saving the settings. For GLM, use <code>rits/zai-org/glm-5-3</code> exactly and do not add an <code>effortLevel</code> override unless your installed Claude Code version documents support for the specific value.</div></div>
-    <div class="tool-info"><strong>DeepSeek is available through Claude Code.</strong><br>EnMaaS exposes DeepSeek V4.1 Flash through the Anthropic Messages API as well as OpenAI-compatible Chat Completions/Responses. Use the exact model ID above; do not copy GLM-only context-window, penalty, or capability settings to DeepSeek.</div>
+    <div class="tool-info"><strong>DeepSeek is available through Claude Code.</strong><br>EnMaaS exposes DeepSeek V4.1 Flash through the Anthropic Messages API as well as OpenAI-compatible Chat Completions/Responses. DeepSeek has a <strong>1,000,000-token context window</strong>. Use the exact model ID above; do not copy GLM-only penalty or capability settings to DeepSeek.</div>
     <div class="warning fallback"><span class="icon">↩</span><div><strong>Rollback if EnMaaS is unavailable</strong><br>Exit Claude Code, restore your previous <code>~/.claude/settings.json</code> backup, or remove the EnMaaS <code>env</code> block and relaunch. Keep the previous provider configuration unchanged so you can switch back immediately during this beta period.</div></div>
   </div></div>
   <div class="tool" id="tool-codex"><div class="tool-icon codex-logo"><svg viewBox="0 0 64 64" role="img" aria-label="Codex logo"><path d="M32 6 53 18v24L32 54 11 42V18Z"/><path d="m24 24-8 8 8 8m16-16 8 8-8 8M36 20 28 44"/></svg></div><div><p class="tool-note">Save your current configuration first so you can switch back easily.</p><h3>Codex</h3><p>Codex uses the OpenAI-compatible Responses API. DeepSeek Responses was verified with EnMaaS. Add EnMaaS as a provider and select it with a profile. To use DeepSeek, set the profile model to <code>rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</code> after confirming the model is available.</p>
@@ -152,7 +152,7 @@ launchctl bootout gui/$(id -u)/com.enmaas.codex-env 2&gt;/dev/null || true
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.enmaas.codex-env.plist
 [[ -n "$(launchctl getenv ENMAAS_KEY)" ]] &amp;&amp; echo "key available"</pre></div>
         <h4 class="setup-heading">2. Add the model catalog</h4>
-        <p class="setup-copy">Save as <code>~/.codex/models.json</code>. DeepSeek V4.1 Flash, GLM 5.3, and GPT-5.6 Luna are enough to start; add more below.</p>
+        <p class="setup-copy">Save as <code>~/.codex/models.json</code>. DeepSeek V4.1 Flash, GLM 5.3, and GPT-5.6 Luna are enough to start; add more below. The DeepSeek entry declares a 1M-token context window (<code>context_window</code> and <code>max_context_window</code> set to <code>1048576</code>); the GLM entry uses <code>1000000</code>.</p>
         <div class="code"><button class="copy">copy</button><pre>{
   "models": [
     {
@@ -334,7 +334,8 @@ supports_websockets = false</pre></div>
            "limit": { "context": 1048576, "output": 65536 }
          },
          "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
-           "name": "DeepSeek V4.1 Flash"
+           "name": "DeepSeek V4.1 Flash",
+           "limit": { "context": 1048576, "output": 65536 }
          }
       }
     },
@@ -462,6 +463,8 @@ opencode
          "id": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
          "name": "DeepSeek V4.1 Flash (EnMaaS)",
          "input": ["text"],
+         "contextWindow": 1048576,
+         "maxTokens": 65536,
          "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
          "compat": {"supportsDeveloperRole": false}
        }]
@@ -517,6 +520,7 @@ pi --provider enmaas-glm-5-3 --model "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017"
     },
     {
       "name": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "context_limit": 1048576,
       "input_token_cost": null,
       "output_token_cost": null,
       "currency": null,
@@ -545,7 +549,7 @@ pi --provider enmaas-glm-5-3 --model "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017"
    </div></div>
    <div class="soon"><span>＋</span><span><b>More tools coming soon.</b> Tell us what you want supported in <a href="https://redhat.enterprise.slack.com/archives/C0C5WRT1VJP">#forum-enmaas</a>.</span></div>
 </div></section>
-   <section id="models"><div class="head"><h2>Hosted models, now including DeepSeek.</h2><p class="lede">EnMaaS currently provides approved hosted open-weight models for engineering use, including GLM 5.3 and DeepSeek V4.1 Flash.</p></div><div class="card accent"><div class="model-line"><span class="model-id">rits/zai-org/glm-5-3</span><span class="model-note">GLM 5.3 · hosted</span></div><div class="grid" style="margin-top:14px"><p><strong>1M</strong><br><span class="mono">context window</span></p><p><strong>Text-first</strong><br><span class="mono">best for engineering work</span></p></div><div class="model-line" style="margin-top:18px"><span class="model-id">rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</span><span class="model-note">DeepSeek V4.1 Flash · hosted</span></div><p style="margin-top:10px">Use this exact model ID through an OpenAI-compatible Chat Completions client.</p></div><div class="card" id="hosted-only" style="margin-top:16px"><h3>When only hosted models are available</h3><p>After your monthly budget is reached, the gateway can still allow GLM 5.3 while other models are denied. Claude Code auto-mode and Codex auto-review send their safety checks to a Sonnet or OpenAI review model by default, so point those at the hosted GLM 5.3 model too. These recipes use GLM 5.3 as the review model; DeepSeek V4.1 Flash is not covered here. Remove these settings once your other models are available again.</p>
+   <section id="models"><div class="head"><h2>Hosted models, now including DeepSeek.</h2><p class="lede">EnMaaS currently provides approved hosted open-weight models for engineering use, including GLM 5.3 and DeepSeek V4.1 Flash.</p></div><div class="card accent"><div class="model-line"><span class="model-id">rits/zai-org/glm-5-3</span><span class="model-note">GLM 5.3 · hosted</span></div><div class="grid" style="margin-top:14px"><p><strong>1M</strong><br><span class="mono">context window</span></p><p><strong>Text-first</strong><br><span class="mono">best for engineering work</span></p></div><div class="model-line" style="margin-top:18px"><span class="model-id">rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</span><span class="model-note">DeepSeek V4.1 Flash · hosted</span></div><div class="grid" style="margin-top:14px"><p><strong>1M</strong><br><span class="mono">context window</span></p><p><strong>Hosted</strong><br><span class="mono">no usage cost</span></p></div><p style="margin-top:10px">DeepSeek V4.1 Flash has a 1,000,000-token context window. Use this exact model ID through an OpenAI-compatible Chat Completions client.</p></div><div class="card" id="hosted-only" style="margin-top:16px"><h3>When only hosted models are available</h3><p>After your monthly budget is reached, the gateway can still allow GLM 5.3 while other models are denied. Claude Code auto-mode and Codex auto-review send their safety checks to a Sonnet or OpenAI review model by default, so point those at the hosted GLM 5.3 model too. These recipes use GLM 5.3 as the review model; DeepSeek V4.1 Flash is not covered here. Remove these settings once your other models are available again.</p>
     <h4 class="setup-heading">Claude Code auto-mode</h4>
     <p class="setup-copy">The auto-mode classifier uses the Sonnet model tier, and subagents and background tasks use other tiers. Point every tier at the hosted model in the <code>env</code> block of <code>~/.claude/settings.json</code> from the <a href="#tool-claude">Claude Code setup</a>.</p>
     <div class="code"><button class="copy">copy</button><pre>"ANTHROPIC_MODEL": "rits/zai-org/glm-5-3",

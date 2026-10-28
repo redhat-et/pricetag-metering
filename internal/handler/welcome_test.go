@@ -51,6 +51,21 @@ func TestServeWelcomeSubstitution(t *testing.T) {
              "context": 1048576,
              "output": 65536
            },`,
+		`"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+           "name": "DeepSeek V4.1 Flash",
+           "limit": { "context": 1048576, "output": 65536 }
+         }`,
+		`"id": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+         "name": "DeepSeek V4.1 Flash (EnMaaS)",
+         "input": ["text"],
+         "contextWindow": 1048576,
+         "maxTokens": 65536,`,
+		`"name": "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "context_limit": 1048576,`,
+		"DeepSeek V4.1 Flash has a 1,000,000-token context window.",
+		"The DeepSeek entry declares a 1M-token context window",
+		"DeepSeek has its own <strong>1,000,000-token context window</strong>",
+		`"description": "Hosted via EnMaaS · 1M-token context"`,
 		"DeepSeek image input",
 		"OpenCode does not need a separate model-picker block",
 		"https://devservices.dpp.openshift.com/support/enmaas/",
