@@ -151,7 +151,7 @@ EOF
 launchctl bootout gui/$(id -u)/com.enmaas.codex-env 2&gt;/dev/null || true
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.enmaas.codex-env.plist
 [[ -n "$(launchctl getenv ENMAAS_KEY)" ]] &amp;&amp; echo "key available"</pre></div>
-        <h4 class="setup-heading">2. Add the model catalog</h4>
+        <h4 class="setup-heading" id="codex-desktop-model-catalog">2. Add the model catalog</h4>
         <p class="setup-copy">Save as <code>~/.codex/models.json</code>. DeepSeek V4.1 Flash, GLM 5.3, and GPT-5.6 Luna are enough to start; add more below.</p>
         <div class="code"><button class="copy">copy</button><pre>{
   "models": [
@@ -301,6 +301,66 @@ supports_websockets = false</pre></div>
   "max_context_window": 1000000
 }</pre></div>
         <p class="tool-info">Hosted models are text-only. Images in the request or history return HTTP 400.</p>
+      </div>
+    </details>
+
+    <h4 class="setup-heading" id="codex-desktop-fedora">ChatGPT desktop (Fedora)</h4>
+    <p class="setup-copy">Use the corporate <code>chatgpt</code> RPM and an <a href="#access">EnMaaS key from Atlas</a>. This creates a <strong>ChatGPT (EnMaaS)</strong> menu entry that loads the key on every launch; desktop launches do not reliably read <code>.bashrc</code>.</p>
+    <details class="setup">
+      <summary>Set up the Fedora desktop app</summary>
+      <div class="setup-body">
+        <h4 class="setup-heading">1. Install and create the launcher</h4>
+        <p class="setup-copy">Run these commands in Bash. If <code>chatgpt</code> is unavailable from your configured repositories, ask CSB support or <a href="https://redhat.enterprise.slack.com/archives/C0C5WRT1VJP">#forum-enmaas</a> for the approved package. Fully quit the app and any Codex app-server daemon first. Back up existing files before replacing them.</p>
+        <div class="code"><button class="copy">copy</button><pre>sudo dnf install chatgpt desktop-file-utils
+mkdir -p "$HOME/.config/enmaas" "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.codex"
+chmod 700 "$HOME/.config/enmaas"
+(
+  umask 077
+  IFS= read -r -s -p 'EnMaaS API key: ' key
+  printf '\n'
+  [[ -n "$key" ]] || { echo "No key entered" &gt;&amp;2; exit 1; }
+  printf 'ENMAAS_KEY=%q\n' "$key" &gt; "$HOME/.config/enmaas/enmaas.env"
+  chmod 600 "$HOME/.config/enmaas/enmaas.env"
+)
+
+cat &gt; "$HOME/.local/bin/chatgpt-enmaas" &lt;&lt;'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$HOME/.config/enmaas/enmaas.env"
+[[ -n "${ENMAAS_KEY:-}" ]] || { echo "ENMAAS_KEY is empty" &gt;&amp;2; exit 1; }
+export ENMAAS_KEY
+exec /usr/bin/chatgpt "$@"
+EOF
+chmod 700 "$HOME/.local/bin/chatgpt-enmaas"
+
+cat &gt; "$HOME/.local/share/applications/chatgpt-enmaas.desktop" &lt;&lt;EOF
+[Desktop Entry]
+Name=ChatGPT (EnMaaS)
+Exec="$HOME/.local/bin/chatgpt-enmaas" %U
+Icon=chatgpt
+Type=Application
+Terminal=false
+Categories=Utility;Development;
+EOF
+update-desktop-database "$HOME/.local/share/applications"</pre></div>
+        <h4 class="setup-heading">2. Add the model catalog</h4>
+        <p class="setup-copy">Open the macOS setup above and save its <a href="#codex-desktop-model-catalog">model catalog JSON</a> as <code>~/.codex/models.json</code>; the same catalog works on Fedora. Merge entries if you already have a catalog.</p>
+        <h4 class="setup-heading">3. Point <code>config.toml</code> at EnMaaS</h4>
+        <p class="setup-copy">Merge this into <code>~/.codex/config.toml</code>, replacing <code>YOUR_USERNAME</code> with your account name. Keep the first three settings before any <code>[table]</code> and update an existing provider table instead of duplicating it. <code>env_key</code> is the variable name, not your API key.</p>
+        <div class="code"><button class="copy">copy</button><pre>model = "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017"
+model_provider = "enmaas"
+model_catalog_json = "/home/YOUR_USERNAME/.codex/models.json"
+
+[model_providers.enmaas]
+name = "EnMaaS"
+base_url = "{{GATEWAY_URL}}/v1"
+env_key = "ENMAAS_KEY"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = false</pre></div>
+        <h4 class="setup-heading">4. Launch and test</h4>
+        <p class="setup-copy">Launch <strong>ChatGPT (EnMaaS)</strong> from the application menu and pin that entry. Start a new chat, select <strong>DeepSeek V4.1 Flash (EnMaaS)</strong>, ask <code>Reply OK only</code>, then ask it to run <code>pwd</code>. Keep this starter setup text-only. If the key is missing, fully quit the app and daemon, then relaunch through this entry.</p>
+        <p class="setup-copy">To roll back, quit the app, restore your previous configuration and catalog, and use the original launcher. Remove only files you created for this setup.</p>
       </div>
     </details>
 
