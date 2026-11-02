@@ -132,7 +132,10 @@ tr.clickable{cursor:pointer}
 .user-rank .ur-row{display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:8px;font-size:12px;line-height:17px}
 .user-rank .ur-rank{color:var(--text2);font-size:10px;font-variant-numeric:tabular-nums;text-align:right}
 .user-rank .ur-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.user-rank .ur-sub{font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-rank .ur-meta{display:flex;gap:4px;min-width:0;font-size:10px;line-height:13px;color:var(--text2)}
+.user-rank .ur-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.user-rank .ur-dot{flex:none}
+.user-rank .ur-cc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .user-rank .ur-val{font-variant-numeric:tabular-nums;color:var(--text2);white-space:nowrap}
 .user-wide-card .pie-split{min-height:390px;justify-content:center;gap:56px}
 .user-wide-card .pie-column{flex:0 0 360px;width:360px}
@@ -612,6 +615,10 @@ function countryFlag(code){
   if(!/^[A-Z]{2}$/.test(normalized))return '';
   const flag=[...normalized].map(c=>String.fromCodePoint(127397+c.charCodeAt(0))).join('');
   return `<span class="country-flag" title="Country: ${normalized}" aria-label="Country: ${normalized}">${flag}</span>`;
+}
+function userCostCenter(tags){
+  if(!tags)return '';
+  return String(tags.cost_center_description||tags.cost_center||'').trim();
 }
 
 // Render a user cell: country flag, then "First Last" with the email muted
@@ -1151,11 +1158,21 @@ function renderUserRank(data,m){
     var username=item.username||'';
     var name=d.label||username||'—';
     var sub=item.display_name&&username&&name!==username?username:'';
+    var country=item.tags&&item.tags.country;
+    var costCenter=userCostCenter(item.tags);
     var pct=max>0?Math.round((d.value/max)*100):0;
     var value=m==='cost'&&d.value===0?'Free':pieFmt(d.value,m);
-    return '<div class="ur-row" title="'+pmEsc(name)+' · '+pmEsc(username)+' · '+pmEsc(value)+'">'+
+    // The rank list is part of the user pie. Blur the names with the same
+    // demo-privacy class as the tables, and do not leak the raw identity in
+    // the hover title while privacy mode is on.
+    var title=demoPrivacyEnabled()?'':' title="'+pmEsc(name)+' · '+pmEsc(username)+' · '+pmEsc(costCenter||'—')+' · '+pmEsc(value)+'"';
+    var meta='';
+    if(sub)meta+='<span class="ur-sub demo-pii">'+pmEsc(sub)+'</span>';
+    if(costCenter)meta+=(meta?'<span class="ur-dot">·</span>':'')+'<span class="ur-cc">'+pmEsc(costCenter)+'</span>';
+    return '<div class="ur-row"'+title+'>'+
       '<span class="ur-rank">'+(i+1)+'</span>'+
-      '<span style="min-width:0"><span class="ur-name">'+pmEsc(name)+'</span>'+(sub?'<span class="ur-sub">'+pmEsc(sub)+'</span>':'')+
+      '<span style="min-width:0">'+countryFlag(country)+'<span class="ur-name demo-pii">'+pmEsc(name)+'</span>'+
+      (meta?'<span class="ur-meta">'+meta+'</span>':'')+
       '<span class="bar-bg" style="display:block;margin-top:3px"><span class="bar-fill" style="display:block;width:'+pct+'%;background:'+COLORS[i%COLORS.length]+'"></span></span></span>'+
       '<span class="ur-val">'+value+'</span></div>';
   }).join('');
@@ -1175,12 +1192,12 @@ function renderUserCostChart(){
     const d=data[i];
     return d&&d.item===null?'Other':demoUserName(d?d.label:'',i);
   };
+  const tooltipCallbacks={label:tooltipLabel,title:tooltipTitle};
   if(userCostChart){
     userCostChart.data.labels=labels;
     userCostChart.data.datasets[0].data=vals;
     userCostChart.data.datasets[0].backgroundColor=colors;
-    userCostChart.options.plugins.tooltip.callbacks.label=tooltipLabel;
-    userCostChart.options.plugins.tooltip.callbacks.title=tooltipTitle;
+    userCostChart.options.plugins.tooltip.callbacks=tooltipCallbacks;
     userCostChart.update();
     renderUserRank(data,m);
     return;
@@ -1188,8 +1205,8 @@ function renderUserCostChart(){
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:160}]},
     options:{responsive:false,width:360,height:360,radius:160,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
-    }}
+      tooltip:{callbacks:tooltipCallbacks}}
+    }
   });
   renderUserRank(data,m);
 }
