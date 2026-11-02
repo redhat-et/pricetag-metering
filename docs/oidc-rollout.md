@@ -45,9 +45,11 @@ shows a Red Hat SSO button. The button starts Authorization Code + PKCE at
 The callback validates state, nonce, PKCE, issuer, audience, signature, and
 token expiry. It requires `sub`, `rhatUUID`, and an email or
 `preferred_username`. OIDC groups are copied into the signed session for
-display/context only; they do not grant PriceTag roles. The session is built
-from the current token, so groups omitted by the IdP do not inherit stale
-values from the directory.
+display/context only; they do not grant PriceTag roles. The persisted
+directory `groups` tag is informational and may lag the IdP; authorization
+uses the partner role and the live platform group list, not that tag. The
+session is built from the current token, so groups omitted by the IdP do not
+inherit stale values from the directory.
 
 `email` is not treated as a second identity. After the profile merge, the
 callback re-resolves the current partner login for the verified `rhatUUID` and
