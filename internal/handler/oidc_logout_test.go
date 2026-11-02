@@ -12,8 +12,9 @@ import (
 func TestLogoutRedirectsToProviderEndSessionWhenAdvertised(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "test-session-secret")
 	h := NewAuthHandler(config.Config{OIDC: config.OIDC{
-		ClientID:    "client-id",
-		RedirectURL: "https://dashboard.example/oauth/callback",
+		ClientID:              "client-id",
+		RedirectURL:           "https://dashboard.example/oauth/callback",
+		PostLogoutRedirectURL: "https://dashboard.example/login",
 	}})
 	h.oidc = &oidcProvider{endSessionURL: "https://idp.example/logout?existing=1"}
 

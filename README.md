@@ -64,6 +64,7 @@ kubectl apply -f deploy/
 | `OIDC_CLIENT_ID` | When OIDC is enabled | — | Confidential OIDC client ID. |
 | `OIDC_CLIENT_SECRET` | When OIDC is enabled | — | Confidential OIDC client secret; inject from a deployment Secret, never commit it. |
 | `OIDC_REDIRECT_URL` | When OIDC is enabled | — | Must exactly match the registered callback, for example `/oauth/callback`. |
+| `OIDC_POST_LOGOUT_REDIRECT_URL` | No | — | Must be registered with the provider. Sent as `post_logout_redirect_uri` after RP-initiated logout; leave empty to use the provider's own signed-out page. |
 | `OIDC_SCOPES` | No | `openid profile email groups` | Space- or comma-separated OIDC scopes. |
 | `SESSION_SECRET` | When OIDC is enabled | — | Signs session and OIDC state cookies. Inject a long random value from a deployment Secret; without it sessions do not survive a restart and SSO logins are invalidated. |
 | `SESSION_COOKIE_SECURE` | No | `true` | Keep enabled in shared/stage/production. Set `false` only for local HTTP testing. |

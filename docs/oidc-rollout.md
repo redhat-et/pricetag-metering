@@ -15,8 +15,14 @@ OIDC_CLIENT_ID=enmaas-pricetag-dashboard
 OIDC_CLIENT_SECRET=<Secret-backed value>
 OIDC_REDIRECT_URL=https://dashboard.enmaas.devshift.net/oauth/callback
 OIDC_SCOPES=openid profile email groups
+OIDC_POST_LOGOUT_REDIRECT_URL=https://dashboard.enmaas.devshift.net/login
 SESSION_SECRET=<long random Secret-backed value>
 ```
+
+`OIDC_POST_LOGOUT_REDIRECT_URL` is optional, must be registered with the
+provider, and is only used when the provider advertises an
+`end_session_endpoint`. If it is empty the provider shows its own signed-out
+page after the RP-initiated logout.
 
 `SESSION_SECRET` signs both the PriceTag session cookie and the OIDC state
 cookie. Without it the process generates a random per-start secret, which

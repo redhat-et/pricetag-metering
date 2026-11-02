@@ -302,8 +302,8 @@ func (h *AuthHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 // oidcLogoutURL is the provider's RP-initiated logout endpoint. The return
-// URI is derived from the registered callback origin, never from the request
-// Host, so it cannot become an open redirect.
+// URI comes from configuration, not the request Host, so it cannot become an
+// open redirect.
 func (h *AuthHandler) oidcLogoutURL() (string, error) {
 	target, err := url.Parse(h.oidc.endSessionURL)
 	if err != nil {
@@ -313,11 +313,8 @@ func (h *AuthHandler) oidcLogoutURL() (string, error) {
 	if h.cfg.OIDC.ClientID != "" {
 		query.Set("client_id", h.cfg.OIDC.ClientID)
 	}
-	if redirect, err := url.Parse(h.cfg.OIDC.RedirectURL); err == nil && redirect.Scheme != "" && redirect.Host != "" {
-		redirect.Path = "/login"
-		redirect.RawQuery = ""
-		redirect.Fragment = ""
-		query.Set("post_logout_redirect_uri", redirect.String())
+	if redirect := strings.TrimSpace(h.cfg.OIDC.PostLogoutRedirectURL); redirect != "" {
+		query.Set("post_logout_redirect_uri", redirect)
 	}
 	target.RawQuery = query.Encode()
 	return target.String(), nil

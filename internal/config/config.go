@@ -194,7 +194,11 @@ type OIDC struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
-	Scopes       []string
+	// PostLogoutRedirectURL is sent to the provider's end-session endpoint
+	// after RP-initiated logout. It must be registered with the provider; leave
+	// empty to let the provider show its own signed-out page.
+	PostLogoutRedirectURL string
+	Scopes                []string
 }
 
 func (o OIDC) EnabledAndConfigured() bool {
@@ -371,15 +375,16 @@ func Load() Config {
 			DashboardURL: strings.TrimSuffix(os.Getenv("WELCOME_DASHBOARD_URL"), "/"),
 		},
 		OIDC: OIDC{
-			Enabled:         envBool("OIDC_ENABLED", false),
-			ClaimsDebug:     envBool("OIDC_CLAIMS_DEBUG", false),
-			DevelopmentMode: envBool("OIDC_DEVELOPMENT_MODE", false),
-			TestLogin:       envBool("OIDC_TEST_LOGIN", false),
-			IssuerURL:       strings.TrimSuffix(os.Getenv("OIDC_ISSUER_URL"), "/"),
-			ClientID:        os.Getenv("OIDC_CLIENT_ID"),
-			ClientSecret:    os.Getenv("OIDC_CLIENT_SECRET"),
-			RedirectURL:     os.Getenv("OIDC_REDIRECT_URL"),
-			Scopes:          envListDefault("OIDC_SCOPES", []string{"openid", "profile", "email", "groups"}),
+			Enabled:               envBool("OIDC_ENABLED", false),
+			ClaimsDebug:           envBool("OIDC_CLAIMS_DEBUG", false),
+			DevelopmentMode:       envBool("OIDC_DEVELOPMENT_MODE", false),
+			TestLogin:             envBool("OIDC_TEST_LOGIN", false),
+			IssuerURL:             strings.TrimSuffix(os.Getenv("OIDC_ISSUER_URL"), "/"),
+			ClientID:              os.Getenv("OIDC_CLIENT_ID"),
+			ClientSecret:          os.Getenv("OIDC_CLIENT_SECRET"),
+			RedirectURL:           os.Getenv("OIDC_REDIRECT_URL"),
+			PostLogoutRedirectURL: os.Getenv("OIDC_POST_LOGOUT_REDIRECT_URL"),
+			Scopes:                envListDefault("OIDC_SCOPES", []string{"openid", "profile", "email", "groups"}),
 		},
 		KeyPolicy: KeyPolicy{
 			DefaultExpiryHours: envInt("DEFAULT_KEY_EXPIRY_HOURS", 90*24),
