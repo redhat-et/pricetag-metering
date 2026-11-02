@@ -165,6 +165,16 @@ and the full 2026-09-16 cutover record (including what went wrong and
 how it was verified clean): **[docs/db-design.md](docs/db-design.md)**.
 Day-to-day ops: [docs/db-backup.md](docs/db-backup.md).
 
+### LDAP cost-center sync
+
+`scripts/sync-ldap-cost-centers.sh` is a read-only LDAP correction job for
+`partner_users.tags.cost_center` and `cost_center_description`. It matches by
+the stable `rhatUUID`, preserves unrelated tags, and only writes when
+`--apply` is passed. It supports local `psql`, Docker, and an OpenShift
+Postgres pod (including reading the DSN from a Secret). Sensitive LDIF/CSV/SQL
+output is written under `~/enmaas-oidc-local` with mode 600. See
+`--help` for the production inventory and dogfood examples.
+
 ## Related
 
 - [Partner user API](docs/partner-user-api.md) — Atlas/LDAP directory sync,
