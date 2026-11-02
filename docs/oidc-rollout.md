@@ -51,9 +51,12 @@ uses the partner role and the live platform group list, not that tag. The
 session is built from the current token, so groups omitted by the IdP do not
 inherit stale values from the directory.
 
-`email` is not treated as a second identity. After the profile merge, the
-callback re-resolves the current partner login for the verified `rhatUUID` and
-writes that canonical login to the session. `email_verified` is not required;
+The callback resolves the provisioned user by the verified `rhatUUID`, not by
+`email` or `preferred_username`; those claims are profile attributes and may
+change without breaking login. `email` is not treated as a second identity.
+After the profile merge, the callback re-resolves the current partner login for
+the verified `rhatUUID` and writes that canonical login to the session.
+`email_verified` is not required;
 the trust assumption is that the IdP asserted the verified `rhatUUID` and the
 partner directory already maps that UUID to an active user.
 

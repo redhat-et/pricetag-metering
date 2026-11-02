@@ -24,6 +24,23 @@ func TestDashboardToolMetricToggle(t *testing.T) {
 	}
 }
 
+func TestDashboardEscapesUserControlledIdentityFields(t *testing.T) {
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"pmEsc(nameByUser[n])",
+		"${pmEsc(r.model||'—')}",
+		"${pmEsc(r.provider||'—')}",
+		"var name=pmEsc(m.model);",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("dashboard.html no longer escapes user-controlled field with %q", want)
+		}
+	}
+}
+
 func TestTopUsersRankShowsCountryCostCenterAndDemoPrivacy(t *testing.T) {
 	data, err := FS.ReadFile("dashboard.html")
 	if err != nil {

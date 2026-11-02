@@ -94,7 +94,9 @@ func (c *Client) CreateUserAPIKey(ctx context.Context, username, group string, r
 
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("maas-api error %d: %s", resp.StatusCode, string(data))
+		// Never put the upstream response body in an error: handlers log errors,
+		// and MaaS bodies can echo request context or key material.
+		return nil, fmt.Errorf("maas-api key create failed with status %d", resp.StatusCode)
 	}
 
 	var result APIKeyResponse
@@ -230,9 +232,9 @@ func (c *Client) SearchAPIKeys(ctx context.Context, username string, groups []st
 	defer resp.Body.Close()
 
 	data, _ := io.ReadAll(resp.Body)
-	slog.Info("maas-api search response", "status", resp.StatusCode, "body", string(data), "url", c.baseURL+"/v1/api-keys/search")
+	slog.Info("maas-api search response", "status", resp.StatusCode)
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("maas-api error %d: %s", resp.StatusCode, string(data))
+		return nil, fmt.Errorf("maas-api key search failed with status %d", resp.StatusCode)
 	}
 
 	var result SearchResult
@@ -266,8 +268,7 @@ func (c *Client) RevokeAPIKey(ctx context.Context, keyID string, groups []string
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		data, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("maas-api error %d: %s", resp.StatusCode, string(data))
+		return fmt.Errorf("maas-api key revoke failed with status %d", resp.StatusCode)
 	}
 	return nil
 }

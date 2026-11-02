@@ -583,23 +583,27 @@ func (h *AdminHandler) createKey(w http.ResponseWriter, r *http.Request) {
 	}
 	// Self-service: a regular user may only create a key for themselves, in
 	// one of their own groups (the redesigned user dashboard's create form).
+	// Align this legacy route with /api/v1/me/keys: a requested group that the
+	// caller is not a member of is rejected, never silently replaced.
 	if !IsPartnerAdmin(r.Context(), h.cfg, h.store, r) {
-		body.Username = r.Header.Get(h.cfg.UserHeader)
-		groups := sessionGroups(r, h.cfg)
-		ok := body.Group == ""
-		for _, g := range groups {
-			if g == body.Group {
-				ok = true
-				break
-			}
-		}
+		username, group, groups, ok := h.myKeyIdentity(w, r)
 		if !ok {
-			if len(groups) > 0 {
-				body.Group = groups[0]
-			} else {
-				body.Group = ""
-			}
+			return
 		}
+		body.Username = username
+		if body.Group != "" {
+			matched := matchSessionGroup(groups, body.Group)
+			if matched == "" {
+				http.Error(w, "you are not a member of that group", http.StatusForbidden)
+				return
+			}
+			if !h.keyGroupEnabled(r.Context(), matched) {
+				http.Error(w, "that group is not enabled for key management", http.StatusForbidden)
+				return
+			}
+			group = matched
+		}
+		body.Group = group
 	}
 	if body.Username == "" || body.KeyName == "" {
 		http.Error(w, "username and keyName are required", http.StatusBadRequest)

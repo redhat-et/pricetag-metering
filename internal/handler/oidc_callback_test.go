@@ -175,30 +175,44 @@ func signTestIDToken(key *rsa.PrivateKey, claims map[string]any) (string, error)
 }
 
 type oidcCallbackStore struct {
-	user          storage.PartnerUser
-	byUsername    map[string]storage.PartnerUser
-	postPatchUser *storage.PartnerUser
-	lookupErr     error
-	lookedUp      string
-	lookups       []string
-	patchCount    int
-	patched       bool
+	user               storage.PartnerUser
+	byUsername         map[string]storage.PartnerUser
+	postPatchUser      *storage.PartnerUser
+	lookupErr          error
+	currentLogin       string
+	postPatchLogin     string
+	currentLoginErr    error
+	lookedUp           string
+	lookups            []string
+	currentLoginLookup string
+	patchCount         int
+	patched            bool
 }
 
-func (s *oidcCallbackStore) PartnerUserByMaaSUsername(_ context.Context, username string) (storage.PartnerUser, error) {
-	s.lookedUp = username
-	s.lookups = append(s.lookups, username)
+func (s *oidcCallbackStore) GetPartnerUser(_ context.Context, userID string) (storage.PartnerUser, error) {
+	s.lookedUp = userID
+	s.lookups = append(s.lookups, userID)
 	if s.patched && s.postPatchUser != nil {
 		return *s.postPatchUser, s.lookupErr
 	}
-	if s.byUsername != nil {
-		user, ok := s.byUsername[strings.ToLower(username)]
-		if !ok {
-			return storage.PartnerUser{}, storage.ErrPartnerUserNotFound
-		}
-		return user, nil
-	}
 	return s.user, s.lookupErr
+}
+
+func (s *oidcCallbackStore) CurrentPartnerUserLogin(_ context.Context, userID string) (string, error) {
+	s.currentLoginLookup = userID
+	if s.currentLoginErr != nil {
+		return "", s.currentLoginErr
+	}
+	if s.currentLogin != "" {
+		return s.currentLogin, nil
+	}
+	if s.patched && s.postPatchUser != nil && !strings.EqualFold(s.postPatchUser.UserID, userID) {
+		return "", storage.ErrPartnerUserNotFound
+	}
+	if email, ok := s.user.Tags["email"].(string); ok && email != "" {
+		return email, nil
+	}
+	return "person@example.com", nil
 }
 
 func (s *oidcCallbackStore) PatchPartnerUser(_ context.Context, _, userID string, tags map[string]any) (storage.PartnerUser, error) {
@@ -206,6 +220,9 @@ func (s *oidcCallbackStore) PatchPartnerUser(_ context.Context, _, userID string
 	s.patched = true
 	s.user.UserID = userID
 	s.user.Tags = tags
+	if s.postPatchLogin != "" {
+		s.currentLogin = s.postPatchLogin
+	}
 	return s.user, nil
 }
 
@@ -276,26 +293,30 @@ func TestOIDCCallbackAcceptsVerifiedTokenAndMatchingUserInfoSubject(t *testing.T
 	if response.Code != http.StatusFound {
 		t.Fatalf("callback status = %d, want %d: %s", response.Code, http.StatusFound, response.Body.String())
 	}
-	if store.lookedUp != "person@example.com" || store.patchCount != 1 {
-		t.Fatalf("store lookup=%q profile patches=%d; want expected user and one profile patch", store.lookedUp, store.patchCount)
+	if store.lookedUp != testOIDCUUID || store.patchCount != 1 {
+		t.Fatalf("store lookup=%q profile patches=%d; want verified UUID and one profile patch", store.lookedUp, store.patchCount)
 	}
 }
 
 func TestOIDCCallbackSessionUsesCanonicalLoginAfterProfilePatch(t *testing.T) {
 	store := &oidcCallbackStore{
 		user: storage.PartnerUser{UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "old@example.com"}},
-		byUsername: map[string]storage.PartnerUser{
-			"person@example.com": {UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "old@example.com"}},
-			"old@example.com":    {UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "old@example.com"}},
-		},
+		// This login is installed by the profile patch, simulating a move of
+		// the current partner_user_logins row. It deliberately differs from
+		// the IdP email, so removing the UUID-based re-resolution makes the
+		// assertion fail.
+		postPatchLogin: "canonical@example.com",
 	}
 	response, h := invokeOIDCCallback(t, oidcCallbackScenario{userinfoSub: testOIDCSubject}, store)
 	if response.Code != http.StatusFound {
 		t.Fatalf("callback status = %d, want %d: %s", response.Code, http.StatusFound, response.Body.String())
 	}
 	session := sessionFromResponse(t, h, response)
-	if session.Username != "person@example.com" {
-		t.Fatalf("session username = %q, want canonical IdP login person@example.com (lookups: %v)", session.Username, store.lookups)
+	if session.Username != "canonical@example.com" {
+		t.Fatalf("session username = %q, want UUID-resolved canonical login canonical@example.com (lookups: %v)", session.Username, store.lookups)
+	}
+	if store.currentLoginLookup != testOIDCUUID {
+		t.Fatalf("canonical login lookup used %q, want verified UUID %q", store.currentLoginLookup, testOIDCUUID)
 	}
 }
 

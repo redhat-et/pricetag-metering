@@ -783,8 +783,8 @@ function renderRecent(data){
       <td>${userCell(r.username,r.display_name,{country:r.country})}</td>
       <td title="${pmEsc(r.cost_center_description||'Unknown')}">${pmEsc(r.cost_center_description||'—')}</td>
       <td style="color:${clientColor}" title="${clientTitle}">${pmEsc(clientLabel||'—')}</td>
-      <td>${r.model||'—'}</td>
-      <td style="color:${provColor}">${r.provider||'—'}</td>
+      <td>${pmEsc(r.model||'—')}</td>
+      <td style="color:${provColor}">${pmEsc(r.provider||'—')}</td>
       <td style="color:${st.color};font-weight:600" title="${st.title}">${st.text}</td>
       <td class="num">${fmtN(r.prompt_tokens)}</td>
       <td class="num">${fmtN(r.completion_tokens)}</td>
@@ -1000,7 +1000,7 @@ function populateFilterDropdowns(models, users){
   var ms=document.getElementById('model-filter-select');
   if(ms){
     var cur=ms.value;
-    ms.innerHTML='<option value="">All</option>'+models.map(function(m){return '<option value="'+m.model+'"'+(m.model===cur?' selected':'')+'>'+m.model+'</option>';}).join('');
+    ms.innerHTML='<option value="">All</option>'+models.map(function(m){var name=pmEsc(m.model);return '<option value="'+name+'"'+(m.model===cur?' selected':'')+'>'+name+'</option>';}).join('');
   }
   allUsers=users;
   renderUserChecklist();
@@ -1051,7 +1051,7 @@ function renderUserChecklist(){
   list.innerHTML=shown.map(function(n){
     var checked=userFilter.indexOf(n)>=0?' checked':'';
     var safe=n.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-    var label=nameByUser[n]?nameByUser[n]+' <span style="color:var(--text2);font-size:10px">'+safe+'</span>':safe;
+    var label=nameByUser[n]?pmEsc(nameByUser[n])+' <span style="color:var(--text2);font-size:10px">'+safe+'</span>':safe;
     return '<label style="display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--text)" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'transparent\'">'+
       '<input type="checkbox" value="'+safe+'"'+checked+' onchange="onUserCheck(this)" style="cursor:pointer">'+
       '<span class="demo-pii" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+label+'</span></label>';

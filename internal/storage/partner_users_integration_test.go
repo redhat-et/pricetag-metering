@@ -132,6 +132,10 @@ func TestPatchPartnerUserMergesTagsAndUpdatesEmail(t *testing.T) {
 	if err != nil || len(logins) != 2 {
 		t.Fatalf("email patch must retain login history: %v, err %v", logins, err)
 	}
+	current, err := s.CurrentPartnerUserLogin(ctx, id)
+	if err != nil || current != "patch.new@example.com" {
+		t.Fatalf("CurrentPartnerUserLogin = %q, err %v; want the new current login", current, err)
+	}
 
 	if _, err := s.PatchPartnerUser(ctx, "partner-m2m:atlas", id, map[string]any{}); !errors.Is(err, ErrInvalidPartnerUser) {
 		t.Fatalf("empty patch error = %v, want ErrInvalidPartnerUser", err)

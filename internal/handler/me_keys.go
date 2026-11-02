@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -77,6 +78,37 @@ func (h *AdminHandler) myKeyIdentity(w http.ResponseWriter, r *http.Request) (us
 	return username, group, groups, true
 }
 
+// matchSessionGroup returns the session-cased group that equals requested, or
+// an empty string when the caller is not a member. Case-insensitive matching
+// preserves the platform's canonical spelling for the X-MaaS-Group header.
+func matchSessionGroup(groups []string, requested string) string {
+	for _, g := range groups {
+		if strings.EqualFold(g, requested) {
+			return g
+		}
+	}
+	return ""
+}
+
+// keyGroupEnabled applies the live MaaSSubscription allow-list when it is
+// available. A missing/unreadable list keeps the legacy behavior; the
+// application-level session membership check still applies.
+func (h *AdminHandler) keyGroupEnabled(ctx context.Context, group string) bool {
+	if h.k8sClient == nil {
+		return true
+	}
+	platform, err := h.platformGroups(ctx)
+	if err != nil || len(platform) == 0 {
+		return true
+	}
+	for _, pg := range platform {
+		if strings.EqualFold(group, pg) {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *AdminHandler) myKeysList(w http.ResponseWriter, r *http.Request) {
 	username, group, _, ok := h.myKeyIdentity(w, r)
 	if !ok {
@@ -116,31 +148,14 @@ func (h *AdminHandler) myKeysCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Group != "" {
-		matched := ""
-		for _, g := range groups {
-			if strings.EqualFold(g, body.Group) {
-				matched = g
-				break
-			}
-		}
+		matched := matchSessionGroup(groups, body.Group)
 		if matched == "" {
 			http.Error(w, "you are not a member of that group", http.StatusForbidden)
 			return
 		}
-		if h.k8sClient != nil {
-			if platform, err := h.platformGroups(r.Context()); err == nil && len(platform) > 0 {
-				allowed := false
-				for _, pg := range platform {
-					if strings.EqualFold(matched, pg) {
-						allowed = true
-						break
-					}
-				}
-				if !allowed {
-					http.Error(w, "that group is not enabled for key management", http.StatusForbidden)
-					return
-				}
-			}
+		if !h.keyGroupEnabled(r.Context(), matched) {
+			http.Error(w, "that group is not enabled for key management", http.StatusForbidden)
+			return
 		}
 		group = matched
 	}

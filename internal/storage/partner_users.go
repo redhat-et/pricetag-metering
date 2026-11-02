@@ -750,6 +750,26 @@ func (s *Store) PartnerUserByMaaSUsername(ctx context.Context, username string) 
 	return user, err
 }
 
+// CurrentPartnerUserLogin resolves the canonical MaaS login for a verified
+// partner UUID. OIDC uses this after profile persistence because that patch
+// can move the is_current login when the IdP changes the email address.
+func (s *Store) CurrentPartnerUserLogin(ctx context.Context, userID string) (string, error) {
+	id, err := normalizePartnerUserID(userID)
+	if err != nil {
+		return "", err
+	}
+	var username string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT l.username
+		FROM partner_user_logins l
+		JOIN partner_users p ON p.user_id = l.user_id
+		WHERE l.user_id = $1 AND l.is_current AND p.active`, id).Scan(&username)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrPartnerUserNotFound
+	}
+	return username, err
+}
+
 func partnerTagKeys(tags map[string]any) []string {
 	keys := make([]string, 0, len(tags))
 	for key := range tags {

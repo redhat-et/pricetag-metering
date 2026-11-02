@@ -370,11 +370,14 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "SSO directory is unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	user, lookupErr := h.oidcStore.PartnerUserByMaaSUsername(r.Context(), username)
+	// rhatUUID is the verified identity. Email and preferred_username are
+	// mutable profile attributes; resolving by UUID is what lets a legitimate
+	// IdP email change complete even when neither claim is a current login.
+	user, lookupErr := h.oidcStore.GetPartnerUser(r.Context(), claims.RhatUUID)
 	if lookupErr != nil || !user.Active {
 		// Do not provision, elevate, or authorize a user from claims alone.
 		if h.oidcClaimsDebugEnabled() {
-			h.renderOIDCClaims(w, claims, "/login", "No active provisioned partner user matched the returned email/username.", rawClaims)
+			h.renderOIDCClaims(w, claims, "/login", "No active provisioned partner user matched the returned rhatUUID.", rawClaims)
 			return
 		}
 		http.Error(w, "SSO identity is not provisioned in EnMaaS", http.StatusForbidden)
@@ -401,20 +404,16 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	}
 	// The patch above can move the current partner_user_logins row (for
 	// example when the IdP email changed the email tag). Re-resolve the
-	// current login against the same verified UUID before writing the
-	// session, so role/manager/scope lookups use the canonical row.
-	canonicalLogin := strings.TrimSpace(claims.Email)
-	if canonicalLogin == "" {
-		canonicalLogin = strings.TrimSpace(claims.Username)
-	}
-	canonical, canonicalErr := h.oidcStore.PartnerUserByMaaSUsername(r.Context(), canonicalLogin)
-	if canonicalErr != nil || !canonical.Active || !strings.EqualFold(canonical.UserID, claims.RhatUUID) {
-		slog.Error("OIDC current login changed during profile persistence",
-			"username", username, "canonical_login", canonicalLogin, "user_id", user.UserID, "error", canonicalErr)
+	// canonical login by the same verified UUID before writing the session,
+	// so role/manager/scope lookups use the current directory row.
+	canonicalLogin, canonicalErr := h.oidcStore.CurrentPartnerUserLogin(r.Context(), claims.RhatUUID)
+	if canonicalErr != nil || strings.TrimSpace(canonicalLogin) == "" {
+		slog.Error("OIDC current login lookup failed",
+			"rhat_uuid", claims.RhatUUID, "user_id", user.UserID, "error", canonicalErr)
 		http.Error(w, "SSO identity is not current in EnMaaS", http.StatusForbidden)
 		return
 	}
-	username = canonicalLogin
+	username = strings.TrimSpace(canonicalLogin)
 	h.setCookie(w, username, claims.Groups, "")
 	slog.Info("user logged in with OIDC", "username", username)
 	if h.oidcClaimsDebugEnabled() {

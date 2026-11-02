@@ -1,8 +1,10 @@
 package maasapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -74,6 +76,46 @@ func TestUserScopedKeyCallsPresentTheOwner(t *testing.T) {
 	}
 	if _, err := c.RevokeUserAPIKey(context.Background(), "k1", "", "team-a"); err == nil {
 		t.Fatal("revoke without owner should fail locally")
+	}
+}
+
+func TestClientErrorsAndLogsDoNotLeakResponseBody(t *testing.T) {
+	const secret = "upstream-response-secret"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(secret))
+	}))
+	defer server.Close()
+
+	c := NewClient(server.URL, "test-tenant")
+	ctx := context.Background()
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{"create", func() error { _, err := c.CreateAPIKey(ctx, "alice@example.com", "team-a", "atlas"); return err }()},
+		{"search", func() error { _, err := c.SearchAPIKeys(ctx, "alice@example.com", []string{"team-a"}); return err }()},
+		{"revoke", c.RevokeAPIKey(ctx, "key-1", []string{"team-a"})},
+	}
+	for _, tc := range tests {
+		if tc.err == nil {
+			t.Fatalf("%s: want upstream error", tc.name)
+		}
+		if strings.Contains(tc.err.Error(), secret) {
+			t.Fatalf("%s: error leaked upstream response body: %q", tc.name, tc.err)
+		}
+	}
+
+	var logs bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	defer slog.SetDefault(old)
+	_, _ = c.SearchAPIKeys(ctx, "alice@example.com", []string{"team-a"})
+	if strings.Contains(logs.String(), secret) {
+		t.Fatalf("search log leaked upstream response body: %q", logs.String())
+	}
+	if !strings.Contains(logs.String(), "status=502") {
+		t.Fatalf("search log should retain status classification, got %q", logs.String())
 	}
 }
 

@@ -54,7 +54,8 @@ type AuthHandler struct {
 }
 
 type oidcPartnerStore interface {
-	PartnerUserByMaaSUsername(context.Context, string) (storage.PartnerUser, error)
+	GetPartnerUser(context.Context, string) (storage.PartnerUser, error)
+	CurrentPartnerUserLogin(context.Context, string) (string, error)
 	PatchPartnerUser(context.Context, string, string, map[string]any) (storage.PartnerUser, error)
 }
 
