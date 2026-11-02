@@ -86,7 +86,9 @@ DOCKER_IMAGE="${DOCKER_IMAGE:-postgres:16}"
 LDAP_SERVERS=()
 
 die() { echo "ERROR: $*" >&2; exit 1; }
-usage() { sed -n '2,90p' "$0"; }
+usage() {
+  awk 'NR > 1 && /^set -euo pipefail$/ { exit } NR > 1 { print }' "$0"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
