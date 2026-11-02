@@ -72,6 +72,8 @@ type Config struct {
 	// header is present. Convenient for local development, unsafe once
 	// the service is exposed.
 	AllowUnauthenticatedAdmin bool
+	// SessionCookieSecure defaults true. Disable only for local HTTP testing.
+	SessionCookieSecure bool
 
 	// DefaultGroup is attributed to callers whose group cannot be
 	// resolved from a header or from the Kubernetes adapter.
@@ -163,10 +165,43 @@ type Config struct {
 	KeyService KeyService
 	Kubernetes Kubernetes
 	Welcome    Welcome
+	OIDC       OIDC
+	KeyPolicy  KeyPolicy
+}
+
+// KeyPolicy controls the lifetime of self-service API keys created from the
+// personal API Keys tab.
+type KeyPolicy struct {
+	DefaultExpiryHours int
+	MaxExpiryHours     int
+	AllowNoExpiry      bool
+}
+
+// OIDC contains the optional corporate SSO configuration. It is deliberately
+// disabled by default: shipping OIDC code must not change the production login
+// path until the provider, redirect URI, and rollout have been reviewed.
+type OIDC struct {
+	Enabled     bool
+	ClaimsDebug bool
+	// TestLogin exposes local persona shortcuts on the login page and forwards
+	// a persona hint to the identity provider. It exists purely for the local
+	// mock IdP; leave it false everywhere else.
+	TestLogin             bool
+	IssuerURL             string
+	ClientID              string
+	ClientSecret          string
+	RedirectURL           string
+	PostLogoutRedirectURL string
+	Scopes                []string
+}
+
+func (o OIDC) EnabledAndConfigured() bool {
+	return o.Enabled && o.IssuerURL != "" && o.ClientID != "" &&
+		o.ClientSecret != "" && o.RedirectURL != ""
 }
 
 // Welcome holds the public gateway endpoints surfaced on the
-// unauthenticated /welcome onboarding page. The URLs are injected into the
+// unauthenticated /welcome page. The URLs are injected into the
 // page at serve time from the deployment environment instead of being
 // written into the template, so no cluster-specific host ever lands in the
 // repository.
@@ -294,6 +329,7 @@ func Load() Config {
 		// ALLOW_UNAUTHENTICATED_ADMIN=true deliberately for local
 		// development only.
 		AllowUnauthenticatedAdmin: envBool("ALLOW_UNAUTHENTICATED_ADMIN", false),
+		SessionCookieSecure:       envBool("SESSION_COOKIE_SECURE", true),
 		DefaultGroup:              envDefault("DEFAULT_GROUP", "default"),
 		MonthSpendEnabled:         envBool("MONTH_SPEND_ENABLED", false),
 		MonthSpendWrites:          envBool("MONTH_SPEND_WRITE_ENABLED", false),
@@ -331,6 +367,22 @@ func Load() Config {
 		Welcome: Welcome{
 			GatewayURL:   strings.TrimSuffix(os.Getenv("WELCOME_GATEWAY_URL"), "/"),
 			DashboardURL: strings.TrimSuffix(os.Getenv("WELCOME_DASHBOARD_URL"), "/"),
+		},
+		OIDC: OIDC{
+			Enabled:               envBool("OIDC_ENABLED", false),
+			ClaimsDebug:           envBool("OIDC_CLAIMS_DEBUG", false),
+			TestLogin:             envBool("OIDC_TEST_LOGIN", false),
+			IssuerURL:             strings.TrimSuffix(os.Getenv("OIDC_ISSUER_URL"), "/"),
+			ClientID:              os.Getenv("OIDC_CLIENT_ID"),
+			ClientSecret:          os.Getenv("OIDC_CLIENT_SECRET"),
+			RedirectURL:           os.Getenv("OIDC_REDIRECT_URL"),
+			PostLogoutRedirectURL: os.Getenv("OIDC_POST_LOGOUT_REDIRECT_URL"),
+			Scopes:                envListDefault("OIDC_SCOPES", []string{"openid", "profile", "email", "groups"}),
+		},
+		KeyPolicy: KeyPolicy{
+			DefaultExpiryHours: envInt("DEFAULT_KEY_EXPIRY_HOURS", 90*24),
+			MaxExpiryHours:     envInt("MAX_KEY_EXPIRY_HOURS", 365*24),
+			AllowNoExpiry:      envBool("ALLOW_NO_EXPIRY", false),
 		},
 		Kubernetes: Kubernetes{
 			Namespace:                  envDefault("K8S_NAMESPACE", "default"),
@@ -394,6 +446,14 @@ func envSecrets(keys ...string) []string {
 		}
 	}
 	return result
+}
+
+func envListDefault(key string, fallback []string) []string {
+	values := envList(key)
+	if len(values) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return values
 }
 
 func envInt(key string, fallback int) int {

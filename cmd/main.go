@@ -279,7 +279,16 @@ func main() {
 
 	adminHandler := handler.NewAdminHandler(k8sClient, maasClient, cfg)
 	adminHandler.SetStore(store)
+	meUsageHandler := handler.NewMeUsageHandler(store, cfg)
+	accountHandler := handler.NewAccountHandler(cfg)
 	authHandler := handler.NewAuthHandler(cfg)
+	if cfg.OIDC.Enabled {
+		if err := authHandler.InitOIDC(ctx); err != nil {
+			slog.Error("OIDC is enabled but provider initialization failed", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("OIDC dashboard login enabled", "issuer", cfg.OIDC.IssuerURL, "client_id", cfg.OIDC.ClientID)
+	}
 	authHandler.SetOrgStore(store) // managers land on /manager after login
 	keysHandler := handler.NewKeysHandler(k8sClient, cfg, store)
 	usageReportHandler := handler.NewUsageReportHandler(store)
@@ -317,6 +326,8 @@ func main() {
 
 	// Auth endpoints — unauthenticated by definition
 	mux.HandleFunc("/login", authHandler.HandleLogin)
+	mux.HandleFunc("/oauth/login", authHandler.HandleOIDCLogin)
+	mux.HandleFunc("/oauth/callback", authHandler.HandleOIDCCallback)
 	mux.HandleFunc("/logout", authHandler.HandleLogout)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
@@ -337,7 +348,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// Public onboarding page — no session by design: it is the link you
+	// Public welcome page — no session by design: it is the link you
 	// send someone before they have a key. Its gateway URLs are substituted
 	// at serve time from WELCOME_*_URL env vars, so the repo template stays
 	// host-free. Root sends newcomers here; signed-in users navigate on.
@@ -357,6 +368,13 @@ func main() {
 	mux.HandleFunc("/me", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusMovedPermanently)
 	})
+	// Authenticated personal Usage + API Keys surface.
+	mux.HandleFunc("/account", auth(accountHandler.ServeAccount))
+	mux.HandleFunc("/api/v1/me/usage/summary", auth(meUsageHandler.HandleSummary))
+	mux.HandleFunc("/api/v1/me/usage/models", auth(meUsageHandler.HandleModels))
+	mux.HandleFunc("/api/v1/me/usage/recent", auth(meUsageHandler.HandleRecent))
+	mux.HandleFunc("/api/v1/me/keys", auth(adminHandler.HandleMyKeys))
+	mux.HandleFunc("/api/v1/me/keys/", auth(adminHandler.HandleMyKeys))
 	mux.HandleFunc("/me/keys", auth(keysHandler.HandleKeys))
 	mux.HandleFunc("/me/keys/", auth(keysHandler.HandleKeys))
 	mux.HandleFunc("/me/whoami", auth(keysHandler.HandleWhoAmI))
@@ -370,7 +388,15 @@ func main() {
 	// resolved scope).
 	dashCache := handler.NewDashboardCache(cfg, store)
 	dashboardPage := func(next http.HandlerFunc) http.HandlerFunc {
-		return auth(handler.RequirePartnerAdminPage(cfg, store, next, dashboardHandler.ServeComingSoon))
+		return auth(func(w http.ResponseWriter, r *http.Request) {
+			if !handler.IsPartnerAdmin(r.Context(), cfg, store, r) {
+				// Regular users now have a real account page; the old
+				// "coming soon" dead end is retired.
+				http.Redirect(w, r, "/account", http.StatusFound)
+				return
+			}
+			next(w, r)
+		})
 	}
 	dashboardAPI := func(next http.HandlerFunc) http.HandlerFunc {
 		return auth(handler.RequirePartnerAdminAPI(cfg, store, next))
@@ -382,12 +408,14 @@ func main() {
 	mux.HandleFunc("/api/v1/dashboard/directory-users", dashboardAPI(dashboardHandler.HandleDirectoryUsers))
 	mux.HandleFunc("/api/v1/dashboard/models", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleModels)))
 	mux.HandleFunc("/api/v1/dashboard/tools", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleTools)))
+	mux.HandleFunc("/api/v1/dashboard/geo", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleGeo)))
+	mux.HandleFunc("/api/v1/dashboard/cost-centers", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleCostCenters)))
 	mux.HandleFunc("/api/v1/dashboard/timeline", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleTimeline)))
 	mux.HandleFunc("/api/v1/dashboard/recent", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleRecent)))
 
 	// Pricing modal rate card — readable by any logged-in user: the rates
 	// are the same numbers every request is billed at, no user data.
-	mux.HandleFunc("/api/v1/pricing", dashboardAPI(handler.NewPricingRefreshHandler(store).HandleList))
+	mux.HandleFunc("/api/v1/pricing", auth(handler.NewPricingRefreshHandler(store).HandleList))
 
 	// Operator pages (admin console, routing) are SUPER-ADMIN
 	// only. Regular admins get the org-wide Usage view on /dashboard and
@@ -431,11 +459,12 @@ func main() {
 	// scope (plain user sees self, manager sees subtree, super-admin sees
 	// all). Backed entirely by partner_users.
 	orgHandler := handler.NewPartnerOrgHandler(store, cfg)
-	mux.HandleFunc("/manager", dashboardPage(orgHandler.ServeManager))
-	mux.HandleFunc("/api/v1/org/scope", dashboardAPI(orgHandler.HandleScope))
-	mux.HandleFunc("/api/v1/org/usage", dashboardAPI(orgHandler.HandleOrgUsage))
-	mux.HandleFunc("/api/v1/org/charts", dashboardAPI(orgHandler.HandleOrgCharts))
-	mux.HandleFunc("/api/v1/org/person", dashboardAPI(orgHandler.HandleOrgPerson))
+	managerAuth := func(next http.HandlerFunc) http.HandlerFunc { return auth(next) }
+	mux.HandleFunc("/manager", managerAuth(orgHandler.ServeManager))
+	mux.HandleFunc("/api/v1/org/scope", managerAuth(orgHandler.HandleScope))
+	mux.HandleFunc("/api/v1/org/usage", managerAuth(orgHandler.HandleOrgUsage))
+	mux.HandleFunc("/api/v1/org/charts", managerAuth(orgHandler.HandleOrgCharts))
+	mux.HandleFunc("/api/v1/org/person", managerAuth(orgHandler.HandleOrgPerson))
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

@@ -501,7 +501,8 @@ td .tag{white-space:nowrap}
 /* ── Shared appbar (same block on every page; var fallbacks let either
    token spelling work) ─────────────────────────────────────────────── */
 .appbar{display:flex;align-items:center;gap:16px;padding:11px 18px;background:var(--c1,#141820);border-bottom:1px solid var(--bdr,#232b3b);flex-wrap:wrap;margin:-20px -40px 16px -40px}
-.appbar .logo{font-weight:700;font-size:15px;letter-spacing:.2px;white-space:nowrap;color:var(--t,#e2e6ec);padding-left:4px}
+ .appbar .logo{font-weight:700;font-size:15px;letter-spacing:.2px;white-space:nowrap;color:var(--t,#e2e6ec);padding-left:4px}
+ .appbar .logo .en{color:#3dcc6e}
 .appbar .logo em{font-style:normal;color:var(--blu,#4da0f8)}
 .appbar nav{display:flex;gap:2px;flex-wrap:wrap}
 .appbar nav a{padding:5px 11px;border-radius:7px;color:var(--t2,#8090a8);font-size:13px;text-decoration:none}
@@ -540,9 +541,11 @@ td .tag{white-space:nowrap}
 
 <!-- Header -->
 <header class="appbar">
-  <a class="logo" href="/dashboard">Price<em>Tag</em></a>
+  <a class="logo" href="/dashboard"><span class="en">En</span><em>MaaS</em></a>
   <nav>
-    <a href="/dashboard">Usage</a>
+    <a href="/account">My usage</a>
+    <a href="/account?tab=keys">API keys</a>
+    <a href="/dashboard">Org usage</a>
     <a href="/manager" id="team-tab" style="display:none" title="Usage for everyone on your team">My team</a>
     <a href="/routing">Routing</a>
     <a href="/admin" class="on">Admin</a>
@@ -1758,7 +1761,7 @@ function inviteMessage(name, url, ttlHours) {
     + "• This pilot does *not* give you an extra $300. The $300/month limit is per person, across all AI platforms — every dollar you spend through PriceTag counts against the same budget you already have elsewhere.\n"
     + "• PriceTag spend doesn't flow into your existing budget tools automatically. Do the math yourself: check your running total on the PriceTag dashboard and add it to what you've already spent, so nothing surprises you at month's end.\n"
     + "• Expensive models are available here — use them knowingly. Models like Fable, Astra and Opus can burn most of a month's budget in a single heavy day. Check the *Pricing* button for what each model costs before you pick it, and keep an eye on the dashboard for your first few days.\n\n"
-    + "This is early — if anything in the onboarding or the docs felt unclear, reply here and tell us. Feedback is how this gets better.";
+    + "This is early — if anything in the setup or the docs felt unclear, reply here and tell us. Feedback is how this gets better.";
 }
 
 function setInviteResult(msgElId, personName, r) {
@@ -2462,7 +2465,7 @@ fetch("/whoami").then(function(r){return r.json()}).then(function(d){
   }
   var mvb=document.getElementById("my-view-btn");
   if(mvb&&d.user){mvb.href="/admin/impersonate?as="+encodeURIComponent(d.user);}
-  if(d.isManager){var tt=document.getElementById("team-tab");if(tt)tt.style.display="";}
+  if(d.isManager||d.isSuperAdmin){var tt=document.getElementById("team-tab");if(tt)tt.style.display="";}
 }).catch(function(){})
 </script>
 <!-- Model pricing modal (shared across pages) -->

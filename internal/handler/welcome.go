@@ -18,7 +18,7 @@ const (
 	welcomeDashboardFallback = "https://dashboard.example.com"
 )
 
-// ServeWelcome renders the public onboarding page. It is intentionally
+// ServeWelcome renders the public welcome page. It is intentionally
 // unauthenticated — it is what you send to a new user before they have a
 // key. The page template carries {{...}} placeholders instead of cluster
 // hosts; the real endpoints are substituted here, at serve time, from the

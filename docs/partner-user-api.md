@@ -46,7 +46,8 @@ PATCH never creates a user.
 
 The merged record must still satisfy the complete user invariant:
 `email`, `first_name`, and `last_name` remain required; emails are globally
-unique; values must be strings (except nullable `manager_uuid`); and tag names
+unique; values must be strings (except nullable `manager_uuid` and group-list
+tags such as `groups` / `*_groups`, which may be string arrays); and tag names
 must match the documented lowercase tag format. An email change updates the
 current MaaS username while retaining historical logins for usage attribution.
 
