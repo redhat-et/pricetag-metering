@@ -17,16 +17,16 @@ html{background:var(--bg)}
 body{margin:0;background:transparent;color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;position:relative;overflow-x:hidden}
 /* ── Subtle welcome-page background animation (issue #11) ──────────────── */
 #dashboard-flow{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.25;mix-blend-mode:screen}
-.dashboard-content{position:relative;z-index:1}
+.dashboard-content{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:20px}
 a{color:inherit;text-decoration:none}
-.appbar{display:flex;align-items:center;gap:16px;padding:11px 18px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.appbar{display:flex;align-items:center;gap:16px;padding:12px 22px;background:var(--panel);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap;margin-bottom:16px}
 .appbar .logo{font-weight:700;font-size:15px;letter-spacing:.2px;white-space:nowrap}
  .appbar .logo .en{color:#3dcc6e}
 .appbar .logo em{font-style:normal;color:var(--accent)}
-.appbar nav{display:flex;gap:2px;flex-wrap:wrap}
-.appbar nav a{padding:5px 11px;border-radius:7px;color:var(--muted);font-size:13px}
-.appbar nav a:hover{background:var(--panel2);color:var(--text)}
-.appbar nav a.on{background:var(--panel2);color:var(--text);font-weight:600}
+.appbar nav{display:flex;gap:4px;flex-wrap:wrap}
+.appbar nav a{padding:6px 14px;border-radius:8px;color:var(--muted);font-size:12px;font-weight:600}
+.appbar nav a:hover{background:#22262c;color:var(--text)}
+.appbar nav a.on{background:#22262c;color:var(--text);font-weight:600}
 .appbar .ab-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .ab-user{color:var(--accent2);font-size:13px;font-weight:600}
 .ab-user .role{color:var(--muted);font-weight:400}

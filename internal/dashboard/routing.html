@@ -103,14 +103,14 @@ body{background:var(--bg);color:var(--t);font-family:'Inter',-apple-system,sans-
 .toast.err{background:var(--red);color:#fff}
 /* ── Shared appbar (same block on every page; var fallbacks let either
    token spelling work) ─────────────────────────────────────────────── */
-.appbar{display:flex;align-items:center;gap:16px;padding:11px 18px;background:var(--c1,#141820);border-bottom:1px solid var(--bdr,#232b3b);flex-wrap:wrap;margin:-24px -32px 16px -32px}
+.appbar{display:flex;align-items:center;gap:16px;padding:12px 22px;background:var(--c1,#141820);border:1px solid var(--bdr,#232b3b);border-radius:10px;flex-wrap:wrap;margin-bottom:16px}
   .appbar .logo{font-weight:700;font-size:15px;letter-spacing:.2px;white-space:nowrap;color:var(--t,#e2e6ec)}
   .appbar .logo .en{color:#3dcc6e}
 .appbar .logo em{font-style:normal;color:var(--blu,#4da0f8)}
-.appbar nav{display:flex;gap:2px;flex-wrap:wrap}
-.appbar nav a{padding:5px 11px;border-radius:7px;color:var(--t2,#8090a8);font-size:13px;text-decoration:none}
-.appbar nav a:hover{background:var(--c2,#1a2030);color:var(--t,#e2e6ec)}
-.appbar nav a.on{background:var(--c2,#1a2030);color:var(--t,#e2e6ec);font-weight:600}
+.appbar nav{display:flex;gap:4px;flex-wrap:wrap}
+.appbar nav a{padding:6px 14px;border-radius:8px;color:var(--t2,#8090a8);font-size:12px;font-weight:600;text-decoration:none}
+.appbar nav a:hover{background:#22262c;color:var(--t,#e2e6ec)}
+.appbar nav a.on{background:#22262c;color:var(--t,#e2e6ec);font-weight:600}
 .appbar .ab-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .ab-btn{background:none;border:1px solid var(--bdr,#232b3b);color:var(--t2,#8090a8);border-radius:7px;padding:4px 11px;font-size:13px;cursor:pointer;text-decoration:none}
 .ab-btn:hover{color:var(--t,#e2e6ec)}
