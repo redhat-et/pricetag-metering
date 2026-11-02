@@ -748,7 +748,7 @@ let adminScope=false; // super-admins only: whole organisation, not a manager's 
 // KPI and the table together. The old shared-dashboard timeline endpoint
 // scoped non-admins to themselves, which is why the chart used to sit empty
 // for a manager with a busy team.
-const PIE_COLORS=['#58a6ff','#3fb950','#d29922','#f85149','#bc8cff','#39d2c0','#f778ba','#79c0ff','#7ee787','#e3b341','#ff9a8c','#d2a8ff','#56d4dd','#ffa657','#a5d6ff'];
+const PIE_COLORS=['#4da0f8','#eba830','#a88cf8','#38d4c2','#e8554e','#f778ba','#b8d94a','#6e7bf2','#b07a48','#ff8c69','#79c0ff','#d2a8ff','#56d4dd','#e3b341','#8090a8'];
 var savingsRef='claude-opus-4-8', modelMetric='tokens', userPieMetric='cost';
 var chartsCache=null, hvChart=null, modelChart=null, userChart=null;
 // Mirror of the Usage page's reference-model picklist and rate card, so the
@@ -989,7 +989,7 @@ function renderPies(){
   const topM=ranked.slice(0,TOPN), tail=ranked.slice(TOPN);
   const pieM=topM.concat(tail.length?[{name:'Other — '+tail.length+' models',val:tail.reduce((s,d)=>s+d.val,0),other:true}]:[]);
   const mv=pieM.map(d=>d.val);
-  const mColors=pieM.map((d,i)=>d.other?'#5b6b82':(d.hosted?'#3fb950':PIE_COLORS[i%PIE_COLORS.length]));
+  const mColors=pieM.map((d,i)=>d.other?'#5b6b82':PIE_COLORS[i%PIE_COLORS.length]);
   const mLabel=d=>{const n=d.name.length>26?d.name.slice(0,25)+'…':d.name;return n+' — '+pieFmt(d.val,modelMetric);};
   if(modelChart)modelChart.destroy();
   modelChart=new Chart(document.getElementById('modelChart'),{

@@ -379,7 +379,7 @@
 <script>
 (function () {
   var state = {tab:'usage', range:'mtd', from:'', to:'', keys:[], models:[], overview:null, revokeId:'', animateUsage:true, modelMetric:'cost', splitMetric:'cost', tableSort:{key:'cost',dir:'desc'}};
-  var COLORS = ['#4da0f8','#3dcc6e','#eba830','#a88cf8','#38d4c2','#e8554e','#8090a8'];
+  var COLORS = ['#4da0f8','#eba830','#a88cf8','#38d4c2','#e8554e','#f778ba','#b8d94a','#6e7bf2','#b07a48','#ff8c69','#79c0ff','#d2a8ff','#56d4dd','#e3b341','#8090a8'];
 
   function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){
@@ -591,7 +591,7 @@
     var segs=[], acc=0, legend='';
     top.forEach(function(r,i){
       var pct = total>0 ? (value(r)/total*100) : 0;
-      var color = COLORS[i%COLORS.length];
+      var color = r._other ? '#5b6b82' : COLORS[i%COLORS.length];
       segs.push(color+' '+acc.toFixed(2)+'% '+(acc+pct).toFixed(2)+'%');
       acc += pct;
       legend += '<div class="legend-row"><span class="sw" style="background:'+color+'"></span>'+

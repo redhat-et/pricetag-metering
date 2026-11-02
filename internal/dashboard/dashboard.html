@@ -592,7 +592,10 @@ let cachedOverview=null;
 // basis in renderSavings so per-user/group filters don't zero it out.
 let catalogModels=[];
 
-const COLORS=['#58a6ff','#3fb950','#d29922','#f85149','#bc8cff','#39d2c0','#f778ba','#79c0ff','#7ee787','#e3b341','#ff9a8c','#d2a8ff','#56d4dd','#ffa657','#a5d6ff'];
+// One categorical palette for every pie. Keep the first ten hues clearly
+// separated; "Other" always uses OTHER_SLICE_COLOR, never a palette entry.
+const COLORS=['#4da0f8','#eba830','#a88cf8','#38d4c2','#e8554e','#f778ba','#b8d94a','#6e7bf2','#b07a48','#ff8c69','#79c0ff','#d2a8ff','#56d4dd','#e3b341','#8090a8'];
+const OTHER_SLICE_COLOR='#5b6b82';
 
 function fmtN(n){if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toString()}
 function fmtC(n){if(n==null)return'$0.00';if(n!==0&&Math.abs(n)<0.01)return'$'+n.toFixed(4);return'$'+n.toFixed(2)}
@@ -730,7 +733,7 @@ function friendlyClient(ua){
 function toolColor(tool){
   // Chart.js needs concrete colors; CSS var() values render as gray in its
   // canvas even though they work for inline table styles.
-  return {'Claude Code':'#d29922','Codex':'#3fb950','OpenCode':'#58a6ff','Pi':'#bc8cff','Charm-Crush':'#f778ba','OpenAI':'#39d2c0','Gemini CLI':'#79c0ff','Aider':'#7ee787','omp':'#ffa657','curl':'#8b949e','Other':'#a5d6ff'}[tool]||'#39d2c0';
+  return {'Claude Code':'#4da0f8','Codex':'#eba830','OpenCode':'#a88cf8','Pi':'#38d4c2','Charm-Crush':'#e8554e','OpenAI':'#f778ba','Gemini CLI':'#b8d94a','Aider':'#6e7bf2','omp':'#b07a48','curl':'#ff8c69','Other':OTHER_SLICE_COLOR}[tool]||'#79c0ff';
 }
 
 // statusCell maps an HTTP status to a colored cell: green for 2xx, red for
@@ -893,7 +896,7 @@ function renderModelChart(){
   const m=modelMetric;
   const vals=data.map(d=>d.value);
   const labels=data.map(d=>`${d.label} — ${pieFmt(d.value,m)}`);
-  const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
+  const colors=data.map((d,i)=>d.item===null?OTHER_SLICE_COLOR:COLORS[i%COLORS.length]);
   if(tokenChart){
     tokenChart.data.labels=labels;
     tokenChart.data.datasets[0].data=vals;
@@ -1164,7 +1167,7 @@ function renderUserCostChart(){
   const displayNames=data.map((d,i)=>d.item===null?'Other':demoUserName(d.label,i));
   const legendParts=data.map(d=>({name:d.item===null?'Other':d.label,rest:' — '+(m==='cost'&&d.value===0?'Free':pieFmt(d.value,m))}));
   const labels=legendParts.map(p=>p.name+p.rest);
-  const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
+  const colors=data.map((d,i)=>d.item===null?OTHER_SLICE_COLOR:COLORS[i%COLORS.length]);
   const tooltipLabel=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return displayNames[ctx.dataIndex]+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
   const tooltipTitle=function(items){
     if(!demoPrivacyEnabled())return items.length?items[0].label:'';
@@ -1237,7 +1240,7 @@ function renderCostCenterChart(){
   const data=topFiveItems(cachedCostCenters||[],function(d){return d.cost_usd||0;},function(d){return d.cost_center_description||'Unknown';},9);
   const vals=data.map(d=>d.value);
   const labels=data.map(d=>`${fmtCostLabel(d.value)} — ${d.label}`);
-  const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
+  const colors=data.map((d,i)=>d.item===null?OTHER_SLICE_COLOR:COLORS[i%COLORS.length]);
   if(costCenterChart){
     costCenterChart.data.labels=labels;
     costCenterChart.data.datasets[0].data=vals;
