@@ -238,9 +238,9 @@ func TestLocalPrices_OpenRouterParity(t *testing.T) {
 	// GLM is the deliberate exception: every rate 0 by design (free), and
 	// retired Qwen ids are deprecated — priced for history, off the list.
 	want := map[string]ModelPrice{
-		"Qwen3.8-27B-FP8":                   {InputCost: 0.214, OutputCost: 2.55, CacheReadCost: 0.15},
-		"Inferact/Qwen3.8-Flash-Next-NVFP4": {InputCost: 0.15, OutputCost: 0.47, CacheReadCost: 0.016},
-		"rits/zai-org/glm-5-3":              {},
+		"Qwen3.8-27B-FP8":                           {InputCost: 0.214, OutputCost: 2.55, CacheReadCost: 0.15},
+		"Inferact/Qwen3.8-Flash-Next-NVFP4":         {InputCost: 0.15, OutputCost: 0.47, CacheReadCost: 0.016},
+		"rits/zai-org/glm-5-3":                      {},
 		"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017": {},
 	}
 	wantDeprecated := map[string]bool{
