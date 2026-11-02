@@ -90,7 +90,7 @@ func newTestOIDCHandler(t *testing.T, testLogin bool) *AuthHandler {
 	t.Cleanup(provider.Close)
 
 	h := NewAuthHandler(config.Config{OIDC: config.OIDC{
-		Enabled: true, TestLogin: testLogin,
+		Enabled: true, DevelopmentMode: true, TestLogin: testLogin,
 		IssuerURL: provider.URL, ClientID: "client",
 		ClientSecret: "secret", RedirectURL: "https://dashboard.example/oauth/callback",
 		Scopes: []string{"openid", "profile", "email", "groups"},

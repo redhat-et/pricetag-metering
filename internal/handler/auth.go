@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -48,13 +49,24 @@ type AuthHandler struct {
 	// record has reports land on /manager, the view they actually came for.
 	// Optional — a nil store (or a lookup failure) keeps the old behaviour
 	// and lands everyone on /dashboard.
-	orgStore *storage.Store
+	orgStore  *storage.Store
+	oidcStore oidcPartnerStore
+}
+
+type oidcPartnerStore interface {
+	PartnerUserByMaaSUsername(context.Context, string) (storage.PartnerUser, error)
+	PatchPartnerUser(context.Context, string, string, map[string]any) (storage.PartnerUser, error)
 }
 
 // SetOrgStore wires the directory lookup used by the login redirect. Kept a
 // setter so login stays constructible without a database (tests, lite
 // deployments).
-func (h *AuthHandler) SetOrgStore(s *storage.Store) { h.orgStore = s }
+func (h *AuthHandler) SetOrgStore(s *storage.Store) {
+	h.orgStore = s
+	h.oidcStore = s
+}
+
+func (h *AuthHandler) setOIDCPartnerStore(s oidcPartnerStore) { h.oidcStore = s }
 
 func NewAuthHandler(cfg config.Config) *AuthHandler {
 	secret := []byte(os.Getenv("SESSION_SECRET"))
@@ -145,7 +157,7 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		// Local/demo shortcuts only: the mock IdP picker is shown below the
 		// production SSO link when explicitly enabled.
-		if h.oidc != nil && h.cfg.OIDC.TestLogin {
+		if h.oidc != nil && h.cfg.OIDC.DevelopmentMode && h.cfg.OIDC.TestLogin {
 			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), testLoginPanel, 1)
 		} else {
 			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), nil, 1)

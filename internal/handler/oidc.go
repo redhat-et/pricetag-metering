@@ -19,6 +19,7 @@ import (
 )
 
 const oidcStateCookie = "metering_oidc_state"
+const oidcNetworkTimeout = 10 * time.Second
 
 var errOIDCUnavailable = errors.New("oidc is not enabled")
 
@@ -87,13 +88,18 @@ type oidcProvider struct {
 }
 
 func (h *AuthHandler) InitOIDC(ctx context.Context) error {
+	if (h.cfg.OIDC.ClaimsDebug || h.cfg.OIDC.TestLogin) && !h.cfg.OIDC.DevelopmentMode {
+		return errors.New("OIDC_CLAIMS_DEBUG and OIDC_TEST_LOGIN require OIDC_DEVELOPMENT_MODE=true")
+	}
 	if !h.cfg.OIDC.Enabled {
 		return nil
 	}
 	if !h.cfg.OIDC.EnabledAndConfigured() {
 		return fmt.Errorf("OIDC_ENABLED is true but OIDC issuer, client ID, secret, and redirect URL are not all configured")
 	}
-	provider, err := oidc.NewProvider(ctx, h.cfg.OIDC.IssuerURL)
+	requestCtx, cancel := h.oidcRequestContext(ctx)
+	defer cancel()
+	provider, err := oidc.NewProvider(requestCtx, h.cfg.OIDC.IssuerURL)
 	if err != nil {
 		return fmt.Errorf("discover OIDC provider: %w", err)
 	}
@@ -109,6 +115,15 @@ func (h *AuthHandler) InitOIDC(ctx context.Context) error {
 		verifier: provider.Verifier(&oidc.Config{ClientID: h.cfg.OIDC.ClientID}),
 	}
 	return nil
+}
+
+func (h *AuthHandler) oidcRequestContext(parent context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(parent, oidcNetworkTimeout)
+	return oidc.ClientContext(ctx, h.httpClient), cancel
+}
+
+func (h *AuthHandler) oidcClaimsDebugEnabled() bool {
+	return h.cfg.OIDC.DevelopmentMode && h.cfg.OIDC.ClaimsDebug
 }
 
 func randomURLValue() (string, error) {
@@ -191,7 +206,7 @@ func (h *AuthHandler) HandleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	verifier := oauth2.GenerateVerifier()
 	testPersona := ""
-	if h.cfg.OIDC.TestLogin {
+	if h.cfg.OIDC.DevelopmentMode && h.cfg.OIDC.TestLogin {
 		if persona := r.URL.Query().Get("persona"); validTestPersona(persona) {
 			testPersona = persona
 		}
@@ -236,7 +251,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	if providerErr := r.URL.Query().Get("error"); providerErr != "" {
 		description := r.URL.Query().Get("error_description")
 		slog.Warn("OIDC provider denied authorization", "error", providerErr, "description", description)
-		if h.cfg.OIDC.ClaimsDebug {
+		if h.oidcClaimsDebugEnabled() {
 			h.renderOIDCProviderError(w, providerErr, description)
 			return
 		}
@@ -248,7 +263,9 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "missing SSO authorization code", http.StatusBadRequest)
 		return
 	}
-	token, err := h.oidc.config.Exchange(r.Context(), code, oauth2.VerifierOption(state.CodeVerifier))
+	requestCtx, cancel := h.oidcRequestContext(r.Context())
+	defer cancel()
+	token, err := h.oidc.config.Exchange(requestCtx, code, oauth2.VerifierOption(state.CodeVerifier))
 	if err != nil {
 		slog.Warn("OIDC code exchange failed", "error", err)
 		http.Error(w, "SSO authorization failed", http.StatusUnauthorized)
@@ -259,7 +276,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "SSO response did not contain an ID token", http.StatusUnauthorized)
 		return
 	}
-	verified, err := h.oidc.verifier.Verify(r.Context(), idToken)
+	verified, err := h.oidc.verifier.Verify(requestCtx, idToken)
 	if err != nil {
 		http.Error(w, "invalid SSO identity token", http.StatusUnauthorized)
 		return
@@ -274,7 +291,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	if err := verified.Claims(&idTokenClaims); err == nil {
 		rawClaims["id_token"] = idTokenClaims
 	}
-	if h.cfg.OIDC.ClaimsDebug {
+	if h.oidcClaimsDebugEnabled() {
 		if accessTokenClaims, decodeErr := decodeJWTClaims(token.AccessToken); decodeErr == nil {
 			rawClaims["access_token_unverified"] = accessTokenClaims
 		}
@@ -283,9 +300,13 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	// token. Merge those claims without allowing them to replace verified token
 	// identity fields such as sub, nonce, or rhatUUID.
 	if h.oidc.provider != nil && h.oidc.provider.UserInfoEndpoint() != "" {
-		if info, infoErr := h.oidc.provider.UserInfo(r.Context(), oauth2.StaticTokenSource(token)); infoErr != nil {
+		if info, infoErr := h.oidc.provider.UserInfo(requestCtx, oauth2.StaticTokenSource(token)); infoErr != nil {
 			slog.Warn("OIDC UserInfo request failed", "error", infoErr)
 		} else {
+			if info.Subject == "" || info.Subject != claims.Subject {
+				http.Error(w, "SSO UserInfo subject does not match identity token", http.StatusUnauthorized)
+				return
+			}
 			var userInfoClaims oidcClaims
 			if infoErr := info.Claims(&userInfoClaims); infoErr != nil {
 				slog.Warn("OIDC UserInfo claims decode failed", "error", infoErr)
@@ -299,7 +320,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if claims.RhatUUID == "" {
-		if h.cfg.OIDC.ClaimsDebug {
+		if h.oidcClaimsDebugEnabled() {
 			h.renderOIDCClaims(w, claims, "/login", "The provider did not return rhatUUID.", rawClaims)
 			return
 		}
@@ -311,21 +332,21 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		username = strings.TrimSpace(claims.Username)
 	}
 	if username == "" {
-		if h.cfg.OIDC.ClaimsDebug {
+		if h.oidcClaimsDebugEnabled() {
 			h.renderOIDCClaims(w, claims, "/login", "The provider did not return an email or preferred_username.", rawClaims)
 			return
 		}
 		http.Error(w, "SSO identity is missing email/username", http.StatusUnauthorized)
 		return
 	}
-	if h.orgStore == nil {
+	if h.oidcStore == nil {
 		http.Error(w, "SSO directory is unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	user, lookupErr := h.orgStore.PartnerUserByMaaSUsername(r.Context(), username)
+	user, lookupErr := h.oidcStore.PartnerUserByMaaSUsername(r.Context(), username)
 	if lookupErr != nil || !user.Active {
 		// Do not provision, elevate, or authorize a user from claims alone.
-		if h.cfg.OIDC.ClaimsDebug {
+		if h.oidcClaimsDebugEnabled() {
 			h.renderOIDCClaims(w, claims, "/login", "No active provisioned partner user matched the returned email/username.", rawClaims)
 			return
 		}
@@ -333,7 +354,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !strings.EqualFold(user.UserID, claims.RhatUUID) {
-		if h.cfg.OIDC.ClaimsDebug {
+		if h.oidcClaimsDebugEnabled() {
 			h.renderOIDCClaims(w, claims, "/login", "The returned rhatUUID does not match the provisioned partner user UUID.", rawClaims)
 			return
 		}
@@ -356,7 +377,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	}
 	h.setCookie(w, username, claims.Groups, "")
 	slog.Info("user logged in with OIDC", "username", username)
-	if h.cfg.OIDC.ClaimsDebug {
+	if h.oidcClaimsDebugEnabled() {
 		h.renderOIDCClaims(w, claims, h.loginDestination(r, username), "", rawClaims)
 		return
 	}
@@ -372,7 +393,7 @@ func (h *AuthHandler) persistOIDCProfile(ctx context.Context, userID string, cla
 	if len(tags) == 0 {
 		return nil
 	}
-	_, err := h.orgStore.PatchPartnerUser(ctx, "oidc", userID, tags)
+	_, err := h.oidcStore.PatchPartnerUser(ctx, "oidc", userID, tags)
 	return err
 }
 

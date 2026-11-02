@@ -183,16 +183,18 @@ type KeyPolicy struct {
 type OIDC struct {
 	Enabled     bool
 	ClaimsDebug bool
+	// DevelopmentMode is a separate explicit gate for local/stage-only OIDC
+	// diagnostics and persona login shortcuts.
+	DevelopmentMode bool
 	// TestLogin exposes local persona shortcuts on the login page and forwards
 	// a persona hint to the identity provider. It exists purely for the local
 	// mock IdP; leave it false everywhere else.
-	TestLogin             bool
-	IssuerURL             string
-	ClientID              string
-	ClientSecret          string
-	RedirectURL           string
-	PostLogoutRedirectURL string
-	Scopes                []string
+	TestLogin    bool
+	IssuerURL    string
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+	Scopes       []string
 }
 
 func (o OIDC) EnabledAndConfigured() bool {
@@ -369,15 +371,15 @@ func Load() Config {
 			DashboardURL: strings.TrimSuffix(os.Getenv("WELCOME_DASHBOARD_URL"), "/"),
 		},
 		OIDC: OIDC{
-			Enabled:               envBool("OIDC_ENABLED", false),
-			ClaimsDebug:           envBool("OIDC_CLAIMS_DEBUG", false),
-			TestLogin:             envBool("OIDC_TEST_LOGIN", false),
-			IssuerURL:             strings.TrimSuffix(os.Getenv("OIDC_ISSUER_URL"), "/"),
-			ClientID:              os.Getenv("OIDC_CLIENT_ID"),
-			ClientSecret:          os.Getenv("OIDC_CLIENT_SECRET"),
-			RedirectURL:           os.Getenv("OIDC_REDIRECT_URL"),
-			PostLogoutRedirectURL: os.Getenv("OIDC_POST_LOGOUT_REDIRECT_URL"),
-			Scopes:                envListDefault("OIDC_SCOPES", []string{"openid", "profile", "email", "groups"}),
+			Enabled:         envBool("OIDC_ENABLED", false),
+			ClaimsDebug:     envBool("OIDC_CLAIMS_DEBUG", false),
+			DevelopmentMode: envBool("OIDC_DEVELOPMENT_MODE", false),
+			TestLogin:       envBool("OIDC_TEST_LOGIN", false),
+			IssuerURL:       strings.TrimSuffix(os.Getenv("OIDC_ISSUER_URL"), "/"),
+			ClientID:        os.Getenv("OIDC_CLIENT_ID"),
+			ClientSecret:    os.Getenv("OIDC_CLIENT_SECRET"),
+			RedirectURL:     os.Getenv("OIDC_REDIRECT_URL"),
+			Scopes:          envListDefault("OIDC_SCOPES", []string{"openid", "profile", "email", "groups"}),
 		},
 		KeyPolicy: KeyPolicy{
 			DefaultExpiryHours: envInt("DEFAULT_KEY_EXPIRY_HOURS", 90*24),

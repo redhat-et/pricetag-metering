@@ -183,7 +183,7 @@ func TestPartnerAPIAdditionalSecretsLoadFromEnvironment(t *testing.T) {
 }
 
 func TestOIDCIsDisabledByDefaultAndLoadsConfiguration(t *testing.T) {
-	for _, key := range []string{"OIDC_ENABLED", "OIDC_ISSUER_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URL", "OIDC_SCOPES"} {
+	for _, key := range []string{"OIDC_ENABLED", "OIDC_CLAIMS_DEBUG", "OIDC_DEVELOPMENT_MODE", "OIDC_TEST_LOGIN", "OIDC_ISSUER_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URL", "OIDC_SCOPES"} {
 		t.Setenv(key, "")
 	}
 	cfg := Load()
@@ -196,12 +196,16 @@ func TestOIDCIsDisabledByDefaultAndLoadsConfiguration(t *testing.T) {
 	t.Setenv("OIDC_CLIENT_SECRET", "secret")
 	t.Setenv("OIDC_REDIRECT_URL", "https://dashboard.example/oauth/callback")
 	t.Setenv("OIDC_SCOPES", "openid profile email groups")
+	t.Setenv("OIDC_DEVELOPMENT_MODE", "true")
 	cfg = Load()
 	if !cfg.OIDC.EnabledAndConfigured() {
 		t.Fatal("complete OIDC configuration was not recognized")
 	}
 	if !reflect.DeepEqual(cfg.OIDC.Scopes, []string{"openid", "profile", "email", "groups"}) {
 		t.Fatalf("OIDC scopes = %v", cfg.OIDC.Scopes)
+	}
+	if !cfg.OIDC.DevelopmentMode {
+		t.Fatal("OIDC_DEVELOPMENT_MODE=true was not loaded")
 	}
 }
 
