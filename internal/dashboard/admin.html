@@ -28,7 +28,7 @@ body{background:var(--bg);color:var(--t);font-family:Inter,-apple-system,BlinkMa
 .partner-detail-ov{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:180;align-items:center;justify-content:center;padding:20px}
 .partner-detail-ov.show{display:flex}.partner-detail-card{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;width:100%;max-width:650px;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .partner-detail-head{display:flex;align-items:center;padding:16px 18px;border-bottom:1px solid var(--bdr)}.partner-detail-head h2{flex:1;font-size:16px}.partner-detail-close{background:var(--c2);color:var(--t2);border:1px solid var(--bdr);width:28px;height:28px;border-radius:6px;cursor:pointer}.partner-detail-body{padding:18px}.partner-detail-grid{display:grid;grid-template-columns:170px 1fr;gap:8px 14px;font-size:12px}.partner-detail-key{color:var(--t2);font-weight:600}.partner-detail-value{word-break:break-word}
-.pg{max-width:1800px;margin:0 auto;padding:20px 40px}
+.pg{max-width:1800px;margin:0 auto;padding:20px}
 
 /* Header */
 .hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
@@ -500,22 +500,25 @@ td .tag{white-space:nowrap}
 .picker-row select option{background:var(--c2);color:var(--t)}
 /* ── Shared appbar (same block on every page; var fallbacks let either
    token spelling work) ─────────────────────────────────────────────── */
-.appbar{display:flex;align-items:center;gap:16px;padding:12px 22px;background:var(--c1,#141820);border:1px solid var(--bdr,#232b3b);border-radius:10px;flex-wrap:wrap;margin-bottom:16px}
- .appbar .logo{font-weight:700;font-size:15px;letter-spacing:.2px;white-space:nowrap;color:var(--t,#e2e6ec)}
- .appbar .logo .en{color:#3dcc6e}
-.appbar .logo em{font-style:normal;color:var(--blu,#4da0f8)}
-.appbar nav{display:flex;gap:4px;flex-wrap:wrap}
-.appbar nav a{padding:6px 14px;border-radius:8px;color:var(--t2,#8090a8);font-size:12px;font-weight:600;text-decoration:none}
-.appbar nav a:hover{background:#22262c;color:var(--t,#e2e6ec)}
-.appbar nav a.on{background:#22262c;color:var(--t,#e2e6ec);font-weight:600}
-.appbar .ab-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-.ab-btn{background:none;border:1px solid var(--bdr,#232b3b);color:var(--t2,#8090a8);border-radius:7px;padding:4px 11px;font-size:13px;cursor:pointer;text-decoration:none}
-.ab-btn:hover{color:var(--t,#e2e6ec)}
-.ab-user{color:var(--grn,#3dcc6e);font-size:13px;font-weight:600}
-.ab-user .role{color:var(--t2,#8090a8);font-weight:400}
+.appbar{position:sticky;top:12px;z-index:40;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  min-height:58px;padding:12px 22px;background:rgba(20,24,32,.96);backdrop-filter:blur(10px);
+  border:1px solid #2e3848;border-radius:10px;
+  width:100%;max-width:1360px;margin:0 auto 16px}
+.appbar .logo{display:flex;align-items:center;gap:0;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:15px;font-weight:700;line-height:18px;letter-spacing:.2px;color:#e2e6ec;text-decoration:none;white-space:nowrap}
+.appbar .logo .en{color:#3dcc6e}
+.appbar .logo em{color:#4da0f8;font-style:normal}
+.appbar nav{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.appbar nav a{display:inline-flex;align-items:center;justify-content:center;padding:6px 14px;border-radius:8px;color:#8090a8;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;font-weight:600;line-height:18px;text-decoration:none;white-space:nowrap}
+.appbar nav a:hover,.appbar nav a.on{color:#e2e6ec;background:#22262c}
+.appbar .ab-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ab-btn{background:none;border:1px solid #2e3848;color:#8090a8;border-radius:8px;padding:6px 14px;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;font-weight:600;line-height:18px;cursor:pointer;text-decoration:none}
+.ab-btn:hover{color:#e2e6ec}
+.ab-user{color:#3dcc6e;font-size:12px;font-weight:600}
+.ab-user .role{color:#8090a8;font-weight:400}
 .demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private #partner-users-list td:first-child,.demo-private #partner-users-list td:nth-child(2){filter:blur(3px);user-select:none}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
-.ab-out{color:var(--red,#e8554e);border:1px solid var(--bdr,#232b3b);border-radius:7px;padding:4px 11px;font-size:13px;text-decoration:none}
-.ab-out:hover{border-color:var(--red,#e8554e)}
+.ab-out{color:#e8554e;border:1px solid #2e3848;border-radius:8px;padding:6px 14px;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;font-weight:600;line-height:18px;text-decoration:none}
+.ab-out:hover{border-color:#e8554e}
+@media(max-width:640px){.appbar{top:8px;padding:10px 14px;gap:10px}}
 /* Pricing modal (shared rate card across all pages) */
 .pm-ov{display:none;position:fixed;inset:0;background:rgba(5,7,10,.72);z-index:300;align-items:flex-start;justify-content:center;padding:40px 14px}
 .pm-ov.show{display:flex}
