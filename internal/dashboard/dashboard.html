@@ -117,7 +117,7 @@ tr.clickable{cursor:pointer}
 .geo-tooltip{position:absolute;pointer-events:none;display:none;background:#0d1117;border:1px solid var(--border);border-radius:6px;padding:6px 9px;font-size:11px;line-height:1.45;box-shadow:0 6px 20px rgba(0,0,0,.55);z-index:5;white-space:nowrap;color:var(--text)}
 .geo-side{display:flex;flex-direction:column;gap:10px;min-width:0}
 .geo-scale{font-size:11px;color:var(--text2)}
-.geo-scale .gs-bar{height:8px;border-radius:4px;margin:5px 0 3px;background:linear-gradient(90deg,#0e4429,#26a641,#d29922,#f85149)}
+.geo-scale .gs-bar{height:8px;border-radius:4px;margin:5px 0 3px;background:linear-gradient(90deg,#9be9a8,#39d353,#d29922,#f85149)}
 .geo-scale .gs-labels{display:flex;justify-content:space-between;font-size:10px}
 .geo-top{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
 .geo-top .gt-title{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:700}
@@ -1278,9 +1278,10 @@ function geoScaleTransform(center,scale){
   if(!center||scale===1)return null;
   return 'translate('+center[0]+','+center[1]+') scale('+scale+') translate('+(-center[0])+','+(-center[1])+')';
 }
-var GEO_BASE='#161b22';
+var GEO_ZERO_COLOR='#9be9a8';
 var geoMapReady=false,geoMapLoading=false,geoCountryPaths=null,geoStatePaths=null,geoAnimFrame=null,geoMaxValue=0;
 var geoMapInView=false,geoPaintPending=false,geoObserverStarted=false;
+var geoHasUSStateData=false;
 var geoDisplayNames=null;
 try{if(window.Intl&&Intl.DisplayNames)geoDisplayNames=new Intl.DisplayNames(['en'],{type:'region'});}catch(e){}
 
@@ -1299,11 +1300,11 @@ function geoFullName(country,state){
   return geoRegionName(country);
 }
 function geoColorFor(value,max){
-  if(!(value>0)||!(max>0))return GEO_BASE;
+  if(!(value>0)||!(max>0))return GEO_ZERO_COLOR;
   // Log scale: one very heavy country should not make every other location
   // look empty. The tooltip and top-locations list still show exact totals.
   var t=Math.min(1,Math.log1p(value)/Math.log1p(max));
-  return d3.interpolateRgbBasis(['#0e4429','#006d32','#26a641','#39d353','#d29922','#f85149'])(t);
+  return d3.interpolateRgbBasis([GEO_ZERO_COLOR,'#39d353','#d29922','#f85149'])(t);
 }
 function geoMapTooltip(evt,label,value,extra){
   var tip=document.getElementById('geo-tooltip');
@@ -1345,7 +1346,7 @@ async function initGeoMap(){
       // Antarctica is outside the dashboard's operating geography and would
       // otherwise consume valuable map area at the bottom of the projection.
       if(code==='AQ'||String(f.properties&&f.properties.name||'').toLowerCase()==='antarctica')return;
-      const p=svg.append('path').datum(f).attr('d',path).attr('class','geo-country').attr('fill',GEO_BASE).attr('data-country',code);
+      const p=svg.append('path').datum(f).attr('d',path).attr('class','geo-country').attr('fill',GEO_ZERO_COLOR).attr('data-country',code);
       const countryScale=geoFocusScale(code);
       if(countryScale>1)p.attr('class','geo-country geo-focus').attr('transform',geoScaleTransform(path.centroid(f),countryScale));
       if(code)geoCountryPaths.set(code,p);
@@ -1354,10 +1355,10 @@ async function initGeoMap(){
     geoStatePaths=new Map();
     topojson.feature(us,us.objects.states).features.forEach(function(f){
       const code=US_STATE_CODES[f.properties.name]||'';
-      const p=svg.append('path').datum(f).attr('d',path).attr('class','geo-state').attr('fill',GEO_BASE).attr('data-state',code);
+      const p=svg.append('path').datum(f).attr('d',path).attr('class','geo-state').attr('fill',GEO_ZERO_COLOR).attr('data-state',code);
       p.attr('class','geo-state geo-focus').attr('transform',geoScaleTransform(path.centroid(f),1.18));
       if(code)geoStatePaths.set(code,p);
-      p.on('mousemove',function(evt){const v=(geoValueByState.get('US|'+code)||0);geoMapTooltip(evt,geoFullName('US',code),v,'US state');}).on('mouseleave',hideGeoMapTooltip);
+      p.on('mousemove',function(evt){const v=geoHasUSStateData?(geoValueByState.get('US|'+code)||0):(geoValueByCountry.get('US')||0);geoMapTooltip(evt,geoFullName('US',code),v,geoHasUSStateData?'US state':'US country total; state breakdown unavailable');}).on('mouseleave',hideGeoMapTooltip);
     });
     geoMapReady=true;
     renderGeoMap();
@@ -1380,16 +1381,20 @@ function renderGeoMap(){
     if(state)byState.set(country+'|'+state,(byState.get(country+'|'+state)||0)+value);
   });
   geoValueByCountry=byCountry;geoValueByState=byState;
+  geoHasUSStateData=Array.from(byState.keys()).some(function(k){return k.indexOf('US|')===0&&(byState.get(k)||0)>0;});
   geoMaxValue=Math.max.apply(null,Array.from(byCountry.values()).concat(Array.from(byState.values())).concat([0]));
   if(geoAnimFrame)cancelAnimationFrame(geoAnimFrame);
   const targets=[];
   geoCountryPaths.forEach(function(p,code){targets.push({p:p,value:byCountry.get(code)||0,delay:(targets.length%48)*7});});
-  geoStatePaths.forEach(function(p,code){targets.push({p:p,value:byState.get('US|'+code)||0,delay:(targets.length%48)*7});});
+  geoStatePaths.forEach(function(p,code){
+    const stateValue=geoHasUSStateData?(byState.get('US|'+code)||0):(byCountry.get('US')||0);
+    targets.push({p:p,value:stateValue,delay:(targets.length%48)*7});
+  });
   if(!geoMapInView){
-    // Keep the map deliberately colorless until the user reaches it. This
-    // makes the paint effect visible instead of spending it above the fold.
+    // Show final fills before the section is visible, then animate them when
+    // the user reaches the map instead of spending animation above the fold.
     geoPaintPending=true;
-    targets.forEach(function(t){t.p.attr('fill',GEO_BASE);});
+    targets.forEach(function(t){t.p.attr('fill',geoColorFor(t.value,geoMaxValue));});
   }else{
     geoPaintPending=false;
     const start=performance.now();
