@@ -15,7 +15,13 @@ OIDC_CLIENT_ID=enmaas-pricetag-dashboard
 OIDC_CLIENT_SECRET=<Secret-backed value>
 OIDC_REDIRECT_URL=https://dashboard.enmaas.devshift.net/oauth/callback
 OIDC_SCOPES=openid profile email groups
+SESSION_SECRET=<long random Secret-backed value>
 ```
+
+`SESSION_SECRET` signs both the PriceTag session cookie and the OIDC state
+cookie. Without it the process generates a random per-start secret, which
+logs every user out on restart and breaks the callback on multi-replica
+deployments where each pod would hold a different secret.
 
 The callback URL must exactly match the URL registered with IAM. The issuer
 must be the exact `iss` value from the provider discovery document; do not
@@ -43,7 +49,8 @@ updating the partner directory, including manager links.
 2. Deploy the code with `OIDC_ENABLED=false`.
 3. Build and test against a non-production PriceTag environment.
 4. Create the `/oauth/login` and `/oauth/callback` routes.
-5. Add the client secret through the deployment secret manager.
+5. Add the client secret and a shared `SESSION_SECRET` through the deployment
+   secret manager.
 6. Enable OIDC only in the approved environment.
 7. Verify ordinary user, manager, inactive/unprovisioned user, and admin cases.
 8. Keep API-key login during the migration and define rollback as

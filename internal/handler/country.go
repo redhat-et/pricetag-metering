@@ -258,13 +258,26 @@ var iso2ToISO3 = map[string]string{
 	"ZW": "ZWE",
 }
 
+var iso3Codes = func() map[string]bool {
+	codes := make(map[string]bool, len(iso2ToISO3))
+	for _, code := range iso2ToISO3 {
+		codes[code] = true
+	}
+	return codes
+}()
+
 // normalizeCountry returns an ISO 3166-1 alpha-3 code, or "" when the
-// input is not a recognisable country code. Alpha-3 input passes through.
+// input is not a recognised country code. Alpha-3 input is accepted only
+// when it appears in the ISO list; unknown three-letter values fail closed
+// instead of silently becoming map regions or policy keys.
 func normalizeCountry(raw string) string {
 	v := strings.ToUpper(strings.TrimSpace(raw))
 	switch len(v) {
 	case 3:
-		return v
+		if iso3Codes[v] {
+			return v
+		}
+		return ""
 	case 2:
 		return iso2ToISO3[v]
 	default:

@@ -167,13 +167,23 @@ func signTestIDToken(key *rsa.PrivateKey, claims map[string]any) (string, error)
 
 type oidcCallbackStore struct {
 	user       storage.PartnerUser
+	byUsername map[string]storage.PartnerUser
 	lookupErr  error
 	lookedUp   string
+	lookups    []string
 	patchCount int
 }
 
 func (s *oidcCallbackStore) PartnerUserByMaaSUsername(_ context.Context, username string) (storage.PartnerUser, error) {
 	s.lookedUp = username
+	s.lookups = append(s.lookups, username)
+	if s.byUsername != nil {
+		user, ok := s.byUsername[strings.ToLower(username)]
+		if !ok {
+			return storage.PartnerUser{}, storage.ErrPartnerUserNotFound
+		}
+		return user, nil
+	}
 	return s.user, s.lookupErr
 }
 
@@ -184,7 +194,7 @@ func (s *oidcCallbackStore) PatchPartnerUser(_ context.Context, _, userID string
 	return s.user, nil
 }
 
-func invokeOIDCCallback(t *testing.T, scenario oidcCallbackScenario, store *oidcCallbackStore) *httptest.ResponseRecorder {
+func invokeOIDCCallback(t *testing.T, scenario oidcCallbackScenario, store *oidcCallbackStore) (*httptest.ResponseRecorder, *AuthHandler) {
 	t.Helper()
 	fixture := newOIDCCallbackFixture(t, scenario)
 	h := NewAuthHandler(config.Config{OIDC: config.OIDC{
@@ -211,14 +221,32 @@ func invokeOIDCCallback(t *testing.T, scenario oidcCallbackScenario, store *oidc
 	request.AddCookie(stateResponse.Result().Cookies()[0])
 	response := httptest.NewRecorder()
 	h.HandleOIDCCallback(response, request)
-	return response
+	return response, h
+}
+
+func sessionFromResponse(t *testing.T, h *AuthHandler, response *httptest.ResponseRecorder) *sessionPayload {
+	t.Helper()
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name != cookieName {
+			continue
+		}
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.AddCookie(cookie)
+		session := h.readCookie(request)
+		if session == nil {
+			t.Fatal("session cookie was not readable")
+		}
+		return session
+	}
+	t.Fatal("callback did not set a session cookie")
+	return nil
 }
 
 func TestOIDCCallbackAcceptsVerifiedTokenAndMatchingUserInfoSubject(t *testing.T) {
 	store := &oidcCallbackStore{user: storage.PartnerUser{
 		UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "person@example.com"},
 	}}
-	response := invokeOIDCCallback(t, oidcCallbackScenario{
+	response, _ := invokeOIDCCallback(t, oidcCallbackScenario{
 		userinfoSub: testOIDCSubject, userinfoData: map[string]any{"given_name": "Pat"},
 	}, store)
 	if response.Code != http.StatusFound {
@@ -226,6 +254,55 @@ func TestOIDCCallbackAcceptsVerifiedTokenAndMatchingUserInfoSubject(t *testing.T
 	}
 	if store.lookedUp != "person@example.com" || store.patchCount != 1 {
 		t.Fatalf("store lookup=%q profile patches=%d; want expected user and one profile patch", store.lookedUp, store.patchCount)
+	}
+}
+
+func TestOIDCCallbackUsesDirectoryEmailOnlyWhenItResolvesToSameUser(t *testing.T) {
+	tests := []struct {
+		name         string
+		emailTag     string
+		byUsername   map[string]storage.PartnerUser
+		wantUsername string
+	}{
+		{
+			name:     "canonical email maps to verified user",
+			emailTag: "canonical@example.com",
+			byUsername: map[string]storage.PartnerUser{
+				"person@example.com":    {UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "canonical@example.com"}},
+				"canonical@example.com": {UserID: testOIDCUUID, Active: true},
+			},
+			wantUsername: "canonical@example.com",
+		},
+		{
+			name:     "email tag maps to another user",
+			emailTag: "other@example.com",
+			byUsername: map[string]storage.PartnerUser{
+				"person@example.com": {UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "other@example.com"}},
+				"other@example.com":  {UserID: "22222222-2222-4222-8222-222222222222", Active: true},
+			},
+			wantUsername: "person@example.com",
+		},
+		{
+			name:     "email tag is not a current login",
+			emailTag: "retired@example.com",
+			byUsername: map[string]storage.PartnerUser{
+				"person@example.com": {UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "retired@example.com"}},
+			},
+			wantUsername: "person@example.com",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &oidcCallbackStore{byUsername: tc.byUsername}
+			response, h := invokeOIDCCallback(t, oidcCallbackScenario{userinfoSub: testOIDCSubject}, store)
+			if response.Code != http.StatusFound {
+				t.Fatalf("callback status = %d, want %d: %s", response.Code, http.StatusFound, response.Body.String())
+			}
+			session := sessionFromResponse(t, h, response)
+			if session.Username != tc.wantUsername {
+				t.Fatalf("session username = %q, want %q (lookups: %v)", session.Username, tc.wantUsername, store.lookups)
+			}
+		})
 	}
 }
 
@@ -245,7 +322,7 @@ func TestOIDCCallbackRejectsInvalidIDTokens(t *testing.T) {
 			scenario := oidcCallbackScenario{userinfoSub: testOIDCSubject}
 			tc.mutate(&scenario)
 			store := &oidcCallbackStore{}
-			response := invokeOIDCCallback(t, scenario, store)
+			response, _ := invokeOIDCCallback(t, scenario, store)
 			if response.Code != http.StatusUnauthorized {
 				t.Fatalf("callback status = %d, want %d: %s", response.Code, http.StatusUnauthorized, response.Body.String())
 			}
@@ -258,7 +335,7 @@ func TestOIDCCallbackRejectsInvalidIDTokens(t *testing.T) {
 
 func TestOIDCCallbackRejectsUserInfoSubjectMismatch(t *testing.T) {
 	store := &oidcCallbackStore{user: storage.PartnerUser{UserID: testOIDCUUID, Active: true}}
-	response := invokeOIDCCallback(t, oidcCallbackScenario{
+	response, _ := invokeOIDCCallback(t, oidcCallbackScenario{
 		userinfoSub: "different-subject", userinfoData: map[string]any{"email": "other@example.com"},
 	}, store)
 	if response.Code != http.StatusUnauthorized {
@@ -299,7 +376,7 @@ func TestOIDCCallbackFailsClosedForMissingOrUnprovisionedIdentity(t *testing.T) 
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			response := invokeOIDCCallback(t, tc.scenario, tc.store)
+			response, _ := invokeOIDCCallback(t, tc.scenario, tc.store)
 			if response.Code != tc.wantCode {
 				t.Fatalf("callback status = %d, want %d: %s", response.Code, tc.wantCode, response.Body.String())
 			}
@@ -351,7 +428,7 @@ func TestOIDCDiscoveryUsesBoundedNetworkTimeout(t *testing.T) {
 func TestOIDCCallbackUsesBoundedTokenExchangeTimeout(t *testing.T) {
 	store := &oidcCallbackStore{}
 	start := time.Now()
-	response := invokeOIDCCallback(t, oidcCallbackScenario{
+	response, _ := invokeOIDCCallback(t, oidcCallbackScenario{
 		userinfoSub: testOIDCSubject, tokenDelay: 150 * time.Millisecond, httpTimeout: 20 * time.Millisecond,
 	}, store)
 	if response.Code != http.StatusUnauthorized {

@@ -361,8 +361,23 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "SSO identity does not match the provisioned user", http.StatusForbidden)
 		return
 	}
-	if email, ok := user.Tags["email"].(string); ok && strings.TrimSpace(email) != "" {
-		username = email
+	// The directory is the authorization source, but the IdP is the freshest
+	// source for profile attributes. Prefer the directory email as the
+	// session login only when it re-resolves to the same active partner user;
+	// otherwise keep the login that was already verified against the UUID.
+	// Substituting an unverified email tag would let role and manager lookups
+	// resolve a different identity than the one the IdP proved.
+	if email, ok := user.Tags["email"].(string); ok {
+		email = strings.TrimSpace(email)
+		if email != "" && !strings.EqualFold(email, username) {
+			canonical, canonicalErr := h.oidcStore.PartnerUserByMaaSUsername(r.Context(), email)
+			if canonicalErr == nil && canonical.Active && strings.EqualFold(canonical.UserID, claims.RhatUUID) {
+				username = email
+			} else {
+				slog.Warn("OIDC directory email is not a current login for the verified partner user; keeping verified login",
+					"email", email, "user_id", user.UserID)
+			}
+		}
 	}
 	// The directory is the authorization source, but the IdP is the freshest
 	// source for profile attributes. Persist every returned claim as a merged

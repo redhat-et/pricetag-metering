@@ -23,6 +23,11 @@ func (h *AdminHandler) HandleMyKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/me/keys")
+	if path == r.URL.Path {
+		// Legacy alias: the old /me/keys proxy forwarded raw upstream calls.
+		// Route it through the same self-scoped, validated handler instead.
+		path = strings.TrimPrefix(r.URL.Path, "/me/keys")
+	}
 	path = strings.TrimSuffix(path, "/")
 
 	switch {
