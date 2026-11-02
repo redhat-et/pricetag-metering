@@ -8,10 +8,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -157,7 +157,7 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		// Local/demo shortcuts only: the mock IdP picker is shown below the
 		// production SSO link when explicitly enabled.
-		if h.oidc != nil && h.cfg.OIDC.DevelopmentMode && h.cfg.OIDC.TestLogin {
+		if h.oidcTestLoginAllowed(r) {
 			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), testLoginPanel, 1)
 		} else {
 			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), nil, 1)
@@ -292,7 +292,35 @@ func (h *AuthHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		Secure:   h.cfg.SessionCookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
+	if h.oidc != nil && h.oidc.endSessionURL != "" {
+		if target, err := h.oidcLogoutURL(); err == nil {
+			http.Redirect(w, r, target, http.StatusFound)
+			return
+		}
+	}
 	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+// oidcLogoutURL is the provider's RP-initiated logout endpoint. The return
+// URI is derived from the registered callback origin, never from the request
+// Host, so it cannot become an open redirect.
+func (h *AuthHandler) oidcLogoutURL() (string, error) {
+	target, err := url.Parse(h.oidc.endSessionURL)
+	if err != nil {
+		return "", err
+	}
+	query := target.Query()
+	if h.cfg.OIDC.ClientID != "" {
+		query.Set("client_id", h.cfg.OIDC.ClientID)
+	}
+	if redirect, err := url.Parse(h.cfg.OIDC.RedirectURL); err == nil && redirect.Scheme != "" && redirect.Host != "" {
+		redirect.Path = "/login"
+		redirect.RawQuery = ""
+		redirect.Fragment = ""
+		query.Set("post_logout_redirect_uri", redirect.String())
+	}
+	target.RawQuery = query.Encode()
+	return target.String(), nil
 }
 
 // RequireAuth gates a handler behind a valid session cookie. On success it
@@ -306,9 +334,21 @@ func (h *AuthHandler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 			http.Redirect(w, r, "/login", http.StatusFound)
 			return
 		}
+		// Never trust identity headers supplied by the client. Clear every
+		// identity header this layer sets, then rebuild it from the signed
+		// session. Without the deletes, a valid session with no groups could
+		// smuggle a group through to the key-minting path.
+		r.Header.Del(h.cfg.UserHeader)
+		r.Header.Del(h.cfg.GroupsHeader)
+		r.Header.Del(realUserHeader)
 		r.Header.Set(h.cfg.UserHeader, session.Username)
 		if len(session.Groups) > 0 {
-			r.Header.Set(h.cfg.GroupsHeader, fmt.Sprintf(`["%s"]`, strings.Join(session.Groups, `","`)))
+			groups, err := json.Marshal(session.Groups)
+			if err != nil {
+				http.Error(w, "invalid session groups", http.StatusInternalServerError)
+				return
+			}
+			r.Header.Set(h.cfg.GroupsHeader, string(groups))
 		}
 		// Admin "view as" mode: swap the identity header to the target user
 		// so every downstream handler (per-user scoping, Partner role checks) behaves

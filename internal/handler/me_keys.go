@@ -57,7 +57,9 @@ func (h *AdminHandler) myKeyIdentity(w http.ResponseWriter, r *http.Request) (us
 		return "", "", nil, false
 	}
 	group = groups[0]
-	// Prefer a group that the cluster's MaaSSubscription actually lists.
+	// Prefer a group that the cluster's MaaSSubscription actually lists. When
+	// the platform list is available, a session group that is not on it must
+	// not fall through: that would let a forged/stale header scope a key.
 	if h.k8sClient != nil {
 		if platform, err := h.platformGroups(r.Context()); err == nil && len(platform) > 0 {
 			for _, g := range groups {
@@ -68,6 +70,8 @@ func (h *AdminHandler) myKeyIdentity(w http.ResponseWriter, r *http.Request) (us
 					}
 				}
 			}
+			http.Error(w, "your session has no EnMaaS group enabled for key management", http.StatusForbidden)
+			return "", "", nil, false
 		}
 	}
 	return username, group, groups, true
@@ -122,6 +126,21 @@ func (h *AdminHandler) myKeysCreate(w http.ResponseWriter, r *http.Request) {
 		if matched == "" {
 			http.Error(w, "you are not a member of that group", http.StatusForbidden)
 			return
+		}
+		if h.k8sClient != nil {
+			if platform, err := h.platformGroups(r.Context()); err == nil && len(platform) > 0 {
+				allowed := false
+				for _, pg := range platform {
+					if strings.EqualFold(matched, pg) {
+						allowed = true
+						break
+					}
+				}
+				if !allowed {
+					http.Error(w, "that group is not enabled for key management", http.StatusForbidden)
+					return
+				}
+			}
 		}
 		group = matched
 	}

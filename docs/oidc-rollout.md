@@ -21,7 +21,10 @@ SESSION_SECRET=<long random Secret-backed value>
 `SESSION_SECRET` signs both the PriceTag session cookie and the OIDC state
 cookie. Without it the process generates a random per-start secret, which
 logs every user out on restart and breaks the callback on multi-replica
-deployments where each pod would hold a different secret.
+deployments where each pod would hold a different secret. With OIDC enabled,
+startup fails if `SESSION_SECRET` is unset. Rotate it by updating the Secret
+and rolling all replicas together: every existing session and in-flight OIDC
+state cookie becomes invalid, so users sign in again.
 
 The callback URL must exactly match the URL registered with IAM. The issuer
 must be the exact `iss` value from the provider discovery document; do not
@@ -36,7 +39,20 @@ shows a Red Hat SSO button. The button starts Authorization Code + PKCE at
 The callback validates state, nonce, PKCE, issuer, audience, signature, and
 token expiry. It requires `sub`, `rhatUUID`, and an email or
 `preferred_username`. OIDC groups are copied into the signed session for
-display/context only; they do not grant PriceTag roles.
+display/context only; they do not grant PriceTag roles. The session is built
+from the current token, so groups omitted by the IdP do not inherit stale
+values from the directory.
+
+`email` is not treated as a second identity. After the profile merge, the
+callback re-resolves the current partner login for the verified `rhatUUID` and
+writes that canonical login to the session. `email_verified` is not required;
+the trust assumption is that the IdP asserted the verified `rhatUUID` and the
+partner directory already maps that UUID to an active user.
+
+Logout clears the PriceTag cookie and, when the provider advertises an
+`end_session_endpoint`, redirects to RP-initiated logout. If the provider has
+no end-session endpoint, logout is local only and the IdP session may still be
+alive.
 
 The user must already exist as an active partner user. The partner user's
 stable UUID must equal the OIDC `rhatUUID`; login does not auto-provision or
@@ -134,6 +150,11 @@ authorizes a user from claims alone.
 For a controlled Stage/dogfood test, `OIDC_CLAIMS_DEBUG=true` renders a
 diagnostic page at the callback containing the decoded claim values and no raw
 token. Keep this disabled in Production.
+
+`OIDC_TEST_LOGIN=true` shows the mock-IdP persona picker, including personas
+used for local demos. It additionally requires a loopback request host
+(`localhost`, `127.0.0.1`, or `::1`), so enabling it on a shared stage hostname
+does not expose it. Keep both development flags `false` in Production.
 
 Country, state, city, office location, cost center, and manager data are not
 promised by every SSO registration, but the Stage registration currently

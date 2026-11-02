@@ -116,7 +116,9 @@ func TestOIDCLoginForwardsPersonaOnlyWhenTestLoginEnabled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newTestOIDCHandler(t, tc.testLogin)
 			response := httptest.NewRecorder()
-			h.HandleOIDCLogin(response, httptest.NewRequest(http.MethodGet, "/oauth/login"+tc.query, nil))
+			request := httptest.NewRequest(http.MethodGet, "/oauth/login"+tc.query, nil)
+			request.Host = "localhost:8080"
+			h.HandleOIDCLogin(response, request)
 			if response.Code != http.StatusFound {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusFound)
 			}
@@ -137,7 +139,9 @@ func TestLoginPageTestPanelDoesNotChangeSSOLink(t *testing.T) {
 
 	enabled := newTestOIDCHandler(t, true)
 	response := httptest.NewRecorder()
-	enabled.HandleLogin(response, httptest.NewRequest(http.MethodGet, "/login", nil))
+	request := httptest.NewRequest(http.MethodGet, "/login", nil)
+	request.Host = "localhost:8080"
+	enabled.HandleLogin(response, request)
 	body := response.Body.String()
 	if !strings.Contains(body, ssoLink) {
 		t.Fatalf("SSO link changed or missing from login page:\n%s", body)
@@ -151,13 +155,26 @@ func TestLoginPageTestPanelDoesNotChangeSSOLink(t *testing.T) {
 
 	disabled := newTestOIDCHandler(t, false)
 	response = httptest.NewRecorder()
-	disabled.HandleLogin(response, httptest.NewRequest(http.MethodGet, "/login", nil))
+	request = httptest.NewRequest(http.MethodGet, "/login", nil)
+	request.Host = "localhost:8080"
+	disabled.HandleLogin(response, request)
 	body = response.Body.String()
 	if !strings.Contains(body, ssoLink) {
 		t.Fatalf("SSO link changed or missing from login page:\n%s", body)
 	}
 	if strings.Contains(body, "Test sign-in") || strings.Contains(body, "<!-- TEST_LOGIN -->") {
 		t.Fatalf("test-login panel leaked when disabled:\n%s", body)
+	}
+}
+
+func TestLoginPageTestPanelIsLocalOnly(t *testing.T) {
+	enabled := newTestOIDCHandler(t, true)
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/login", nil)
+	request.Host = "dashboard.enmaas.devshift.net"
+	enabled.HandleLogin(response, request)
+	if body := response.Body.String(); strings.Contains(body, "Test sign-in") {
+		t.Fatal("test-login persona panel leaked to a non-loopback host")
 	}
 }
 

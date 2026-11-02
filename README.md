@@ -68,6 +68,7 @@ kubectl apply -f deploy/
 | `SESSION_SECRET` | When OIDC is enabled | — | Signs session and OIDC state cookies. Inject a long random value from a deployment Secret; without it sessions do not survive a restart and SSO logins are invalidated. |
 | `SESSION_COOKIE_SECURE` | No | `true` | Keep enabled in shared/stage/production. Set `false` only for local HTTP testing. |
 | `OIDC_DEVELOPMENT_MODE` | No | `false` | Explicit local/stage-only gate required before enabling OIDC diagnostics or test personas. Keep `false` in production. |
+| `OIDC_TEST_LOGIN` | No | `false` | Shows the mock-IdP persona picker. Requires `OIDC_DEVELOPMENT_MODE=true` **and** a loopback request host; it is never shown on a shared dashboard hostname. |
 | `OIDC_CLAIMS_DEBUG` | No | `false` | Development/stage-only diagnostic page after OIDC callback. Requires `OIDC_DEVELOPMENT_MODE=true`; never enable in production. |
 
 ## CloudEvents Format

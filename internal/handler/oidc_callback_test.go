@@ -35,6 +35,7 @@ type oidcCallbackScenario struct {
 	invalidSig   bool
 	rhatUUID     string
 	omitRhatUUID bool
+	groups       []string
 	userinfoSub  string
 	userinfoData map[string]any
 	tokenDelay   time.Duration
@@ -79,6 +80,11 @@ func newOIDCCallbackFixture(t *testing.T, scenario oidcCallbackScenario) *oidcCa
 			_ = r.ParseForm()
 			if r.Form.Get("grant_type") != "authorization_code" || r.Form.Get("code") != "test-code" {
 				http.Error(w, "invalid token request", http.StatusBadRequest)
+				return
+			}
+			// The callback must send the PKCE verifier from the signed state.
+			if r.Form.Get("code_verifier") != "test-code-verifier" {
+				http.Error(w, "missing or wrong code_verifier", http.StatusBadRequest)
 				return
 			}
 			token, signErr := signTestIDToken(key, fixture.claims)
@@ -144,6 +150,9 @@ func newOIDCCallbackFixture(t *testing.T, scenario oidcCallbackScenario) *oidcCa
 	if !scenario.omitRhatUUID {
 		fixture.claims["rhatUUID"] = rhatUUID
 	}
+	if len(scenario.groups) > 0 {
+		fixture.claims["groups"] = scenario.groups
+	}
 	return fixture
 }
 
@@ -166,17 +175,22 @@ func signTestIDToken(key *rsa.PrivateKey, claims map[string]any) (string, error)
 }
 
 type oidcCallbackStore struct {
-	user       storage.PartnerUser
-	byUsername map[string]storage.PartnerUser
-	lookupErr  error
-	lookedUp   string
-	lookups    []string
-	patchCount int
+	user          storage.PartnerUser
+	byUsername    map[string]storage.PartnerUser
+	postPatchUser *storage.PartnerUser
+	lookupErr     error
+	lookedUp      string
+	lookups       []string
+	patchCount    int
+	patched       bool
 }
 
 func (s *oidcCallbackStore) PartnerUserByMaaSUsername(_ context.Context, username string) (storage.PartnerUser, error) {
 	s.lookedUp = username
 	s.lookups = append(s.lookups, username)
+	if s.patched && s.postPatchUser != nil {
+		return *s.postPatchUser, s.lookupErr
+	}
 	if s.byUsername != nil {
 		user, ok := s.byUsername[strings.ToLower(username)]
 		if !ok {
@@ -189,12 +203,13 @@ func (s *oidcCallbackStore) PartnerUserByMaaSUsername(_ context.Context, usernam
 
 func (s *oidcCallbackStore) PatchPartnerUser(_ context.Context, _, userID string, tags map[string]any) (storage.PartnerUser, error) {
 	s.patchCount++
+	s.patched = true
 	s.user.UserID = userID
 	s.user.Tags = tags
 	return s.user, nil
 }
 
-func invokeOIDCCallback(t *testing.T, scenario oidcCallbackScenario, store *oidcCallbackStore) (*httptest.ResponseRecorder, *AuthHandler) {
+func newOIDCCallbackHandler(t *testing.T, scenario oidcCallbackScenario, store *oidcCallbackStore) (*AuthHandler, *oidcCallbackFixture) {
 	t.Helper()
 	fixture := newOIDCCallbackFixture(t, scenario)
 	h := NewAuthHandler(config.Config{OIDC: config.OIDC{
@@ -209,6 +224,12 @@ func invokeOIDCCallback(t *testing.T, scenario oidcCallbackScenario, store *oidc
 	if err := h.InitOIDC(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	return h, fixture
+}
+
+func invokeOIDCCallback(t *testing.T, scenario oidcCallbackScenario, store *oidcCallbackStore) (*httptest.ResponseRecorder, *AuthHandler) {
+	t.Helper()
+	h, _ := newOIDCCallbackHandler(t, scenario, store)
 
 	state := oidcState{State: "expected-state", Nonce: "expected-nonce", CodeVerifier: "test-code-verifier", Exp: time.Now().Add(time.Minute).Unix()}
 	stateResponse := httptest.NewRecorder()
@@ -224,22 +245,25 @@ func invokeOIDCCallback(t *testing.T, scenario oidcCallbackScenario, store *oidc
 	return response, h
 }
 
-func sessionFromResponse(t *testing.T, h *AuthHandler, response *httptest.ResponseRecorder) *sessionPayload {
-	t.Helper()
+func findSessionInResponse(h *AuthHandler, response *httptest.ResponseRecorder) *sessionPayload {
 	for _, cookie := range response.Result().Cookies() {
 		if cookie.Name != cookieName {
 			continue
 		}
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.AddCookie(cookie)
-		session := h.readCookie(request)
-		if session == nil {
-			t.Fatal("session cookie was not readable")
-		}
-		return session
+		return h.readCookie(request)
 	}
-	t.Fatal("callback did not set a session cookie")
 	return nil
+}
+
+func sessionFromResponse(t *testing.T, h *AuthHandler, response *httptest.ResponseRecorder) *sessionPayload {
+	t.Helper()
+	session := findSessionInResponse(h, response)
+	if session == nil {
+		t.Fatal("callback did not set a readable session cookie")
+	}
+	return session
 }
 
 func TestOIDCCallbackAcceptsVerifiedTokenAndMatchingUserInfoSubject(t *testing.T) {
@@ -257,52 +281,103 @@ func TestOIDCCallbackAcceptsVerifiedTokenAndMatchingUserInfoSubject(t *testing.T
 	}
 }
 
-func TestOIDCCallbackUsesDirectoryEmailOnlyWhenItResolvesToSameUser(t *testing.T) {
-	tests := []struct {
-		name         string
-		emailTag     string
-		byUsername   map[string]storage.PartnerUser
-		wantUsername string
-	}{
-		{
-			name:     "canonical email maps to verified user",
-			emailTag: "canonical@example.com",
-			byUsername: map[string]storage.PartnerUser{
-				"person@example.com":    {UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "canonical@example.com"}},
-				"canonical@example.com": {UserID: testOIDCUUID, Active: true},
-			},
-			wantUsername: "canonical@example.com",
-		},
-		{
-			name:     "email tag maps to another user",
-			emailTag: "other@example.com",
-			byUsername: map[string]storage.PartnerUser{
-				"person@example.com": {UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "other@example.com"}},
-				"other@example.com":  {UserID: "22222222-2222-4222-8222-222222222222", Active: true},
-			},
-			wantUsername: "person@example.com",
-		},
-		{
-			name:     "email tag is not a current login",
-			emailTag: "retired@example.com",
-			byUsername: map[string]storage.PartnerUser{
-				"person@example.com": {UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "retired@example.com"}},
-			},
-			wantUsername: "person@example.com",
+func TestOIDCCallbackSessionUsesCanonicalLoginAfterProfilePatch(t *testing.T) {
+	store := &oidcCallbackStore{
+		user: storage.PartnerUser{UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "old@example.com"}},
+		byUsername: map[string]storage.PartnerUser{
+			"person@example.com": {UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "old@example.com"}},
+			"old@example.com":    {UserID: testOIDCUUID, Active: true, Tags: map[string]any{"email": "old@example.com"}},
 		},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			store := &oidcCallbackStore{byUsername: tc.byUsername}
-			response, h := invokeOIDCCallback(t, oidcCallbackScenario{userinfoSub: testOIDCSubject}, store)
-			if response.Code != http.StatusFound {
-				t.Fatalf("callback status = %d, want %d: %s", response.Code, http.StatusFound, response.Body.String())
-			}
-			session := sessionFromResponse(t, h, response)
-			if session.Username != tc.wantUsername {
-				t.Fatalf("session username = %q, want %q (lookups: %v)", session.Username, tc.wantUsername, store.lookups)
-			}
-		})
+	response, h := invokeOIDCCallback(t, oidcCallbackScenario{userinfoSub: testOIDCSubject}, store)
+	if response.Code != http.StatusFound {
+		t.Fatalf("callback status = %d, want %d: %s", response.Code, http.StatusFound, response.Body.String())
+	}
+	session := sessionFromResponse(t, h, response)
+	if session.Username != "person@example.com" {
+		t.Fatalf("session username = %q, want canonical IdP login person@example.com (lookups: %v)", session.Username, store.lookups)
+	}
+}
+
+func TestOIDCCallbackFailsWhenCurrentLoginNoLongerMatchesUUID(t *testing.T) {
+	otherID := "22222222-2222-4222-8222-222222222222"
+	store := &oidcCallbackStore{
+		user:          storage.PartnerUser{UserID: testOIDCUUID, Active: true},
+		postPatchUser: &storage.PartnerUser{UserID: otherID, Active: true},
+	}
+	response, h := invokeOIDCCallback(t, oidcCallbackScenario{userinfoSub: testOIDCSubject}, store)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("callback status = %d, want %d: %s", response.Code, http.StatusForbidden, response.Body.String())
+	}
+	if session := findSessionInResponse(h, response); session != nil {
+		t.Fatalf("diverged identity still issued a session for %q", session.Username)
+	}
+}
+
+func TestOIDCCallbackRejectsMissingStateCookie(t *testing.T) {
+	store := &oidcCallbackStore{user: storage.PartnerUser{UserID: testOIDCUUID, Active: true}}
+	h, _ := newOIDCCallbackHandler(t, oidcCallbackScenario{userinfoSub: testOIDCSubject}, store)
+	request := httptest.NewRequest(http.MethodGet, "/oauth/callback?state=expected-state&code=test-code", nil)
+	response := httptest.NewRecorder()
+	h.HandleOIDCCallback(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("callback status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	if store.patchCount != 0 {
+		t.Fatal("missing state cookie still reached the identity store")
+	}
+}
+
+func TestOIDCCallbackRejectsStateQueryMismatch(t *testing.T) {
+	store := &oidcCallbackStore{user: storage.PartnerUser{UserID: testOIDCUUID, Active: true}}
+	h, _ := newOIDCCallbackHandler(t, oidcCallbackScenario{userinfoSub: testOIDCSubject}, store)
+	stateResponse := httptest.NewRecorder()
+	if err := h.setOIDCState(stateResponse, oidcState{
+		State: "expected-state", Nonce: "expected-nonce", CodeVerifier: "test-code-verifier",
+		Exp: time.Now().Add(time.Minute).Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/oauth/callback?state=other-state&code=test-code", nil)
+	request.AddCookie(stateResponse.Result().Cookies()[0])
+	response := httptest.NewRecorder()
+	h.HandleOIDCCallback(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("callback status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+}
+
+func TestOIDCCallbackRejectsExpiredState(t *testing.T) {
+	store := &oidcCallbackStore{user: storage.PartnerUser{UserID: testOIDCUUID, Active: true}}
+	h, _ := newOIDCCallbackHandler(t, oidcCallbackScenario{userinfoSub: testOIDCSubject}, store)
+	stateResponse := httptest.NewRecorder()
+	if err := h.setOIDCState(stateResponse, oidcState{
+		State: "expected-state", Nonce: "expected-nonce", CodeVerifier: "test-code-verifier",
+		Exp: time.Now().Add(-time.Minute).Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/oauth/callback?state=expected-state&code=test-code", nil)
+	request.AddCookie(stateResponse.Result().Cookies()[0])
+	response := httptest.NewRecorder()
+	h.HandleOIDCCallback(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("callback status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+}
+
+func TestOIDCCallbackDoesNotCarryStaleDirectoryGroupsIntoSession(t *testing.T) {
+	store := &oidcCallbackStore{user: storage.PartnerUser{
+		UserID: testOIDCUUID, Active: true,
+		Tags: map[string]any{"groups": []string{"stale-admin"}},
+	}}
+	response, h := invokeOIDCCallback(t, oidcCallbackScenario{userinfoSub: testOIDCSubject}, store)
+	if response.Code != http.StatusFound {
+		t.Fatalf("callback status = %d, want %d: %s", response.Code, http.StatusFound, response.Body.String())
+	}
+	session := sessionFromResponse(t, h, response)
+	if len(session.Groups) != 0 {
+		t.Fatalf("session groups = %#v, want none when the IdP omitted groups", session.Groups)
 	}
 }
 

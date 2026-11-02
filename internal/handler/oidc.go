@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -82,9 +83,10 @@ type oidcClaims struct {
 }
 
 type oidcProvider struct {
-	config   *oauth2.Config
-	provider *oidc.Provider
-	verifier *oidc.IDTokenVerifier
+	config        *oauth2.Config
+	provider      *oidc.Provider
+	verifier      *oidc.IDTokenVerifier
+	endSessionURL string
 }
 
 func (h *AuthHandler) InitOIDC(ctx context.Context) error {
@@ -114,6 +116,12 @@ func (h *AuthHandler) InitOIDC(ctx context.Context) error {
 		provider: provider,
 		verifier: provider.Verifier(&oidc.Config{ClientID: h.cfg.OIDC.ClientID}),
 	}
+	var discovery struct {
+		EndSessionEndpoint string `json:"end_session_endpoint"`
+	}
+	if err := provider.Claims(&discovery); err == nil {
+		h.oidc.endSessionURL = discovery.EndSessionEndpoint
+	}
 	return nil
 }
 
@@ -124,6 +132,25 @@ func (h *AuthHandler) oidcRequestContext(parent context.Context) (context.Contex
 
 func (h *AuthHandler) oidcClaimsDebugEnabled() bool {
 	return h.cfg.OIDC.DevelopmentMode && h.cfg.OIDC.ClaimsDebug
+}
+
+// oidcTestLoginAllowed gates the local persona picker to loopback requests.
+// Development mode alone is not enough: a shared stage deployment may set it,
+// and the mock IdP can mint an admin persona.
+func (h *AuthHandler) oidcTestLoginAllowed(r *http.Request) bool {
+	if h.oidc == nil || !h.cfg.OIDC.DevelopmentMode || !h.cfg.OIDC.TestLogin {
+		return false
+	}
+	host := strings.ToLower(strings.TrimSpace(r.Host))
+	if parsed, _, err := net.SplitHostPort(host); err == nil {
+		host = parsed
+	}
+	switch host {
+	case "localhost", "127.0.0.1", "::1", "[::1]":
+		return true
+	default:
+		return false
+	}
 }
 
 func randomURLValue() (string, error) {
@@ -206,7 +233,7 @@ func (h *AuthHandler) HandleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	verifier := oauth2.GenerateVerifier()
 	testPersona := ""
-	if h.cfg.OIDC.DevelopmentMode && h.cfg.OIDC.TestLogin {
+	if h.oidcTestLoginAllowed(r) {
 		if persona := r.URL.Query().Get("persona"); validTestPersona(persona) {
 			testPersona = persona
 		}
@@ -362,24 +389,6 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	// The directory is the authorization source, but the IdP is the freshest
-	// source for profile attributes. Prefer the directory email as the
-	// session login only when it re-resolves to the same active partner user;
-	// otherwise keep the login that was already verified against the UUID.
-	// Substituting an unverified email tag would let role and manager lookups
-	// resolve a different identity than the one the IdP proved.
-	if email, ok := user.Tags["email"].(string); ok {
-		email = strings.TrimSpace(email)
-		if email != "" && !strings.EqualFold(email, username) {
-			canonical, canonicalErr := h.oidcStore.PartnerUserByMaaSUsername(r.Context(), email)
-			if canonicalErr == nil && canonical.Active && strings.EqualFold(canonical.UserID, claims.RhatUUID) {
-				username = email
-			} else {
-				slog.Warn("OIDC directory email is not a current login for the verified partner user; keeping verified login",
-					"email", email, "user_id", user.UserID)
-			}
-		}
-	}
-	// The directory is the authorization source, but the IdP is the freshest
 	// source for profile attributes. Persist every returned claim as a merged
 	// tag so group membership, state, cost center and the rest are available
 	// to the dashboard without waiting for the next LDAP sync. Omitted claims
@@ -390,6 +399,22 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "SSO profile could not be saved", http.StatusInternalServerError)
 		return
 	}
+	// The patch above can move the current partner_user_logins row (for
+	// example when the IdP email changed the email tag). Re-resolve the
+	// current login against the same verified UUID before writing the
+	// session, so role/manager/scope lookups use the canonical row.
+	canonicalLogin := strings.TrimSpace(claims.Email)
+	if canonicalLogin == "" {
+		canonicalLogin = strings.TrimSpace(claims.Username)
+	}
+	canonical, canonicalErr := h.oidcStore.PartnerUserByMaaSUsername(r.Context(), canonicalLogin)
+	if canonicalErr != nil || !canonical.Active || !strings.EqualFold(canonical.UserID, claims.RhatUUID) {
+		slog.Error("OIDC current login changed during profile persistence",
+			"username", username, "canonical_login", canonicalLogin, "user_id", user.UserID, "error", canonicalErr)
+		http.Error(w, "SSO identity is not current in EnMaaS", http.StatusForbidden)
+		return
+	}
+	username = canonicalLogin
 	h.setCookie(w, username, claims.Groups, "")
 	slog.Info("user logged in with OIDC", "username", username)
 	if h.oidcClaimsDebugEnabled() {

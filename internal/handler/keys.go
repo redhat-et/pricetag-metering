@@ -58,11 +58,19 @@ func (h *KeysHandler) identityHeaders(r *http.Request) map[string]string {
 	if groups == "" && h.k8sClient != nil && user != "" {
 		userGroups, _ := h.k8sClient.GetUserGroups(user)
 		if len(userGroups) > 0 {
-			groups = `["` + strings.Join(userGroups, `","`) + `"]`
+			encoded, err := json.Marshal(userGroups)
+			if err == nil {
+				groups = string(encoded)
+			}
 		}
 	}
 	if groups == "" {
-		groups = `["` + h.cfg.DefaultGroup + `"]`
+		encoded, err := json.Marshal([]string{h.cfg.DefaultGroup})
+		if err != nil {
+			groups = "[]"
+		} else {
+			groups = string(encoded)
+		}
 	}
 
 	headers := map[string]string{

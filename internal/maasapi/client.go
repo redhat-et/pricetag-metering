@@ -79,7 +79,11 @@ func (c *Client) CreateUserAPIKey(ctx context.Context, username, group string, r
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-MaaS-Username", username)
-	httpReq.Header.Set("X-MaaS-Group", fmt.Sprintf(`["%s"]`, group))
+	groupJSON, err := json.Marshal([]string{group})
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("X-MaaS-Group", string(groupJSON))
 	httpReq.Header.Set("X-MaaS-Tenant", c.tenant)
 
 	resp, err := c.client.Do(httpReq)

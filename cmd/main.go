@@ -281,13 +281,20 @@ func main() {
 	adminHandler.SetStore(store)
 	meUsageHandler := handler.NewMeUsageHandler(store, cfg)
 	accountHandler := handler.NewAccountHandler(cfg)
+	if cfg.OIDC.Enabled && strings.TrimSpace(os.Getenv("SESSION_SECRET")) == "" {
+		slog.Error("OIDC is enabled but SESSION_SECRET is not set; a per-process secret breaks state/session cookies across replicas and restarts")
+		os.Exit(1)
+	}
 	authHandler := handler.NewAuthHandler(cfg)
 	if cfg.OIDC.Enabled {
 		if err := authHandler.InitOIDC(ctx); err != nil {
-			slog.Error("OIDC is enabled but provider initialization failed", "error", err)
-			os.Exit(1)
+			// OIDC is an additional login method. An IdP outage must not take
+			// down API-key login or the rest of the dashboard, so degrade
+			// loudly instead of exiting.
+			slog.Error("OIDC is enabled but provider initialization failed; continuing with API-key login only", "error", err)
+		} else {
+			slog.Info("OIDC dashboard login enabled", "issuer", cfg.OIDC.IssuerURL, "client_id", cfg.OIDC.ClientID)
 		}
-		slog.Info("OIDC dashboard login enabled", "issuer", cfg.OIDC.IssuerURL, "client_id", cfg.OIDC.ClientID)
 	}
 	authHandler.SetOrgStore(store) // managers land on /manager after login
 	keysHandler := handler.NewKeysHandler(k8sClient, cfg, store)
