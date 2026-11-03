@@ -57,8 +57,8 @@ func TestGeoMapUsesCountryFillHeat(t *testing.T) {
 			t.Errorf("dashboard.html no longer contains %q", want)
 		}
 	}
-	if strings.Contains(string(data), "geoDotCluster(") {
-		t.Error("dashboard.html still renders centroid dots instead of country fills")
+	if !strings.Contains(string(data), "geoDotCluster(") {
+		t.Error("dashboard.html no longer renders proportional centroid glow dots")
 	}
 }
 
