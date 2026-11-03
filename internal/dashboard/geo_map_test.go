@@ -41,17 +41,20 @@ func TestGeoMapUsesRaisedDeepSpaceStyle(t *testing.T) {
 	}
 }
 
-func TestGeoMapUsesCountryFillHeat(t *testing.T) {
+func TestGeoMapUsesContinentFillHeat(t *testing.T) {
 	data, err := FS.ReadFile("dashboard.html")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"class','geo-country-heat'",
-		"class','geo-state-heat'",
+		"var GEO_CONTINENT_CODES=",
+		"function geoContinent(country)",
+		"class','geo-continent-heat'",
 		"var eased=t*t*(3-2*t);",
 		"parts.path.classed('is-on',eased>0)",
-		"const countryHeatLayer=svg.append('g').attr('class','geo-country-heat-layer');",
+		"const byCountry=new Map(),byState=new Map(),byContinent=new Map();",
+		"byContinent.set(continent,(byContinent.get(continent)||0)+value);",
+		"const continentMax=Math.max.apply(null,Array.from(byContinent.values()).concat([0]));",
 	} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("dashboard.html no longer contains %q", want)
@@ -59,6 +62,11 @@ func TestGeoMapUsesCountryFillHeat(t *testing.T) {
 	}
 	if strings.Contains(string(data), "geoDotCluster(") {
 		t.Error("dashboard.html still renders centroid dots instead of country fills")
+	}
+	for _, old := range []string{"class','geo-country-heat'", "class','geo-state-heat'", "geoCountryGlows.get(code),glowMax:countryMax"} {
+		if strings.Contains(string(data), old) {
+			t.Errorf("dashboard.html still contains country-level heat treatment %q", old)
+		}
 	}
 }
 
