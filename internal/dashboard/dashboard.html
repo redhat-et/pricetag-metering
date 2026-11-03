@@ -114,7 +114,7 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-ocean{fill:url(#geo-ocean-grad)}
 #geo-map .geo-atmosphere{fill:none;stroke:#8ac7db;stroke-width:1.2;opacity:.13;filter:url(#geo-atmosphere-glow);pointer-events:none}
 #geo-map .geo-graticule{display:none}
-#geo-map .geo-country-fill{fill:url(#geo-land-grad);stroke:none;pointer-events:none}
+#geo-map .geo-country-fill{fill:#6b4936;stroke:none;pointer-events:none}
 #geo-map .geo-country-shadow{fill:#071421;stroke:#02070d;stroke-width:1.2;opacity:.9;pointer-events:none;filter:url(#geo-depth-shadow)}
 #geo-map .geo-country{fill:none;stroke:#f1d1ad;stroke-width:.24;vector-effect:non-scaling-stroke;opacity:.42;transition:stroke .18s,opacity .18s}
 #geo-map .geo-country.geo-active{stroke:#fff1df;opacity:.58}
@@ -174,8 +174,8 @@ tr.clickable{cursor:pointer}
 .user-map-row{grid-template-columns:1fr}
 .user-map-row .geo-section{margin-bottom:0;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0}
 .user-map-row .geo-section .chart-head{margin-bottom:8px}
-.user-map-row .geo-layout{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,3fr);gap:16px;align-items:stretch}
-.user-map-row .geo-top{font-size:11px;padding:14px;border:1px solid #1b3042;border-radius:10px;background:linear-gradient(180deg,#101b2a,#07101c);justify-content:center}
+.user-map-row .geo-layout{display:block}
+.user-map-row .geo-top{position:absolute;z-index:4;top:18px;right:18px;width:min(310px,31%);font-size:11px;padding:14px;border:1px solid rgba(228,191,157,.24);border-radius:10px;background:rgba(7,16,28,.82);backdrop-filter:blur(10px);box-shadow:0 12px 35px rgba(0,0,0,.3);justify-content:center}
 .user-map-row .geo-card{min-width:0;padding:0;border:0;box-shadow:none}
 .user-map-row .geo-side{display:flex;flex-direction:column;gap:0}
 .user-map-row .geo-scale{padding:0 0 2px}
@@ -490,11 +490,11 @@ tr.clickable{cursor:pointer}
       <span class="geo-note" id="geo-note">Loading map…</span>
     </div>
     <div class="geo-layout">
-      <div class="geo-top" id="geo-top"></div>
       <div class="geo-card">
         <div class="geo-wrap">
           <svg id="geo-map" role="img" aria-label="Warm dotted world map with usage intensity by country and US state"></svg>
           <div class="geo-tooltip" id="geo-tooltip"></div>
+          <div class="geo-top" id="geo-top"></div>
         </div>
         <div class="geo-side">
           <div class="geo-scale">
@@ -1335,8 +1335,8 @@ function geoScaleTransform(center,scale){
   if(!center||scale===1)return null;
   return 'translate('+center[0]+','+center[1]+') scale('+scale+') translate('+(-center[0])+','+(-center[1])+')';
 }
-var GEO_LAND_COLOR='#29495b';
-var GEO_GLOW_STOPS=['#35566b','#6f91a0','#d47b3e','#ffb36c','#fff2d8'];
+var GEO_LAND_COLOR='#6b4936';
+var GEO_GLOW_STOPS=['#6b4936','#9a6040','#d47b3e','#ffb36c','#fff2d8'];
 var geoMapReady=false,geoMapLoading=false,geoCountryPaths=null,geoStatePaths=null,geoCountryGlows=null,geoStateGlows=null,geoCountryDots=null,geoStateDots=null,geoContinentByCountry=new Map(),geoAnimFrame=null,geoMaxValue=0;
 var geoMapInView=false,geoPaintPending=false,geoObserverStarted=false;
 var geoHasUSStateData=false;
@@ -1369,7 +1369,8 @@ function geoColorFor(value,max){
   return d3.interpolateRgbBasis(GEO_GLOW_STOPS)(t);
 }
 function geoLandColorFor(value,max){
-  return GEO_LAND_COLOR;
+  var t=geoIntensity(value,max);
+  return t>0?d3.interpolateRgbBasis(GEO_GLOW_STOPS)(t):GEO_LAND_COLOR;
 }
 function geoHotspotCount(value,max){
   var t=geoIntensity(value,max);
@@ -1598,32 +1599,30 @@ function renderGeoMap(){
     const continent=geoContinentByCountry.get(country)||geoContinentFor(country);
     byContinent.set(continent,(byContinent.get(continent)||0)+value);
   });
-  const continentMax=Math.max.apply(null,Array.from(byContinent.values()).concat([0]));
+  const countryMax=Math.max.apply(null,Array.from(byCountry.values()).concat([0]));
   const dotMax=Math.max.apply(null,Array.from(byCountry.values()).concat([0],Array.from(byState.values())));
   const stateMax=Math.max.apply(null,Array.from(byState.values()).concat([0]));
-  geoMaxValue=Math.max(continentMax,stateMax);
+  geoMaxValue=Math.max(countryMax,stateMax);
   let usStateTotal=0;
   byState.forEach(function(value,key){if(key.indexOf('US|')===0)usStateTotal+=value;});
   const usCountryGlowValue=Math.max(0,(byCountry.get('US')||0)-usStateTotal);
   if(geoAnimFrame)cancelAnimationFrame(geoAnimFrame);
 
-  geoCountryGlows.forEach(function(g){setGeoGlow(g,0,continentMax);});
+  geoCountryGlows.forEach(function(g){setGeoGlow(g,0,countryMax);});
   geoStateGlows.forEach(function(g){setGeoGlow(g,0,stateMax);});
   geoCountryDots.forEach(function(d){setGeoDots(d,0,dotMax);});
   geoStateDots.forEach(function(d){setGeoDots(d,0,stateMax);});
   geoCountryPaths.forEach(function(p,code){
     const value=byCountry.get(code)||0;
-    const continent=geoContinentByCountry.get(code)||geoContinentFor(code);
-    p.attr('fill',geoLandColorFor(byContinent.get(continent)||0,continentMax)).classed('geo-active',value>0);
+    p.attr('fill',geoLandColorFor(value,countryMax)).classed('geo-active',value>0);
   });
 
   const targets=[];
   geoCountryPaths.forEach(function(p,code){
-    const value=code==='US'?usCountryGlowValue:(byCountry.get(code)||0);
-    const continent=geoContinentByCountry.get(code)||geoContinentFor(code);
-    const heatValue=byContinent.get(continent)||0;
+    const value=byCountry.get(code)||0;
+    const heatValue=value;
     if(value<=0&&heatValue<=0)return;
-    targets.push({p:p,value:value,heatValue:heatValue,glow:geoCountryGlows.get(code),dots:geoCountryDots.get(code),glowMax:continentMax,kind:'country',delay:(targets.length%48)*7});
+    targets.push({p:p,value:value,heatValue:heatValue,glow:geoCountryGlows.get(code),dots:geoCountryDots.get(code),glowMax:countryMax,kind:'country',delay:(targets.length%48)*7});
   });
   if(geoHasUSStateData){
     geoStatePaths.forEach(function(p,code){
@@ -1631,7 +1630,7 @@ function renderGeoMap(){
     });
   }
   function paint(t,value){
-    if(t.kind==='country')t.p.attr('fill',geoLandColorFor(t.heatValue*value,continentMax));
+    if(t.kind==='country')t.p.attr('fill',geoLandColorFor(t.heatValue*value,countryMax));
     setGeoGlow(t.glow,t.heatValue*value,t.glowMax);
     setGeoDots(t.dots,t.value*value,dotMax);
   }
