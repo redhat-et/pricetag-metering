@@ -1337,6 +1337,7 @@ function geoScaleTransform(center,scale){
 }
 var GEO_LAND_COLOR='#394b59';
 var GEO_GLOW_STOPS=['#394b59','#8d5b3d','#d47b3e','#ffb36c','#fff2d8'];
+var geoMapDefs=null;
 var geoMapReady=false,geoMapLoading=false,geoCountryPaths=null,geoStatePaths=null,geoCountryGlows=null,geoStateGlows=null,geoCountryDots=null,geoStateDots=null,geoContinentByCountry=new Map(),geoAnimFrame=null,geoMaxValue=0;
 var geoMapInView=false,geoPaintPending=false,geoObserverStarted=false;
 var geoHasUSStateData=false;
@@ -1375,6 +1376,25 @@ function geoLandColorFor(value,max){
 function geoRankHeatColor(rank){
   if(!(rank>0))return GEO_LAND_COLOR;
   return d3.interpolateRgbBasis(GEO_GLOW_STOPS)(Math.max(0,Math.min(1,(11-rank)/10)));
+}
+function geoCountryHeatGradient(code,color){
+  if(!geoMapDefs)return color;
+  var id='geo-country-gradient-'+String(code||'').toLowerCase();
+  var gradient=geoMapDefs.select('#'+id);
+  var edge=geoHeatEdgeColor(color);
+  if(gradient.empty())gradient=geoMapDefs.append('radialGradient').attr('id',id).attr('gradientUnits','objectBoundingBox').attr('cx','.5').attr('cy','.5').attr('r','.78');
+  gradient.selectAll('*').remove();
+  gradient.append('stop').attr('offset','0%').attr('stop-color',color);
+  gradient.append('stop').attr('offset','62%').attr('stop-color',color);
+  gradient.append('stop').attr('offset','100%').attr('stop-color',edge);
+  return 'url(#'+id+')';
+}
+function geoHeatEdgeColor(color){
+  var c=d3.color(color);
+  return c?'rgb('+Math.round(c.r*.7)+','+Math.round(c.g*.7)+','+Math.round(c.b*.7)+')':color;
+}
+function geoCountryHeatCss(color){
+  return 'radial-gradient(circle at 50% 50%,'+color+' 0%,'+color+' 62%,'+geoHeatEdgeColor(color)+' 100%)';
 }
 function geoHotspotCount(value,max){
   var t=geoIntensity(value,max);
@@ -1463,7 +1483,8 @@ async function initGeoMap(){
     // point blooms. The dashboard only has country/state aggregates, so the
     // glow is anchored to each region's centroid rather than pretending to be
     // city-level data.
-    const defs=svg.append('defs');
+  const defs=svg.append('defs');
+    geoMapDefs=defs;
     const ocean=defs.append('radialGradient').attr('id','geo-ocean-grad').attr('cx','50%').attr('cy','38%').attr('r','78%');
     ocean.append('stop').attr('offset','0%').attr('stop-color','#173d52');
     ocean.append('stop').attr('offset','58%').attr('stop-color','#0b2537');
@@ -1628,8 +1649,9 @@ function renderGeoMap(){
     const value=byCountry.get(code)||0;
     const heatValue=value;
     const heatColor=geoRankHeatColor(heatRankByCountry.get(code)||0);
+    const heatFill=geoCountryHeatGradient(code,heatColor);
     if(value<=0&&heatValue<=0)return;
-    targets.push({p:p,value:value,dotValue:code==='US'&&geoHasUSStateData?0:value,heatValue:heatValue,heatColor:heatColor,glow:geoCountryGlows.get(code),dots:geoCountryDots.get(code),glowMax:countryMax,kind:'country',delay:(targets.length%48)*7});
+    targets.push({p:p,value:value,dotValue:code==='US'&&geoHasUSStateData?0:value,heatValue:heatValue,heatColor:heatFill,glow:geoCountryGlows.get(code),dots:geoCountryDots.get(code),glowMax:countryMax,kind:'country',delay:(targets.length%48)*7});
   });
   if(geoHasUSStateData){
     geoStatePaths.forEach(function(p,code){
@@ -1676,9 +1698,10 @@ function renderGeoMap(){
      top.innerHTML='<div class="gt-title">Top 10 countries by usage</div>'+rows.map(function(entry,i){
        const label=geoFullName(entry[0],'');
        const value=entry[1];
-       const color=geoColorFor(value,topMax);
+       const color=geoRankHeatColor(i+1);
+       const heatCss=geoCountryHeatCss(color);
        const width=Math.max(3,Math.round(value/topMax*100));
-       return '<div class="gt-row" title="'+pmEsc(label)+'"><span class="gt-rank">'+(i+1)+'</span><div class="gt-main"><span class="gt-swatch" style="background:'+color+';color:'+color+'"></span><span class="gt-name">'+pmEsc(label)+'</span><span class="gt-val">'+fmtN(value)+'</span></div><div class="gt-track"><div class="gt-fill" style="width:'+width+'%;background:'+color+';color:'+color+'"></div></div></div>';
+       return '<div class="gt-row" title="'+pmEsc(label)+'"><span class="gt-rank">'+(i+1)+'</span><div class="gt-main"><span class="gt-swatch" style="background:'+heatCss+';color:'+color+'"></span><span class="gt-name">'+pmEsc(label)+'</span><span class="gt-val">'+fmtN(value)+'</span></div><div class="gt-track"><div class="gt-fill" style="width:'+width+'%;background:'+heatCss+';color:'+color+'"></div></div></div>';
      }).join('');
   }
 }
