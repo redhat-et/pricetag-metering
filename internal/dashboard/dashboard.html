@@ -910,13 +910,14 @@ function pieUnit(metric){
 }
 function renderPieLegend(id,labels,colors,redactName,parts){
   var el=document.getElementById(id);if(!el)return;
-  function html(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   el.innerHTML=labels.map(function(label,i){
-    var text=html(label);
+    // pmEsc also escapes double quotes, which the local html() helper used to
+    // leave intact; the label is interpolated into a title="..." attribute.
+    var text=pmEsc(label);
     var labelHtml=text;
     var part=parts&&parts[i];
     if(redactName&&part){
-      if(!/^Other\b/.test(part.name))labelHtml='<span class="demo-pii">'+html(part.name)+'</span>'+html(part.rest||'');
+      if(!/^Other\b/.test(part.name))labelHtml='<span class="demo-pii">'+pmEsc(part.name)+'</span>'+pmEsc(part.rest||'');
     }else if(redactName&&text.indexOf('Other —')!==0){
       var sep=text.indexOf(' — ');
       if(sep>=0)labelHtml='<span class="demo-pii">'+text.slice(0,sep)+'</span>'+text.slice(sep);

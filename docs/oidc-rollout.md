@@ -70,6 +70,18 @@ stable UUID must equal the OIDC `rhatUUID`; login does not auto-provision or
 elevate accounts. LDAP synchronization remains responsible for creating and
 updating the partner directory, including manager links.
 
+### Session groups are context, not standing authorization
+
+The signed session lives for seven days, so its captured group list can outlive
+an IdP group removal. That is deliberate and bounded: session groups are never
+treated as an entitlement. Every privileged group-scoped action revalidates
+against the live `MaaSSubscription` allow-list — self-service API key creation
+and revocation both require a session group that the cluster currently lists,
+and return 403 once the user is removed from all of them, without waiting for
+the session to expire. Other views show groups read-only. If a future feature
+grants access based on the session claim alone, it must revalidate per request
+instead; do not extend this model without that check.
+
 ## Safe rollout sequence
 
 1. Obtain the exact IAM discovery/issuer URL and confirm the claims.

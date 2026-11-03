@@ -808,11 +808,23 @@ var pendingInviteCount = 0;
 /* ================================================================
    HTML escaping
    ================================================================ */
-var escDiv = document.createElement('div');
+/* Attribute-safe HTML escaping. A textContent/innerHTML round-trip escapes
+   &, < and > but leaves both quote characters intact, so the same helper was
+   unsafe inside value="..." and data-* attributes. Escape quotes explicitly. */
 function esc(s) {
   if (s == null) return '';
-  escDiv.textContent = String(s);
-  return escDiv.innerHTML;
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+/* Quote-safe encoder for values spliced into inline JS string literals inside
+   HTML attributes. HTML entities are decoded before the handler runs, so the
+   value must use JS escapes that contain no quote characters at all. */
+function jsq(s) {
+  if (s == null) return '';
+  return String(s).replace(/[\\'"<\n\r]/g, function(c) {
+    return '\\x' + ('0' + c.charCodeAt(0).toString(16)).slice(-2);
+  });
 }
 function countryFlag(code) {
   var normalized = String(code || '').trim().toUpperCase();
@@ -1130,7 +1142,7 @@ function loadPendingUsers() {
         + '<div class="pending-user">' + esc(p.name) + '</div>'
         + '</div>'
         + '<select class="pending-select" id="' + selectId + '">' + groupOptions + '</select>'
-        + '<button class="btn-approve" onclick="approvePendingUser(\'' + esc(p.name) + '\',\'' + selectId + '\',this)">Add to Group</button>'
+        + '<button class="btn-approve" onclick="approvePendingUser(\'' + jsq(p.name) + '\',\'' + selectId + '\',this)">Add to Group</button>'
         + '</div>';
     });
 
@@ -1262,7 +1274,7 @@ function loadGroups() {
         g.members.forEach(function(u) {
           html += '<div style="font-size:11px;color:var(--t);padding:2px 0;display:flex;align-items:center;justify-content:space-between">'
             + '<span>&#8226; ' + esc(u) + '</span>'
-            + '<button class="btn-outline" onclick="event.stopPropagation();removeFromGroup(\'' + esc(name) + '\',\'' + esc(u) + '\')" style="font-size:9px;padding:2px 6px;cursor:pointer">&times;</button>'
+            + '<button class="btn-outline" onclick="event.stopPropagation();removeFromGroup(\'' + jsq(name) + '\',\'' + jsq(u) + '\')" style="font-size:9px;padding:2px 6px;cursor:pointer">&times;</button>'
             + '</div>';
         });
       } else {
@@ -1270,7 +1282,7 @@ function loadGroups() {
       }
       html += '<div style="margin-top:8px;display:flex;gap:6px">'
         + '<input type="text" id="add-user-' + cardId + '" placeholder="username" style="flex:1;background:var(--bg,#0b0e11);color:var(--t);border:1px solid var(--bdr);padding:4px 8px;border-radius:4px;font-size:11px">'
-        + '<button class="btn-outline" onclick="event.stopPropagation();addToGroup(\'' + esc(name) + '\',\'' + cardId + '\')" style="font-size:10px;padding:4px 10px;cursor:pointer;color:var(--grn);border-color:var(--grn)">+ Add</button>'
+        + '<button class="btn-outline" onclick="event.stopPropagation();addToGroup(\'' + jsq(name) + '\',\'' + cardId + '\')" style="font-size:10px;padding:4px 10px;cursor:pointer;color:var(--grn);border-color:var(--grn)">+ Add</button>'
         + '</div>';
       html += '</div>';
 
@@ -2024,12 +2036,12 @@ function renderPeople() {
       '<td><div class="org-name">' + esc(p.full_name) + ' ' + badges + '</div>' +
       (p.title ? '<div class="org-title">' + esc(p.title) + '</div>' : '') + '</td>' +
       '<td>' + roleBadge(p._role) + '</td>' +
-      '<td><select class="tbl-input" style="min-width:120px" onchange="setPersonField(\'' + esc(p.slug) + '\',\'group_name\',this.value)">' + peopleGroupOptions(p.group_name) + '</select></td>' +
-      '<td><select class="tbl-input" style="min-width:150px" onchange="setPersonField(\'' + esc(p.slug) + '\',\'manager_slug\',this.value)">' + opts + '</select></td>' +
-      '<td><input class="tbl-input" style="min-width:170px" value="' + esc(p.email || '') + '" placeholder="fill in…" onchange="setPersonField(\'' + esc(p.slug) + '\',\'email\',this.value)"></td>' +
+      '<td><select class="tbl-input" style="min-width:120px" onchange="setPersonField(\'' + jsq(p.slug) + '\',\'group_name\',this.value)">' + peopleGroupOptions(p.group_name) + '</select></td>' +
+      '<td><select class="tbl-input" style="min-width:150px" onchange="setPersonField(\'' + jsq(p.slug) + '\',\'manager_slug\',this.value)">' + opts + '</select></td>' +
+      '<td><input class="tbl-input" style="min-width:170px" value="' + esc(p.email || '') + '" placeholder="fill in…" onchange="setPersonField(\'' + jsq(p.slug) + '\',\'email\',this.value)"></td>' +
       '<td>' + login + '</td>' +
       '<td>' + (p.reports || '') + '</td>' +
-      '<td style="white-space:nowrap">' + viewas + ' <button class="btn btn-outline" style="padding:3px 10px;font-size:9px" onclick="openInviteFor(\'' + esc(p.slug) + '\')">Invite</button></td>' +
+      '<td style="white-space:nowrap">' + viewas + ' <button class="btn btn-outline" style="padding:3px 10px;font-size:9px" onclick="openInviteFor(\'' + jsq(p.slug) + '\')">Invite</button></td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
