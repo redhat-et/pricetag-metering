@@ -11,8 +11,8 @@ func TestGeoMapUsesRaisedDeepSpaceStyle(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"var GEO_LAND_COLOR='#6b4936';",
-		"var GEO_GLOW_STOPS=['#6b4936','#9a6040','#d47b3e','#ffb36c','#fff2d8'];",
+		"var GEO_LAND_COLOR='#394b59';",
+		"var GEO_GLOW_STOPS=['#394b59','#8d5b3d','#d47b3e','#ffb36c','#fff2d8'];",
 		"background:linear-gradient(90deg,#394b59,#8d5b3d,#d47b3e,#ffb36c,#fff2d8)",
 		"d3.interpolateRgbBasis(GEO_GLOW_STOPS)",
 		"defs.append('radialGradient').attr('id','geo-glow-grad')",

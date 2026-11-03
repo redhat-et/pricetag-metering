@@ -114,7 +114,7 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-ocean{fill:url(#geo-ocean-grad)}
 #geo-map .geo-atmosphere{fill:none;stroke:#8ac7db;stroke-width:1.2;opacity:.13;filter:url(#geo-atmosphere-glow);pointer-events:none}
 #geo-map .geo-graticule{display:none}
-#geo-map .geo-country-fill{fill:#6b4936;stroke:none;pointer-events:none}
+#geo-map .geo-country-fill{fill:#394b59;stroke:none;pointer-events:none}
 #geo-map .geo-country-shadow{fill:#071421;stroke:#02070d;stroke-width:1.2;opacity:.9;pointer-events:none;filter:url(#geo-depth-shadow)}
 #geo-map .geo-country{fill:none;stroke:#f1d1ad;stroke-width:.24;vector-effect:non-scaling-stroke;opacity:.42;transition:stroke .18s,opacity .18s}
 #geo-map .geo-country.geo-active{stroke:#fff1df;opacity:.58}
@@ -1335,8 +1335,8 @@ function geoScaleTransform(center,scale){
   if(!center||scale===1)return null;
   return 'translate('+center[0]+','+center[1]+') scale('+scale+') translate('+(-center[0])+','+(-center[1])+')';
 }
-var GEO_LAND_COLOR='#6b4936';
-var GEO_GLOW_STOPS=['#6b4936','#9a6040','#d47b3e','#ffb36c','#fff2d8'];
+var GEO_LAND_COLOR='#394b59';
+var GEO_GLOW_STOPS=['#394b59','#8d5b3d','#d47b3e','#ffb36c','#fff2d8'];
 var geoMapReady=false,geoMapLoading=false,geoCountryPaths=null,geoStatePaths=null,geoCountryGlows=null,geoStateGlows=null,geoCountryDots=null,geoStateDots=null,geoContinentByCountry=new Map(),geoAnimFrame=null,geoMaxValue=0;
 var geoMapInView=false,geoPaintPending=false,geoObserverStarted=false;
 var geoHasUSStateData=false;
@@ -1579,7 +1579,7 @@ function setGeoGlow(parts,value,max){
   if(!parts)return;
   var t=geoIntensity(value,max);
   var eased=t*t*(3-2*t);
-  parts.path.classed('is-on',eased>0).attr('fill',eased>0?geoColorFor(value,max):'transparent').attr('opacity',eased>0?.12+eased*.78:0);
+  parts.path.classed('is-on',eased>0).attr('fill',eased>0?geoColorFor(value,max):'transparent').attr('opacity',eased>0?.88+eased*.12:0);
 }
 
 function renderGeoMap(){
