@@ -137,12 +137,16 @@ tr.clickable{cursor:pointer}
 .geo-scale .gs-bar{height:8px;border-radius:4px;margin:5px 0 3px;background:linear-gradient(90deg,#28475b,#4d7890,#d47b3e,#ffb36c,#fff2d8);box-shadow:0 0 14px rgba(255,163,83,.16)}
 .geo-scale .gs-labels{display:flex;justify-content:space-between;font-size:10px}
 .geo-scale .gs-sub{font-size:10px;color:#6e7a89;margin-left:4px}
-.geo-top{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
+.geo-top{display:flex;flex-direction:column;gap:7px;min-height:0;overflow:hidden}
 .geo-top .gt-title{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:700}
-.geo-top .gt-row{display:flex;align-items:center;gap:7px;font-size:11px;min-width:0}
-.geo-top .gt-swatch{width:10px;height:10px;border-radius:50%;flex:0 0 10px;box-shadow:0 0 9px currentColor}
+.geo-top .gt-row{display:grid;grid-template-columns:18px minmax(0,1fr);gap:5px 6px;align-items:center;font-size:11px;min-width:0}
+.geo-top .gt-rank{color:#71808d;font-size:10px;text-align:right;font-variant-numeric:tabular-nums}
+.geo-top .gt-main{display:flex;align-items:center;gap:6px;min-width:0}
+.geo-top .gt-swatch{width:9px;height:9px;border-radius:50%;flex:0 0 9px;box-shadow:0 0 8px currentColor}
 .geo-top .gt-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.geo-top .gt-val{color:var(--text2);font-variant-numeric:tabular-nums}
+.geo-top .gt-val{color:var(--text2);font-size:10px;font-variant-numeric:tabular-nums}
+.geo-top .gt-track{grid-column:2;height:5px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:-3px}
+.geo-top .gt-fill{height:100%;border-radius:inherit;box-shadow:0 0 8px currentColor;transition:width .5s ease}
 .geo-note{font-size:11px;color:var(--text2)}
 .geo-flash{animation:geoFlash 1.9s ease-out}
 @keyframes geoFlash{0%{filter:brightness(2.8) drop-shadow(0 0 7px var(--geo-flash-color,#fff));stroke:var(--geo-flash-color,#fff);stroke-width:1.6}45%{filter:brightness(1.5) drop-shadow(0 0 4px var(--geo-flash-color,#fff));stroke:var(--geo-flash-color,#fff);stroke-width:1}100%{filter:none;stroke:#30405e;stroke-width:.35}}
@@ -173,9 +177,8 @@ tr.clickable{cursor:pointer}
 .user-map-row .geo-card{max-width:none;margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:10px}
 .user-map-row .geo-wrap{height:clamp(360px,35vw,520px);width:100%}
 .user-map-row #geo-map{height:100%;width:100%;max-width:none}
-.user-map-row .geo-side{font-size:10px;display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:start}
-.user-map-row .geo-top{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));column-gap:12px;row-gap:4px}
-.user-map-row .geo-top .gt-title{grid-column:1/-1}
+.user-map-row .geo-side{font-size:10px;display:flex;flex-direction:column;gap:14px;align-items:stretch}
+.user-map-row .geo-top{display:flex;flex-direction:column;gap:7px}
 
 .tl-toggle{display:flex;gap:4px;margin-bottom:12px}
 .tl-toggle button{background:var(--bg-card);color:var(--text2);border:1px solid var(--border);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px}
@@ -196,7 +199,7 @@ tr.clickable{cursor:pointer}
 .recent-scroll::-webkit-scrollbar-track{background:var(--bg-card)}
 .recent-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
-@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.charts-row.three-col{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}.user-map-row{grid-template-columns:minmax(180px,1fr) minmax(0,2fr)}.user-map-row .geo-card{grid-template-columns:1fr}.user-map-row .geo-top{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.charts-row.three-col{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}.user-map-row{grid-template-columns:minmax(180px,1fr) minmax(0,2fr)}.user-map-row .geo-card{grid-template-columns:1fr}.user-map-row .geo-top{display:flex;grid-template-columns:none}}
 @media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row,.charts-row.three-col,.charts-row.user-map-row{grid-template-columns:1fr}.geo-card,.user-map-row .geo-card{grid-template-columns:1fr}.geo-wrap,#geo-map,.user-map-row .geo-wrap{height:360px}.pie-split{flex-wrap:wrap}.pie-side{width:100%}.user-wide-card .pie-split{gap:0}.user-wide-card .user-rank{grid-template-columns:1fr}}
 .user-name{font-weight:600;line-height:1.2}
 .user-mail{font-size:10px;color:var(--text2);margin-top:1px}
@@ -496,7 +499,7 @@ tr.clickable{cursor:pointer}
   </div>
   <div class="section geo-section">
     <div class="chart-head">
-      <h2>Usage Geography <span style="font-size:12px;color:var(--text2);font-weight:400">(usage heat by country &amp; US state)</span></h2>
+      <h2>Usage Geography <span style="font-size:12px;color:var(--text2);font-weight:400">(continent heat · country/state detail)</span></h2>
       <span class="geo-note" id="geo-note">Loading map…</span>
     </div>
     <div class="geo-card">
@@ -1657,14 +1660,17 @@ function renderGeoMap(){
   const total=Array.from(byCountry.values()).reduce(function(a,b){return a+b;},0);
   const note=document.getElementById('geo-note');
   if(note)note.textContent=total?continents+' continents · '+countries+' countries · '+states+' US states · '+fmtN(total)+' tokens':'No usage in this range';
-  const top=document.getElementById('geo-top');
-  if(top){
-    const rows=(cachedGeo||[]).slice(0,8);
-    top.innerHTML='<div class="gt-title">Top locations</div>'+rows.map(function(g){
-      const label=geoFullName(g.country,g.state);
-      const color=geoColorFor(g.total_tokens||0,geoMaxValue);
-      return '<div class="gt-row" title="'+pmEsc(label)+'"><span class="gt-swatch" style="background:'+color+';color:'+color+'"></span><span class="gt-name">'+pmEsc(label)+'</span><span class="gt-val">'+fmtN(g.total_tokens||0)+'</span></div>';
-    }).join('');
+   const top=document.getElementById('geo-top');
+   if(top){
+     const rows=Array.from(byCountry.entries()).filter(function(entry){return entry[0]!=='UNKNOWN'&&entry[1]>0;}).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
+     const topMax=Math.max.apply(null,rows.map(function(entry){return entry[1];}).concat([1]));
+     top.innerHTML='<div class="gt-title">Top 10 countries by usage</div>'+rows.map(function(entry,i){
+       const label=geoFullName(entry[0],'');
+       const value=entry[1];
+       const color=geoColorFor(value,topMax);
+       const width=Math.max(3,Math.round(value/topMax*100));
+       return '<div class="gt-row" title="'+pmEsc(label)+'"><span class="gt-rank">'+(i+1)+'</span><div class="gt-main"><span class="gt-swatch" style="background:'+color+';color:'+color+'"></span><span class="gt-name">'+pmEsc(label)+'</span><span class="gt-val">'+fmtN(value)+'</span></div><div class="gt-track"><div class="gt-fill" style="width:'+width+'%;background:'+color+';color:'+color+'"></div></div></div>';
+     }).join('');
   }
 }
 function flashGeo(country,state,color){
