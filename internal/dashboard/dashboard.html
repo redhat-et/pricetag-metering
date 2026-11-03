@@ -1223,41 +1223,10 @@ function renderUserRank(data,m){
   }).join('');
 }
 function renderUserCostChart(){
-   const data=topNItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;},30);
-  const m=userPieMetric;
+  const data=topNItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;},30);
   // The dashboard now uses the ranked color legend only; the pie was removed
   // to give the geography map the full width of the analytics area.
-  renderUserRank(data,m);
-  return;
-  const vals=data.map(d=>d.value);
-  const displayNames=data.map((d,i)=>d.item===null?'Other':demoUserName(d.label,i));
-  const legendParts=data.map(d=>({name:d.item===null?'Other':d.label,rest:' — '+(m==='cost'&&d.value===0?'Free':pieFmt(d.value,m))}));
-  const labels=legendParts.map(p=>p.name+p.rest);
-  const colors=data.map((d,i)=>d.item===null?OTHER_SLICE_COLOR:COLORS[i%COLORS.length]);
-  const tooltipLabel=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return displayNames[ctx.dataIndex]+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
-  const tooltipTitle=function(items){
-    if(!demoPrivacyEnabled())return items.length?items[0].label:'';
-    const i=items.length?items[0].dataIndex:0;
-    const d=data[i];
-    return d&&d.item===null?'Other':demoUserName(d?d.label:'',i);
-  };
-  const tooltipCallbacks={label:tooltipLabel,title:tooltipTitle};
-  if(userCostChart){
-    userCostChart.data.labels=labels;
-    userCostChart.data.datasets[0].data=vals;
-    userCostChart.data.datasets[0].backgroundColor=colors;
-    userCostChart.options.plugins.tooltip.callbacks=tooltipCallbacks;
-    userCostChart.update();
-    renderUserRank(data,m);
-    return;
-  }
-  userCostChart=new Chart(document.getElementById('user-cost-chart'),{
-    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:160}]},
-    options:{responsive:false,width:360,height:360,radius:160,plugins:{legend:{display:false},
-      tooltip:{callbacks:tooltipCallbacks}}
-    }
-  });
-  renderUserRank(data,m);
+  renderUserRank(data,userPieMetric);
 }
 
 window.refreshDemoPrivacy=function(){

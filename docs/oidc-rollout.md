@@ -70,17 +70,40 @@ stable UUID must equal the OIDC `rhatUUID`; login does not auto-provision or
 elevate accounts. LDAP synchronization remains responsible for creating and
 updating the partner directory, including manager links.
 
-### Session groups are context, not standing authorization
+### Session groups are bounded by the session lifetime
 
-The signed session lives for seven days, so its captured group list can outlive
-an IdP group removal. That is deliberate and bounded: session groups are never
-treated as an entitlement. Every privileged group-scoped action revalidates
-against the live `MaaSSubscription` allow-list — self-service API key creation
-and revocation both require a session group that the cluster currently lists,
-and return 403 once the user is removed from all of them, without waiting for
-the session to expire. Other views show groups read-only. If a future feature
-grants access based on the session claim alone, it must revalidate per request
-instead; do not extend this model without that check.
+The signed session lives for seven days. Its group list is captured from the
+IdP at login and is **not** revalidated per request. This section states
+exactly what the code enforces, so the guarantee is not overstated.
+
+Self-service API key create and revoke do two separate things:
+
+1. They intersect the session groups with the cluster's live
+   `MaaSSubscription` group list. A group removed from the subscription stops
+   working immediately, even for an existing session.
+2. They do **not** re-check that the user is still a member of that group in
+   the IdP or in OpenShift. Membership is whatever the IdP asserted at login.
+
+Consequences, stated plainly:
+
+- If a user is removed from an IdP group but that group is still listed on the
+  subscription, the user can keep minting and revoking keys scoped to it until
+  the session expires (at most seven days). This is stale authorization, not
+  merely display context.
+- If the Kubernetes client is unavailable, or the subscription lookup errors or
+  returns an empty list, the code falls back to the session groups rather than
+  failing closed. That legacy fallback is intentional for availability and is
+  the reason a missing platform list is not treated as an authorization check.
+- Partner deactivation has the same bound: `partner_users.active` is evaluated
+  during login, and `RequireAuth` validates the signed cookie only. A
+  deactivated partner keeps an existing session until it expires and then
+  cannot log in again.
+
+This is an explicit, accepted risk for this change: revocation is bounded by
+the seven-day session lifetime instead of taking effect immediately. Before
+session groups are used for any other authorization decision, or before the
+session lifetime is extended, per-request membership and `partner_users.active`
+revalidation must be added and must fail closed when the lookup is unavailable.
 
 ## Safe rollout sequence
 

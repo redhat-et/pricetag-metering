@@ -2,6 +2,10 @@ package dashboard
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -64,8 +68,9 @@ func TestTopUsersRankShowsCountryCostCenterAndDemoPrivacy(t *testing.T) {
 		`<span class="ur-sub demo-pii">`,
 		`<span class="ur-cc">`,
 		`var title=demoPrivacyEnabled()?'':' title="'`,
-		"const tooltipCallbacks={label:tooltipLabel,title:tooltipTitle};",
-		"userCostChart.options.plugins.tooltip.callbacks=tooltipCallbacks;",
+		// The user pie (and its tooltip) is gone: renderUserCostChart renders
+		// only the ranked legend, with no unreachable chart code after it.
+		"renderUserRank(data,userPieMetric);\n}",
 	} {
 		if !bytes.Contains(data, []byte(want)) {
 			t.Errorf("dashboard.html no longer contains %q", want)
@@ -132,6 +137,70 @@ func TestAdminEscapesAttributesAndInlineHandlerStrings(t *testing.T) {
 	} {
 		if bytes.Contains(data, []byte(bad)) {
 			t.Errorf("admin.html still interpolates %q into an inline handler", bad)
+		}
+	}
+}
+
+// jsq() is splices into inline JS string literals inside HTML attributes, so it
+// must neutralise the entity opener as well as quotes: the HTML parser would
+// otherwise decode "&#39;" back into a quote before JavaScript runs.
+func TestAdminJsqEncodingIsEntityAndQuoteSafe(t *testing.T) {
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not available; jsq behaviour is exercised in CI where node exists")
+	}
+	data, err := FS.ReadFile("admin.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(data)
+	start := strings.Index(src, "function jsq(s)")
+	if start < 0 {
+		t.Fatal("admin.html no longer defines jsq()")
+	}
+	depth, end := 0, -1
+	for i := start; i < len(src); i++ {
+		switch src[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				end = i + 1
+			}
+		}
+		if end >= 0 {
+			break
+		}
+	}
+	if end < 0 {
+		t.Fatal("could not extract jsq() body")
+	}
+	fn := src[start:end]
+
+	cases := []struct{ in, want string }{
+		{`&#39;);alert(document.domain);//`, `\x26#39;);alert(document.domain);//`},
+		{`it's "quoted" & <tag>`, `it\x27s \x22quoted\x22 \x26 \x3ctag>`},
+		{`a\b`, `a\x5cb`},
+		{"line\nbreak", `line\x0abreak`},
+	}
+	for _, tc := range cases {
+		lit, err := json.Marshal(tc.in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		script := fmt.Sprintf("%s;process.stdout.write(jsq(%s));", fn, lit)
+		out, err := exec.Command(nodePath, "-e", script).Output()
+		if err != nil {
+			t.Fatalf("node failed: %v", err)
+		}
+		if string(out) != tc.want {
+			t.Errorf("jsq(%q) = %q, want %q", tc.in, out, tc.want)
+		}
+		for _, raw := range []string{"&", "'", "\"", "<"} {
+			if strings.Contains(string(out), raw) {
+				t.Errorf("jsq(%q) left raw %q in the encoded output %q", tc.in, raw, out)
+			}
 		}
 	}
 }

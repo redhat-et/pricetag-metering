@@ -45,7 +45,11 @@ func (h *AdminHandler) HandleMyKeys(w http.ResponseWriter, r *http.Request) {
 
 // myKeyIdentity resolves the caller, their normalized groups, and the MaaS
 // group to scope the request. MaaS requires one non-empty group header; a
-// user with several groups is scoped to the first authorized one.
+// user with several groups is scoped to the first group that the live
+// MaaSSubscription lists. Group MEMBERSHIP is not revalidated here: the
+// groups come from the signed session (IdP assertion at login) and are only
+// intersected with the subscription's group list, so an IdP removal takes
+// effect when the session expires. See docs/oidc-rollout.md.
 func (h *AdminHandler) myKeyIdentity(w http.ResponseWriter, r *http.Request) (username, group string, groups []string, ok bool) {
 	username = strings.TrimSpace(caller(r, h.cfg))
 	if username == "" {

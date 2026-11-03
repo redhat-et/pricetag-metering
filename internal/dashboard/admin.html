@@ -818,11 +818,13 @@ function esc(s) {
   });
 }
 /* Quote-safe encoder for values spliced into inline JS string literals inside
-   HTML attributes. HTML entities are decoded before the handler runs, so the
-   value must use JS escapes that contain no quote characters at all. */
+   HTML attributes. The HTML parser decodes entities before the handler runs,
+   so this must encode & as well as quotes — otherwise an input such as
+   "&#39;);alert(1);//" would decode back into a quote and break out of the JS
+   string. Every dangerous character becomes a \\xNN escape. */
 function jsq(s) {
   if (s == null) return '';
-  return String(s).replace(/[\\'"<\n\r]/g, function(c) {
+  return String(s).replace(/[&\\'"<\n\r]/g, function(c) {
     return '\\x' + ('0' + c.charCodeAt(0).toString(16)).slice(-2);
   });
 }
