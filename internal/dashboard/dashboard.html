@@ -124,7 +124,7 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-country{fill:none;stroke:#f1d1ad;stroke-width:.24;vector-effect:non-scaling-stroke;opacity:.42;pointer-events:all;transition:stroke .18s,stroke-width .18s,opacity .18s}
 #geo-map .geo-country.geo-active{stroke:#fff1df;opacity:.58}
 #geo-map .geo-state{fill:none;stroke:#e8c8a7;stroke-width:.18;vector-effect:non-scaling-stroke;opacity:.28;pointer-events:all}
-#geo-map .geo-country-heat{stroke:currentColor;stroke-width:1.15;stroke-opacity:.28;vector-effect:non-scaling-stroke;pointer-events:none;mix-blend-mode:normal;filter:none}
+#geo-map .geo-country-heat{stroke:currentColor;stroke-width:3.2;stroke-opacity:.34;vector-effect:non-scaling-stroke;pointer-events:none;mix-blend-mode:normal;filter:none}
 #geo-map .geo-state-heat{stroke:none;pointer-events:none;mix-blend-mode:normal;filter:none}
 #geo-map .geo-country-heat.is-on,#geo-map .geo-state-heat.is-on{opacity:1}
 #geo-map .geoHeatFlash{animation:geoHeatFlash 1.9s ease-out}
@@ -1686,7 +1686,7 @@ function renderGeoMap(){
     if(t.kind==='country')t.p.attr('fill',t.heatColor);
     setGeoGlow(t.glow,t.heatValue*value,t.glowMax,t.heatColor);
     if(t.kind==='country'&&t.glow){
-      t.glow.path.attr('color',t.heatBase).attr('stroke-width',t.heatValue*value>0?1.15:0).attr('stroke-opacity',t.heatValue*value>0?.28:0);
+      t.glow.path.attr('color',t.heatBase).attr('stroke-width',t.heatValue*value>0?3.2:0).attr('stroke-opacity',t.heatValue*value>0?.34:0);
     }
     setGeoDots(t.dots,(t.dotValue===undefined?t.value:t.dotValue)*value,dotMax);
   }
@@ -1742,16 +1742,13 @@ function flashGeo(country,state,color){
   if(!glow&&geoCountryGlows)glow=geoCountryGlows.get(country);
   if(!path||!glow)return;
   if(!glow.path.classed('is-on'))return;
-  const gn=glow.path.node();
-  gn.classList.remove('geoHeatFlash');
-  void gn.getBoundingClientRect();
-  gn.classList.add('geoHeatFlash');
-  setTimeout(function(){gn.classList.remove('geoHeatFlash');},2000);
   var dots=country==='US'&&state&&geoStateDots?geoStateDots.get(state):null;
   if(!dots&&geoCountryDots)dots=geoCountryDots.get(country);
   if(dots&&dots.length){
     var spark=dots[geoHash(country+'|'+state)%dots.length];
     var node=spark.group.node();
+    spark.halo.attr('r',2.2).attr('opacity',.82);
+    spark.core.attr('r',.9).attr('opacity',1);
     node.classList.remove('geo-activity-spark');
     void node.getBoundingClientRect();
     node.classList.add('geo-activity-spark');
