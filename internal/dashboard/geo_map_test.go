@@ -41,21 +41,24 @@ func TestGeoMapUsesRaisedDeepSpaceStyle(t *testing.T) {
 	}
 }
 
-func TestGeoMapUsesValueProportionalDotReveal(t *testing.T) {
+func TestGeoMapUsesCountryFillHeat(t *testing.T) {
 	data, err := FS.ReadFile("dashboard.html")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"return t>0?Math.max(1,Math.min(12,Math.ceil(t*12))):0;",
-		"var heatDots=geoIntensity(value,max)*12;",
-		"var reveal=Math.max(0,Math.min(1,heatDots-index));",
-		"dot.group.classed('is-on',false)",
-		"dot.group.classed('is-on',true)",
+		"class','geo-country-heat'",
+		"class','geo-state-heat'",
+		"var eased=t*t*(3-2*t);",
+		"parts.path.classed('is-on',eased>0)",
+		"const countryHeatLayer=svg.append('g').attr('class','geo-country-heat-layer');",
 	} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("dashboard.html no longer contains %q", want)
 		}
+	}
+	if strings.Contains(string(data), "geoDotCluster(") {
+		t.Error("dashboard.html still renders centroid dots instead of country fills")
 	}
 }
 

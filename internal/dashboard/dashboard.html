@@ -119,13 +119,19 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-country{fill:none;stroke:#d8e8ee;stroke-width:.18;vector-effect:non-scaling-stroke;opacity:.25;transition:stroke .18s,opacity .18s}
 #geo-map .geo-country.geo-active{stroke:#e9f5f7;opacity:.38}
 #geo-map .geo-state{fill:none;stroke:#c2dbe3;stroke-width:.16;vector-effect:non-scaling-stroke;opacity:.2;pointer-events:all}
+#geo-map .geo-country-heat,#geo-map .geo-state-heat{stroke:none;pointer-events:none;mix-blend-mode:screen;filter:url(#geo-heat-blur)}
+#geo-map .geo-country-heat.is-on,#geo-map .geo-state-heat.is-on{opacity:1}
+#geo-map .geoHeatFlash{animation:geoHeatFlash 1.9s ease-out}
 #geo-map .geo-country:hover{stroke:#ffffff;stroke-width:.35;opacity:.55}
 #geo-map .geo-glow{pointer-events:none;mix-blend-mode:screen;opacity:0}
 #geo-map .geo-glow-halo{filter:url(#geo-glow-blur)}
 #geo-map .geo-glow-core{filter:url(#geo-core-blur)}
 #geo-map .geo-glow.is-on{opacity:1}
 #geo-map .geo-glow.geo-flash{animation:geoGlowFlash 1.9s ease-out}
-.geo-tooltip{position:absolute;pointer-events:none;display:none;background:rgba(18,9,42,.96);border:1px solid rgba(255,110,226,.35);border-radius:7px;padding:7px 10px;font-size:11px;line-height:1.5;box-shadow:0 8px 26px rgba(0,0,0,.6),0 0 18px rgba(255,45,205,.12);z-index:5;white-space:nowrap;color:var(--text)}
+.geo-tooltip{position:absolute;pointer-events:none;display:none;background:rgba(5,18,29,.97);border:1px solid rgba(210,235,241,.5);border-radius:8px;padding:9px 12px;font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.58),0 0 22px rgba(178,225,239,.2);z-index:5;white-space:nowrap;color:var(--text);transform:scale(1);transform-origin:bottom left;animation:geoTooltipPop .16s ease-out}
+.geo-tooltip b{color:#fff;font-size:13px}
+@keyframes geoTooltipPop{from{opacity:0;transform:translateY(5px) scale(.88)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes geoHeatFlash{0%{filter:url(#geo-heat-blur) brightness(2.1)}45%{filter:url(#geo-heat-blur) brightness(1.35)}100%{filter:url(#geo-heat-blur) brightness(1)}}
 .geo-side{display:flex;flex-direction:column;gap:10px;min-width:0}
 .geo-scale{font-size:11px;color:var(--text2)}
 .geo-scale .gs-bar{height:8px;border-radius:4px;margin:5px 0 3px;background:linear-gradient(90deg,#28475b,#4d7890,#d47b3e,#ffb36c,#fff2d8);box-shadow:0 0 14px rgba(255,163,83,.16)}
@@ -150,11 +156,10 @@ tr.clickable{cursor:pointer}
 .user-rank .ur-dot{flex:none}
 .user-rank .ur-cc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .user-rank .ur-val{font-variant-numeric:tabular-nums;color:var(--text2);white-space:nowrap}
-.user-wide-card .pie-split{min-height:390px;justify-content:center;gap:56px}
-.user-wide-card .pie-column{flex:0 0 360px;width:360px}
-.user-wide-card .pie-canvas{width:360px!important;height:360px!important;max-width:360px!important;max-height:360px!important}
-.user-wide-card .pie-side{max-width:720px}
-.user-wide-card .user-rank{width:min(720px,100%);display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));column-gap:28px;align-content:center}
+.user-wide-card .pie-split{min-height:0;height:auto;justify-content:stretch;gap:0}
+.user-wide-card .pie-column{display:none}
+.user-wide-card .pie-side{max-width:none;width:100%}
+.user-wide-card .user-rank{width:100%;display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));column-gap:28px;align-content:start}
 .user-wide-card .user-rank .gt-title{grid-column:1/-1}
 .user-map-row .user-wide-card{min-width:0}
 .user-map-row .user-wide-card .pie-split{min-height:300px;gap:12px}
@@ -162,11 +167,12 @@ tr.clickable{cursor:pointer}
 .user-map-row .user-wide-card .pie-canvas{width:270px!important;height:270px!important;max-width:270px!important;max-height:270px!important}
 .user-map-row .user-wide-card .pie-side{min-width:0}
 .user-map-row .user-wide-card .user-rank{width:100%;display:flex;gap:4px}
+.user-map-row{grid-template-columns:minmax(0,1fr)}
 .user-map-row .geo-section{margin-bottom:0;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0}
 .user-map-row .geo-section .chart-head{margin-bottom:8px}
 .user-map-row .geo-card{max-width:none;margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:10px}
-.user-map-row .geo-wrap{height:340px;width:100%}
-.user-map-row #geo-map{height:340px;width:100%;max-width:none}
+.user-map-row .geo-wrap{height:clamp(420px,42vw,590px);width:100%}
+.user-map-row #geo-map{height:100%;width:100%;max-width:none}
 .user-map-row .geo-side{font-size:10px;display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:start}
 .user-map-row .geo-top{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));column-gap:12px;row-gap:4px}
 .user-map-row .geo-top .gt-title{grid-column:1/-1}
@@ -191,7 +197,7 @@ tr.clickable{cursor:pointer}
 .recent-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
 @media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.charts-row.three-col{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}.user-map-row .geo-card{grid-template-columns:1fr}.user-map-row .geo-top{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row,.charts-row.three-col,.charts-row.user-map-row{grid-template-columns:1fr}.geo-card,.user-map-row .geo-card{grid-template-columns:1fr}.geo-wrap,#geo-map,.user-map-row .geo-wrap{height:260px}.pie-split{flex-wrap:wrap}.pie-canvas{flex-basis:220px;margin:0 auto}.pie-side{width:100%}.user-wide-card .pie-split{gap:20px}.user-wide-card .pie-column,.user-map-row .user-wide-card .pie-column{flex-basis:300px;width:300px}.user-wide-card .pie-canvas,.user-map-row .user-wide-card .pie-canvas{width:300px!important;height:300px!important;max-width:300px!important;max-height:300px!important}.user-wide-card .user-rank{grid-template-columns:1fr}}
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row,.charts-row.three-col,.charts-row.user-map-row{grid-template-columns:1fr}.geo-card,.user-map-row .geo-card{grid-template-columns:1fr}.geo-wrap,#geo-map,.user-map-row .geo-wrap{height:360px}.pie-split{flex-wrap:wrap}.pie-side{width:100%}.user-wide-card .pie-split{gap:0}.user-wide-card .user-rank{grid-template-columns:1fr}}
 .user-name{font-weight:600;line-height:1.2}
 .user-mail{font-size:10px;color:var(--text2);margin-top:1px}
 .country-flag{display:inline-block;margin-right:6px;font-size:15px;line-height:1;vertical-align:-1px}
@@ -485,8 +491,7 @@ tr.clickable{cursor:pointer}
       </div>
     </div>
     <div class="pie-split">
-      <div class="pie-column"><canvas id="user-cost-chart" class="pie-canvas user-big-canvas" width="360" height="360"></canvas></div>
-      <div class="pie-side"><div id="user-rank" class="user-rank"></div></div>
+       <div class="pie-side"><div id="user-rank" class="user-rank"></div></div>
     </div>
   </div>
   <div class="section geo-section">
@@ -501,7 +506,7 @@ tr.clickable{cursor:pointer}
       </div>
       <div class="geo-side">
         <div class="geo-scale">
-          <span>Usage glow <span class="gs-sub">region centroid</span></span>
+           <span>Usage heat <span class="gs-sub">country/state total</span></span>
           <div class="gs-bar"></div>
           <div class="gs-labels"><span>low</span><span>high</span></div>
         </div>
@@ -1193,6 +1198,10 @@ function renderUserRank(data,m){
 function renderUserCostChart(){
   const data=topNItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;},10);
   const m=userPieMetric;
+  // The dashboard now uses the ranked color legend only; the pie was removed
+  // to give the geography map the full width of the analytics area.
+  renderUserRank(data,m);
+  return;
   const vals=data.map(d=>d.value);
   const displayNames=data.map((d,i)=>d.item===null?'Other':demoUserName(d.label,i));
   const legendParts=data.map(d=>({name:d.item===null?'Other':d.label,rest:' — '+(m==='cost'&&d.value===0?'Free':pieFmt(d.value,m))}));
@@ -1363,28 +1372,6 @@ function geoGlowOpacity(value,max){
   var t=geoIntensity(value,max);
   return t>0?.3+t*.7:0;
 }
-function geoHash(text){
-  var hash=2166136261;
-  text=String(text||'');
-  for(var i=0;i<text.length;i++)hash=Math.imul(hash^text.charCodeAt(i),16777619);
-  return hash>>>0;
-}
-function geoDotCluster(layer,code,centroid,transform){
-  var cluster=layer.append('g').attr('class','geo-dot-cluster').attr('data-geo-code',code);
-  if(transform)cluster.attr('transform',transform);
-  var seed=geoHash(code),dots=[];
-  for(var i=0;i<12;i++){
-    var angle=((seed%360)+i*137.5)*Math.PI/180;
-    var distance=i===0?0:5+((seed>>>((i%4)*8))%19);
-    var x=centroid[0]+Math.cos(angle)*distance;
-    var y=centroid[1]+Math.sin(angle)*distance*.72;
-    var dot=cluster.append('g').attr('class','geo-glow');
-    var halo=dot.append('circle').attr('class','geo-glow-halo').attr('cx',x).attr('cy',y).attr('r',0).attr('fill','url(#geo-glow-grad)');
-    var core=dot.append('circle').attr('class','geo-glow-core').attr('cx',x).attr('cy',y).attr('r',0).attr('fill','url(#geo-core-grad)');
-    dots.push({group:dot,halo:halo,core:core});
-  }
-  return dots;
-}
 function geoMapTooltip(evt,label,value,extra){
   var tip=document.getElementById('geo-tooltip');
   var wrap=document.querySelector('.geo-wrap');
@@ -1397,6 +1384,12 @@ function geoMapTooltip(evt,label,value,extra){
   tip.style.top=Math.min(y,r.height-tip.offsetHeight-6)+'px';
 }
 function hideGeoMapTooltip(){var tip=document.getElementById('geo-tooltip');if(tip)tip.style.display='none';}
+function geoHoverZoom(group,base,center,on){
+  if(!group)return;
+  var zoom=geoScaleTransform(center,on?1.18:1);
+  var target=on?(base?(base+' '+zoom):zoom):(base||null);
+  group.interrupt().transition().duration(on?180:140).ease(d3.easeCubicOut).attr('transform',target);
+}
 
 async function initGeoMap(){
   if(geoMapReady||geoMapLoading)return;
@@ -1442,6 +1435,8 @@ async function initGeoMap(){
     depthShadow.append('feGaussianBlur').attr('stdDeviation','1.8');
     const atmosphereGlow=defs.append('filter').attr('id','geo-atmosphere-glow').attr('x','-20%').attr('y','-80%').attr('width','140%').attr('height','260%');
     atmosphereGlow.append('feGaussianBlur').attr('stdDeviation','5');
+    const heatBlur=defs.append('filter').attr('id','geo-heat-blur').attr('x','-20%').attr('y','-20%').attr('width','140%').attr('height','140%');
+    heatBlur.append('feGaussianBlur').attr('stdDeviation','2.5');
 
     // Natural Earth gives the map the gently curved, outside-the-earth feel
     // from the reference while keeping the US visibly larger than Greenland.
@@ -1454,6 +1449,7 @@ async function initGeoMap(){
     const landShadowLayer=svg.append('g').attr('class','geo-land-shadow-layer');
     const landLayer=svg.append('g').attr('class','geo-land-layer');
     const countryGlowLayer=svg.append('g').attr('class','geo-country-glow-layer');
+    const countryHeatLayer=svg.append('g').attr('class','geo-country-heat-layer');
     const countryBorderLayer=svg.append('g').attr('class','geo-country-border-layer');
     geoCountryPaths=new Map();
     geoCountryGlows=new Map();
@@ -1478,26 +1474,36 @@ async function initGeoMap(){
       if(transform)fillGroup.attr('transform',transform);
       if(code==='US')usTransform=transform;
       fillGroup.append('path').datum(f).attr('d',path).attr('class','geo-country-fill').attr('data-country',code);
-      if(code)geoCountryGlows.set(code,geoDotCluster(countryGlowLayer,code,dotCentroid,transform));
+       if(code){
+         const heatGroup=countryHeatLayer.append('g');
+         if(transform)heatGroup.attr('transform',transform);
+         geoCountryGlows.set(code,{path:heatGroup.append('path').datum(f).attr('d',path).attr('class','geo-country-heat').attr('data-country',code)});
+       }
       const borderGroup=countryBorderLayer.append('g');
       if(transform)borderGroup.attr('transform',transform);
       const p=borderGroup.append('path').datum(f).attr('d',path).attr('class','geo-country').attr('data-country',code);
       if(code)geoCountryPaths.set(code,p);
-      p.on('mousemove',function(evt){const v=(geoValueByCountry.get(code)||0);if(!code)return;geoMapTooltip(evt,geoRegionName(code),v);}).on('mouseleave',hideGeoMapTooltip);
+       p.on('mouseenter',function(evt){if(!code)return;geoHoverZoom(borderGroup,transform,centroid,true);p.classed('geo-hover',true);const v=(geoValueByCountry.get(code)||0);geoMapTooltip(evt,geoRegionName(code),v,'country total');})
+        .on('mousemove',function(evt){const v=(geoValueByCountry.get(code)||0);if(!code)return;geoMapTooltip(evt,geoRegionName(code),v,'country total');})
+        .on('mouseleave',function(){geoHoverZoom(borderGroup,transform,centroid,false);p.classed('geo-hover',false);hideGeoMapTooltip();});
     });
 
     const stateGlowLayer=svg.append('g').attr('class','geo-state-glow-layer');
+    const stateHeatLayer=svg.append('g').attr('class','geo-state-heat-layer');
     const stateBorderLayer=svg.append('g').attr('class','geo-state-border-layer');
-    if(usTransform){stateGlowLayer.attr('transform',usTransform);stateBorderLayer.attr('transform',usTransform);}
+    if(usTransform){stateGlowLayer.attr('transform',usTransform);stateHeatLayer.attr('transform',usTransform);stateBorderLayer.attr('transform',usTransform);}
     geoStatePaths=new Map();
     geoStateGlows=new Map();
     topojson.feature(us,us.objects.states).features.forEach(function(f){
       const code=US_STATE_CODES[f.properties.name]||'';
       const centroid=path.centroid(f);
-      const p=stateBorderLayer.append('path').datum(f).attr('d',path).attr('class','geo-state').attr('data-state',code);
+      const stateGroup=stateBorderLayer.append('g').attr('class','geo-state-hover-group');
+      const p=stateGroup.append('path').datum(f).attr('d',path).attr('class','geo-state').attr('data-state',code);
       if(code)geoStatePaths.set(code,p);
-      if(code)geoStateGlows.set(code,geoDotCluster(stateGlowLayer,code,centroid,null));
-      p.on('mousemove',function(evt){const v=geoHasUSStateData?(geoValueByState.get('US|'+code)||0):(geoValueByCountry.get('US')||0);geoMapTooltip(evt,geoFullName('US',code),v,geoHasUSStateData?'US state':'US country total; state breakdown unavailable');}).on('mouseleave',hideGeoMapTooltip);
+       if(code)geoStateGlows.set(code,{path:stateHeatLayer.append('path').datum(f).attr('d',path).attr('class','geo-state-heat').attr('data-state',code)});
+       p.on('mouseenter',function(evt){const v=geoHasUSStateData?(geoValueByState.get('US|'+code)||0):(geoValueByCountry.get('US')||0);geoHoverZoom(stateGroup,null,centroid,true);p.classed('geo-hover',true);geoMapTooltip(evt,geoFullName('US',code),v,geoHasUSStateData?'US state':'US country total; state breakdown unavailable');})
+        .on('mousemove',function(evt){const v=geoHasUSStateData?(geoValueByState.get('US|'+code)||0):(geoValueByCountry.get('US')||0);geoMapTooltip(evt,geoFullName('US',code),v,geoHasUSStateData?'US state':'US country total; state breakdown unavailable');})
+        .on('mouseleave',function(){geoHoverZoom(stateGroup,null,centroid,false);p.classed('geo-hover',false);hideGeoMapTooltip();});
     });
     geoMapReady=true;
     renderGeoMap();
@@ -1512,23 +1518,9 @@ var geoValueByCountry=new Map(),geoValueByState=new Map();
 
 function setGeoGlow(parts,value,max){
   if(!parts)return;
-  var heatDots=geoIntensity(value,max)*12;
-  parts.forEach(function(dot,index){
-    // The fractional edge makes each new dot fade/scale in instead of
-    // popping into existence when a threshold is crossed.
-    var reveal=Math.max(0,Math.min(1,heatDots-index));
-    var eased=reveal*reveal*(3-2*reveal);
-    if(!(eased>0)){
-      dot.group.classed('is-on',false);
-      dot.halo.attr('r',0);
-      dot.core.attr('r',0);
-      return;
-    }
-    var r=geoGlowRadius(value,max)*(index===0?1.08:.82);
-    dot.group.classed('is-on',true);
-    dot.halo.attr('r',r*eased).attr('opacity',geoGlowOpacity(value,max)*eased);
-    dot.core.attr('r',geoGlowCoreRadius(value,max)*eased).attr('opacity',Math.min(1,.55+geoIntensity(value,max)*.45)*eased);
-  });
+  var t=geoIntensity(value,max);
+  var eased=t*t*(3-2*t);
+  parts.path.classed('is-on',eased>0).attr('fill',eased>0?geoColorFor(value,max):'transparent').attr('opacity',eased>0?.12+eased*.78:0);
 }
 
 function renderGeoMap(){
@@ -1619,17 +1611,12 @@ function flashGeo(country,state,color){
   if(country==='US'&&state&&geoStateGlows)glow=geoStateGlows.get(state);
   if(!glow&&geoCountryGlows)glow=geoCountryGlows.get(country);
   if(!path||!glow)return;
-  // Flash only dots currently revealed by the value-driven cluster. Hidden
-  // dots must not appear during a live event, or the animation would imply
-  // heat that the map is not actually representing.
-  glow.forEach(function(dot){
-    if(!dot.group.classed('is-on'))return;
-    const gn=dot.group.node();
-    gn.classList.remove('geo-flash');
-    void gn.getBoundingClientRect();
-    gn.classList.add('geo-flash');
-    setTimeout(function(){gn.classList.remove('geo-flash');},2000);
-  });
+  if(!glow.path.classed('is-on'))return;
+  const gn=glow.path.node();
+  gn.classList.remove('geoHeatFlash');
+  void gn.getBoundingClientRect();
+  gn.classList.add('geoHeatFlash');
+  setTimeout(function(){gn.classList.remove('geoHeatFlash');},2000);
 }
 function requestFlashColor(event){
   var client=friendlyClient(event&&event.user_agent||'');
