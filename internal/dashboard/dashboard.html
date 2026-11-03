@@ -1283,7 +1283,7 @@ function renderToolChart(){
   const value=d=>metric==='users'?(d.users||0):metric==='requests'?(d.requests||0):(d.total_tokens||0);
   const unit=metric==='users'?' users':metric==='requests'?' requests':' tokens';
   const existingOther=toolRows.filter(d=>d.tool==='Other').reduce((sum,d)=>sum+value(d),0);
-  const data=topFiveItems(toolRows.filter(d=>d.tool!=='Other'&&value(d)>0),value,function(d){return d.tool;},5);
+  const data=topFiveItems(toolRows.filter(d=>d.tool!=='Other'&&value(d)>0),value,function(d){return d.tool;},9);
   var otherItem=data.length&&data[data.length-1].label==='Other'?data.pop():{item:null,label:'Other',value:0};
   otherItem.value+=existingOther;
   if(otherItem.value>0)data.push(otherItem);

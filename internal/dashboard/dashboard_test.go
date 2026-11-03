@@ -5,6 +5,16 @@ import (
 	"testing"
 )
 
+func TestToolPieShowsTopNinePlusOther(t *testing.T) {
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte("function(d){return d.tool;},9)")) {
+		t.Error("tool pie no longer limits to the top 9 tools plus an Other row")
+	}
+}
+
 func TestDashboardToolMetricToggle(t *testing.T) {
 	data, err := FS.ReadFile("dashboard.html")
 	if err != nil {
