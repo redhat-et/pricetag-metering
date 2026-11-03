@@ -13,7 +13,7 @@ func TestGeoMapUsesRaisedDeepSpaceStyle(t *testing.T) {
 	for _, want := range []string{
 		"var GEO_LAND_COLOR='#29495b';",
 		"var GEO_GLOW_STOPS=['#35566b','#6f91a0','#d47b3e','#ffb36c','#fff2d8'];",
-		"background:linear-gradient(90deg,#28475b,#4d7890,#d47b3e,#ffb36c,#fff2d8)",
+		"background:linear-gradient(90deg,#394b59,#8d5b3d,#d47b3e,#ffb36c,#fff2d8)",
 		"d3.interpolateRgbBasis(GEO_GLOW_STOPS)",
 		"defs.append('radialGradient').attr('id','geo-glow-grad')",
 		"geoHotspotCount(value,max)",
@@ -49,7 +49,7 @@ func TestGeoMapUsesCountryFillHeat(t *testing.T) {
 	for _, want := range []string{
 		"class','geo-country-heat'",
 		"class','geo-state-heat'",
-		"var eased=t*t*(3-2*t);",
+		"var t=geoIntensity(value,max),eased=t*t*(3-2*t),count=geoHotspotCount(value,max);",
 		"parts.path.classed('is-on',eased>0)",
 		"const countryHeatLayer=svg.append('g').attr('class','geo-country-heat-layer');",
 	} {
@@ -74,6 +74,9 @@ func TestGeoMapUsesCountryTotalWhenUSStateBreakdownIsMissing(t *testing.T) {
 		"geoStateGlows.get(code)",
 		"geoHasUSStateData){",
 		"const dotCentroid=code==='US'?projection([-74,40.5]):centroid;",
+		"attr('viewBox','0 0 1000 500')",
+		"slice(0,10)",
+		"limit=30",
 	} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("dashboard.html no longer contains %q", want)

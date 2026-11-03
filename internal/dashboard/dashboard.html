@@ -85,7 +85,7 @@ tr.clickable{cursor:pointer}
 .charts-row.three-col{grid-template-columns:repeat(3,minmax(0,1fr))}
 .charts-row.two-col{grid-template-columns:repeat(2,minmax(0,1fr))}
 .charts-row.user-wide{grid-template-columns:1fr}
-.charts-row.user-map-row{grid-template-columns:minmax(220px,1fr) minmax(0,3fr);align-items:stretch}
+.charts-row.user-map-row{grid-template-columns:1fr;align-items:stretch}
 .charts-row.four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .chart-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px}
 .chart-box canvas{max-height:280px}
@@ -108,21 +108,21 @@ tr.clickable{cursor:pointer}
 .model-hosted-split .hs-head{font-size:9px;gap:5px}
 .model-hosted-split .hs-head b,.model-hosted-split .hs-head .frontier{font-size:10px}
 .model-hosted-split .hs-track{height:4px;margin-top:5px}
-.geo-card{background:linear-gradient(180deg,#101b2a,#07101c);border:1px solid #1b3042;border-radius:12px;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:14px;align-items:stretch;max-width:1180px;margin:0 auto;box-shadow:0 20px 55px rgba(0,0,0,.38)}
-.geo-wrap{position:relative;min-width:0;height:360px;background:radial-gradient(ellipse at 50% 45%,#173b52 0%,#0b2132 48%,#030b13 100%);border-radius:9px;overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 -34px 80px rgba(0,0,0,.5),inset 0 12px 40px rgba(79,166,205,.08)}
-#geo-map{width:100%;max-width:none;height:360px;display:block}
+.geo-card{background:linear-gradient(180deg,#101b2a,#07101c);border:1px solid #1b3042;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px;align-items:stretch;max-width:none;margin:0;box-shadow:0 20px 55px rgba(0,0,0,.38)}
+.geo-wrap{position:relative;min-width:0;width:100%;aspect-ratio:2/1;min-height:390px;background:radial-gradient(ellipse at 50% 45%,#173b52 0%,#0b2132 55%,#030b13 100%);border-radius:9px;overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 -34px 80px rgba(0,0,0,.5),inset 0 12px 40px rgba(79,166,205,.08)}
+#geo-map{width:100%;height:100%;max-width:none;display:block}
 #geo-map .geo-ocean{fill:url(#geo-ocean-grad)}
 #geo-map .geo-atmosphere{fill:none;stroke:#8ac7db;stroke-width:1.2;opacity:.13;filter:url(#geo-atmosphere-glow);pointer-events:none}
 #geo-map .geo-graticule{display:none}
 #geo-map .geo-country-fill{fill:url(#geo-land-grad);stroke:none;pointer-events:none}
 #geo-map .geo-country-shadow{fill:#071421;stroke:#02070d;stroke-width:1.2;opacity:.9;pointer-events:none;filter:url(#geo-depth-shadow)}
-#geo-map .geo-country{fill:none;stroke:#d8e8ee;stroke-width:.2;vector-effect:non-scaling-stroke;opacity:.34;transition:stroke .18s,opacity .18s}
-#geo-map .geo-country.geo-active{stroke:#e9f5f7;opacity:.38}
-#geo-map .geo-state{fill:none;stroke:#c2dbe3;stroke-width:.16;vector-effect:non-scaling-stroke;opacity:.2;pointer-events:all}
+#geo-map .geo-country{fill:none;stroke:#f1d1ad;stroke-width:.24;vector-effect:non-scaling-stroke;opacity:.42;transition:stroke .18s,opacity .18s}
+#geo-map .geo-country.geo-active{stroke:#fff1df;opacity:.58}
+#geo-map .geo-state{fill:none;stroke:#e8c8a7;stroke-width:.18;vector-effect:non-scaling-stroke;opacity:.28;pointer-events:all}
 #geo-map .geo-country-heat,#geo-map .geo-state-heat{stroke:none;pointer-events:none;mix-blend-mode:screen;filter:url(#geo-heat-blur)}
 #geo-map .geo-country-heat.is-on,#geo-map .geo-state-heat.is-on{opacity:1}
 #geo-map .geoHeatFlash{animation:geoHeatFlash 1.9s ease-out}
-#geo-map .geo-country:hover{stroke:#ffffff;stroke-width:.35;opacity:.55}
+#geo-map .geo-country:hover{stroke:#fff8ee;stroke-width:.42;opacity:.82}
 #geo-map .geo-glow{pointer-events:none;mix-blend-mode:screen;opacity:0}
 #geo-map .geo-glow-halo{filter:url(#geo-glow-blur)}
 #geo-map .geo-glow-core{filter:url(#geo-core-blur)}
@@ -134,7 +134,7 @@ tr.clickable{cursor:pointer}
 @keyframes geoHeatFlash{0%{filter:url(#geo-heat-blur) brightness(2.1)}45%{filter:url(#geo-heat-blur) brightness(1.35)}100%{filter:url(#geo-heat-blur) brightness(1)}}
 .geo-side{display:flex;flex-direction:column;gap:10px;min-width:0}
 .geo-scale{font-size:11px;color:var(--text2)}
-.geo-scale .gs-bar{height:8px;border-radius:4px;margin:5px 0 3px;background:linear-gradient(90deg,#28475b,#4d7890,#d47b3e,#ffb36c,#fff2d8);box-shadow:0 0 14px rgba(255,163,83,.16)}
+.geo-scale .gs-bar{height:8px;border-radius:4px;margin:5px 0 3px;background:linear-gradient(90deg,#394b59,#8d5b3d,#d47b3e,#ffb36c,#fff2d8);box-shadow:0 0 14px rgba(255,163,83,.16)}
 .geo-scale .gs-labels{display:flex;justify-content:space-between;font-size:10px}
 .geo-scale .gs-sub{font-size:10px;color:#6e7a89;margin-left:4px}
 .geo-top{display:flex;flex-direction:column;gap:7px;min-height:0;overflow:hidden}
@@ -163,22 +163,22 @@ tr.clickable{cursor:pointer}
 .user-wide-card .pie-split{min-height:0;height:auto;justify-content:stretch;gap:0}
 .user-wide-card .pie-column{display:none}
 .user-wide-card .pie-side{max-width:none;width:100%}
-.user-wide-card .user-rank{width:100%;display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));column-gap:28px;align-content:start}
+.user-wide-card .user-rank{width:100%;display:grid;grid-template-columns:repeat(3,minmax(260px,1fr));column-gap:28px;align-content:start}
 .user-wide-card .user-rank .gt-title{grid-column:1/-1}
 .user-map-row .user-wide-card{min-width:0}
 .user-map-row .user-wide-card .pie-split{min-height:300px;gap:12px}
 .user-map-row .user-wide-card .pie-column{flex:0 0 270px;width:270px}
 .user-map-row .user-wide-card .pie-canvas{width:270px!important;height:270px!important;max-width:270px!important;max-height:270px!important}
 .user-map-row .user-wide-card .pie-side{min-width:0}
-.user-map-row .user-wide-card .user-rank{width:100%;display:flex;gap:4px}
-.user-map-row{grid-template-columns:minmax(0,1fr)}
+.user-map-row .user-wide-card .user-rank{width:100%;display:grid;grid-template-columns:repeat(3,minmax(260px,1fr));column-gap:28px;align-content:start}
+.user-map-row{grid-template-columns:1fr}
 .user-map-row .geo-section{margin-bottom:0;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0}
 .user-map-row .geo-section .chart-head{margin-bottom:8px}
-.user-map-row .geo-card{max-width:none;margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:10px}
-.user-map-row .geo-wrap{height:clamp(360px,35vw,520px);width:100%}
-.user-map-row #geo-map{height:100%;width:100%;max-width:none}
-.user-map-row .geo-side{font-size:10px;display:flex;flex-direction:column;gap:14px;align-items:stretch}
-.user-map-row .geo-top{display:flex;flex-direction:column;gap:7px}
+.user-map-row .geo-layout{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,3fr);gap:16px;align-items:stretch}
+.user-map-row .geo-top{font-size:11px;padding:14px;border:1px solid #1b3042;border-radius:10px;background:linear-gradient(180deg,#101b2a,#07101c);justify-content:center}
+.user-map-row .geo-card{min-width:0;padding:0;border:0;box-shadow:none}
+.user-map-row .geo-side{display:flex;flex-direction:column;gap:0}
+.user-map-row .geo-scale{padding:0 0 2px}
 
 .tl-toggle{display:flex;gap:4px;margin-bottom:12px}
 .tl-toggle button{background:var(--bg-card);color:var(--text2);border:1px solid var(--border);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px}
@@ -199,8 +199,8 @@ tr.clickable{cursor:pointer}
 .recent-scroll::-webkit-scrollbar-track{background:var(--bg-card)}
 .recent-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
-@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.charts-row.three-col{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}.user-map-row{grid-template-columns:minmax(180px,1fr) minmax(0,2fr)}.user-map-row .geo-card{grid-template-columns:1fr}.user-map-row .geo-top{display:flex;grid-template-columns:none}}
-@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row,.charts-row.three-col,.charts-row.user-map-row{grid-template-columns:1fr}.geo-card,.user-map-row .geo-card{grid-template-columns:1fr}.geo-wrap,#geo-map,.user-map-row .geo-wrap{height:360px}.pie-split{flex-wrap:wrap}.pie-side{width:100%}.user-wide-card .pie-split{gap:0}.user-wide-card .user-rank{grid-template-columns:1fr}}
+@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.charts-row.three-col{grid-template-columns:1fr 1fr}.user-map-row .geo-layout{grid-template-columns:220px minmax(0,1fr)}}
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row,.charts-row.three-col,.charts-row.user-map-row{grid-template-columns:1fr}.geo-wrap,.user-map-row .geo-wrap{min-height:320px}.user-map-row .geo-layout{grid-template-columns:1fr}.pie-split{flex-wrap:wrap}.pie-side{width:100%}.user-wide-card .pie-split{gap:0}.user-wide-card .user-rank{grid-template-columns:1fr}}
 .user-name{font-weight:600;line-height:1.2}
 .user-mail{font-size:10px;color:var(--text2);margin-top:1px}
 .country-flag{display:inline-block;margin-right:6px;font-size:15px;line-height:1;vertical-align:-1px}
@@ -483,10 +483,32 @@ tr.clickable{cursor:pointer}
   </div>
 </div>
 
-<div class="charts-row two-col user-map-row" id="bottom-analytics">
+<div class="charts-row user-map-row" id="bottom-analytics">
+  <div class="section geo-section">
+    <div class="chart-head">
+      <h2>Usage Geography <span style="font-size:12px;color:var(--text2);font-weight:400">(country usage intensity)</span></h2>
+      <span class="geo-note" id="geo-note">Loading map…</span>
+    </div>
+    <div class="geo-layout">
+      <div class="geo-top" id="geo-top"></div>
+      <div class="geo-card">
+        <div class="geo-wrap">
+          <svg id="geo-map" role="img" aria-label="Warm dotted world map with usage intensity by country and US state"></svg>
+          <div class="geo-tooltip" id="geo-tooltip"></div>
+        </div>
+        <div class="geo-side">
+          <div class="geo-scale">
+            <span>Usage heat <span class="gs-sub">country total</span></span>
+            <div class="gs-bar"></div>
+            <div class="gs-labels"><span>low</span><span>high</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
   <div class="chart-box user-wide-card">
     <div class="chart-head">
-      <h2>By User <span style="font-size:11px;color:var(--text2);font-weight:400">(top 10)</span></h2>
+      <h2>By User <span style="font-size:11px;color:var(--text2);font-weight:400">(top 30)</span></h2>
       <div class="tl-toggle" id="user-metric-toggle" style="margin-bottom:0">
         <button data-um="cost" class="active">Cost</button>
         <button data-um="tokens">Tokens</button>
@@ -495,26 +517,6 @@ tr.clickable{cursor:pointer}
     </div>
     <div class="pie-split">
        <div class="pie-side"><div id="user-rank" class="user-rank"></div></div>
-    </div>
-  </div>
-  <div class="section geo-section">
-    <div class="chart-head">
-      <h2>Usage Geography <span style="font-size:12px;color:var(--text2);font-weight:400">(continent heat · country/state detail)</span></h2>
-      <span class="geo-note" id="geo-note">Loading map…</span>
-    </div>
-    <div class="geo-card">
-      <div class="geo-wrap">
-        <svg id="geo-map" role="img" aria-label="Raised deep-space world map with glowing usage heat by country and US state"></svg>
-        <div class="geo-tooltip" id="geo-tooltip"></div>
-      </div>
-      <div class="geo-side">
-        <div class="geo-scale">
-           <span>Usage heat <span class="gs-sub">continent total</span></span>
-          <div class="gs-bar"></div>
-          <div class="gs-labels"><span>low</span><span>high</span></div>
-        </div>
-        <div class="geo-top" id="geo-top"></div>
-      </div>
     </div>
   </div>
 </div>
@@ -692,7 +694,7 @@ async function refresh(force){
       const [ov,gr,chartUs,mo,tools,geo,cc,rc,rosterCat,modelCat,directory]=await Promise.all([
        api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
        api('/api/v1/dashboard/groups?'+filters,force),
-        api('/api/v1/dashboard/users?'+filters+'&sort='+chartSort+'&order=desc&limit=10&offset=0&savings=false',force),
+         api('/api/v1/dashboard/users?'+filters+'&sort='+chartSort+'&order=desc&limit=30&offset=0&savings=false',force),
       api('/api/v1/dashboard/models?'+filters,force),
       api('/api/v1/dashboard/tools?'+filters,force),
       api('/api/v1/dashboard/geo?'+filters,force),
@@ -1174,7 +1176,7 @@ function renderUserRank(data,m){
   var el=document.getElementById('user-rank');
   if(!el)return;
   var max=Math.max.apply(null,data.map(function(d){return d.value;}).concat([0]));
-  el.innerHTML='<div class="gt-title" style="font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:700;margin-bottom:2px">Top 10 users</div>'+data.map(function(d,i){
+   el.innerHTML='<div class="gt-title" style="grid-column:1/-1;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:700;margin-bottom:2px">Top 30 users</div>'+data.map(function(d,i){
     var item=d.item||{};
     var username=item.username||'';
     var name=d.label||username||'—';
@@ -1199,7 +1201,7 @@ function renderUserRank(data,m){
   }).join('');
 }
 function renderUserCostChart(){
-  const data=topNItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;},10);
+   const data=topNItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;},30);
   const m=userPieMetric;
   // The dashboard now uses the ranked color legend only; the pie was removed
   // to give the geography map the full width of the analytics area.
@@ -1248,7 +1250,7 @@ async function refreshUserChartOnly(){
   var gf=groupFilter?'&group='+encodeURIComponent(groupFilter):'';
   var mf=modelFilter?'&model='+encodeURIComponent(modelFilter):'';
   var sort=userPieMetric==='cost'?'cost_usd':userPieMetric==='requests'?'requests':'total_tokens';
-  var rows=await api('/api/v1/dashboard/users?range='+r+gf+uf+mf+'&sort='+sort+'&order=desc&limit=10&offset=0&savings=false',false);
+   var rows=await api('/api/v1/dashboard/users?range='+r+gf+uf+mf+'&sort='+sort+'&order=desc&limit=30&offset=0&savings=false',false);
   chartUsers=collapseUsageUsers(Array.isArray(rows)?rows:[]);
   renderUserCostChart();
 }
@@ -1371,15 +1373,15 @@ function geoLandColorFor(value,max){
 }
 function geoHotspotCount(value,max){
   var t=geoIntensity(value,max);
-  return t>0?Math.max(1,Math.min(12,Math.ceil(t*12))):0;
+  return t>0?Math.max(1,Math.min(24,Math.ceil(t*24))):0;
 }
 function geoGlowRadius(value,max){
   var t=geoIntensity(value,max);
-  return t>0?8+t*18:0;
+  return t>0?2+t*8:0;
 }
 function geoGlowCoreRadius(value,max){
   var t=geoIntensity(value,max);
-  return t>0?1.8+t*3.5:0;
+  return t>0?.7+t*1.8:0;
 }
 function geoGlowOpacity(value,max){
   var t=geoIntensity(value,max);
@@ -1395,7 +1397,7 @@ function geoDotCluster(layer,code,centroid,transform){
   var cluster=layer.append('g').attr('class','geo-dot-cluster').attr('data-geo-code',code);
   if(transform)cluster.attr('transform',transform);
   var seed=geoHash(code),dots=[];
-  for(var i=0;i<12;i++){
+   for(var i=0;i<24;i++){
     var angle=((seed%360)+i*137.5)*Math.PI/180;
     var distance=i===0?0:5+((seed>>>((i%4)*8))%19);
     var x=centroid[0]+Math.cos(angle)*distance;
@@ -1409,12 +1411,13 @@ function geoDotCluster(layer,code,centroid,transform){
 }
 function setGeoDots(dots,value,max){
   if(!dots)return;
-  var t=geoIntensity(value,max),eased=t*t*(3-2*t);
-  dots.forEach(function(dot,index){
-    var r=geoGlowRadius(value,max)*(index===0?1.08:.82);
-    dot.group.classed('is-on',eased>0);
-    dot.halo.attr('r',r*eased).attr('opacity',geoGlowOpacity(value,max)*eased);
-    dot.core.attr('r',geoGlowCoreRadius(value,max)*eased).attr('opacity',Math.min(1,.55+t*.45)*eased);
+   var t=geoIntensity(value,max),eased=t*t*(3-2*t),count=geoHotspotCount(value,max);
+   dots.forEach(function(dot,index){
+     var r=geoGlowRadius(value,max)*(index===0?1.08:.82);
+     var on=eased>0&&index<count;
+     dot.group.classed('is-on',on);
+     dot.halo.attr('r',on?r*eased:0).attr('opacity',on?geoGlowOpacity(value,max)*eased:0);
+     dot.core.attr('r',on?geoGlowCoreRadius(value,max)*eased:0).attr('opacity',on?Math.min(1,.55+t*.45)*eased:0);
   });
 }
 function geoMapTooltip(evt,label,value,extra){
@@ -1448,7 +1451,7 @@ async function initGeoMap(){
     const width=1000,height=500;
     // Keep the useful continental band in view. The full sphere view wastes
     // most of the card on empty ocean above, below, and left of the Americas.
-    const svg=d3.select('#geo-map').attr('viewBox','55 72 900 365').attr('preserveAspectRatio','none');
+    const svg=d3.select('#geo-map').attr('viewBox','0 0 1000 500').attr('preserveAspectRatio','xMidYMid meet');
     svg.selectAll('*').remove();
 
     // A dark, outer-space ocean with a subtle atmospheric horizon and warm
@@ -1457,13 +1460,13 @@ async function initGeoMap(){
     // city-level data.
     const defs=svg.append('defs');
     const ocean=defs.append('radialGradient').attr('id','geo-ocean-grad').attr('cx','50%').attr('cy','38%').attr('r','78%');
-    ocean.append('stop').attr('offset','0%').attr('stop-color','#21485e');
-    ocean.append('stop').attr('offset','58%').attr('stop-color','#0d2638');
+    ocean.append('stop').attr('offset','0%').attr('stop-color','#173d52');
+    ocean.append('stop').attr('offset','58%').attr('stop-color','#0b2537');
     ocean.append('stop').attr('offset','100%').attr('stop-color','#020911');
     const landGrad=defs.append('linearGradient').attr('id','geo-land-grad').attr('x1','0').attr('y1','0').attr('x2','0.8').attr('y2','1');
-    landGrad.append('stop').attr('offset','0%').attr('stop-color','#9eb7c0');
-    landGrad.append('stop').attr('offset','42%').attr('stop-color','#527487');
-    landGrad.append('stop').attr('offset','100%').attr('stop-color','#1a3448');
+    landGrad.append('stop').attr('offset','0%').attr('stop-color','#d9a06d');
+    landGrad.append('stop').attr('offset','42%').attr('stop-color','#875337');
+    landGrad.append('stop').attr('offset','100%').attr('stop-color','#302331');
     const glowGrad=defs.append('radialGradient').attr('id','geo-glow-grad');
     glowGrad.append('stop').attr('offset','0%').attr('stop-color','#fff0ff').attr('stop-opacity','.98');
     glowGrad.append('stop').attr('offset','9%').attr('stop-color','#fff2d8').attr('stop-opacity','.9');
@@ -1688,6 +1691,9 @@ function flashGeo(country,state,color){
   void gn.getBoundingClientRect();
   gn.classList.add('geoHeatFlash');
   setTimeout(function(){gn.classList.remove('geoHeatFlash');},2000);
+  var dots=country==='US'&&state&&geoStateDots?geoStateDots.get(state):null;
+  if(!dots&&geoCountryDots)dots=geoCountryDots.get(country);
+  if(dots)dots.forEach(function(dot){var node=dot.group.node();node.classList.remove('geo-flash');void node.getBoundingClientRect();node.classList.add('geo-flash');setTimeout(function(){node.classList.remove('geo-flash');},2000);});
 }
 function requestFlashColor(event){
   var client=friendlyClient(event&&event.user_agent||'');
