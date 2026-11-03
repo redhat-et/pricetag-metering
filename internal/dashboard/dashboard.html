@@ -175,10 +175,10 @@ tr.clickable{cursor:pointer}
 .user-map-row .geo-section{margin-bottom:0;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0}
 .user-map-row .geo-section .chart-head{margin-bottom:8px}
 .user-map-row .geo-layout{display:block}
-.user-map-row .geo-top{position:absolute;z-index:4;top:18px;right:18px;width:min(310px,31%);font-size:11px;padding:14px;border:1px solid rgba(228,191,157,.24);border-radius:10px;background:rgba(7,16,28,.82);backdrop-filter:blur(10px);box-shadow:0 12px 35px rgba(0,0,0,.3);justify-content:center}
-.user-map-row .geo-card{min-width:0;padding:0;border:0;box-shadow:none}
-.user-map-row .geo-side{display:flex;flex-direction:column;gap:0}
-.user-map-row .geo-scale{padding:0 0 2px}
+.user-map-row .geo-top{position:absolute;z-index:4;top:auto;right:auto;bottom:18px;left:18px;width:min(310px,31%);font-size:11px;padding:14px;border:1px solid rgba(228,191,157,.24);border-radius:10px;background:rgba(7,16,28,.86);backdrop-filter:blur(10px);box-shadow:0 12px 35px rgba(0,0,0,.3);justify-content:center}
+.user-map-row .geo-card{position:relative;min-width:0;padding:0;border:0;box-shadow:none}
+.user-map-row .geo-side{position:absolute;z-index:4;left:350px;right:18px;bottom:14px;display:flex;flex-direction:column;gap:0;padding:10px 12px 8px;border:1px solid rgba(228,191,157,.2);border-radius:8px;background:rgba(7,16,28,.72);backdrop-filter:blur(8px)}
+.user-map-row .geo-scale{padding:0}
 
 .tl-toggle{display:flex;gap:4px;margin-bottom:12px}
 .tl-toggle button{background:var(--bg-card);color:var(--text2);border:1px solid var(--border);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px}
@@ -495,12 +495,12 @@ tr.clickable{cursor:pointer}
           <svg id="geo-map" role="img" aria-label="Warm dotted world map with usage intensity by country and US state"></svg>
           <div class="geo-tooltip" id="geo-tooltip"></div>
           <div class="geo-top" id="geo-top"></div>
-        </div>
-        <div class="geo-side">
-          <div class="geo-scale">
-            <span>Usage heat <span class="gs-sub">country total</span></span>
-            <div class="gs-bar"></div>
-            <div class="gs-labels"><span>low</span><span>high</span></div>
+          <div class="geo-side">
+            <div class="geo-scale">
+              <span>Usage heat <span class="gs-sub">country total</span></span>
+              <div class="gs-bar"></div>
+              <div class="gs-labels"><span>low</span><span>high</span></div>
+            </div>
           </div>
         </div>
       </div>
