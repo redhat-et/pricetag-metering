@@ -1568,6 +1568,93 @@ func (s *Store) GetUserProfile(ctx context.Context, username string) (UserProfil
 // with a duplicate-key error inside Postgres.
 const migrationLockKey = 0x7072696365746167 // "pricetag"
 
+// usageGroupActivityIndex backs filtered /recent lookups (group scope). It is
+// built outside the startup migration path: CREATE INDEX CONCURRENTLY on a
+// large ledger can outlast the fixed migration timeout, and a cancelled
+// concurrent build can leave an invalid index that IF NOT EXISTS would then
+// skip forever. EnsureUsageGroupIndex handles both cases and retries.
+const usageGroupActivityIndex = "idx_usage_events_group_ts"
+
+const usageGroupActivityIndexDDL = `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_group_ts ON usage_events (group_name, timestamp DESC)`
+
+// usageIndexLockKey serialises the concurrent index build across replicas
+// that start together. It is deliberately distinct from migrationLockKey:
+// waiting for a large index build must not delay another pod's migrations.
+const usageIndexLockKey = 0x7573616765696478 // "usageidx"
+
+// ensureUsageGroupIndexWithLock serialises builders across replicas, then
+// runs ensureUsageGroupIndex. The session-level lock is held on a dedicated
+// connection because CREATE INDEX CONCURRENTLY cannot run inside a
+// transaction.
+func (s *Store) ensureUsageGroupIndexWithLock(ctx context.Context) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("index lock connection: %w", err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, usageIndexLockKey); err != nil {
+		return fmt.Errorf("acquire index lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, usageIndexLockKey)
+	}()
+	return s.ensureUsageGroupIndex(ctx)
+}
+
+// ensureUsageGroupIndex returns immediately when a valid index exists,
+// drops an invalid/not-ready leftover from an interrupted build, then builds
+// the index concurrently. Concurrent builds do not block ingestion writes.
+func (s *Store) ensureUsageGroupIndex(ctx context.Context) error {
+	var valid bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT i.indisvalid AND i.indisready
+		FROM pg_index i
+		JOIN pg_class c ON c.oid = i.indexrelid
+		WHERE c.relname = $1`, usageGroupActivityIndex).Scan(&valid)
+	switch {
+	case err == nil && valid:
+		return nil
+	case err == nil && !valid:
+		slog.Warn("dropping interrupted usage_events index before rebuild", "index", usageGroupActivityIndex)
+		if _, derr := s.db.ExecContext(ctx, `DROP INDEX CONCURRENTLY IF EXISTS `+usageGroupActivityIndex); derr != nil {
+			return fmt.Errorf("drop invalid index: %w", derr)
+		}
+	case !errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("inspect usage index: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, usageGroupActivityIndexDDL); err != nil {
+		return fmt.Errorf("create usage index: %w", err)
+	}
+	return nil
+}
+
+// EnsureUsageGroupIndex builds the filtered-/recent index in the background.
+// It never fails service startup: a missing index only makes filtered recent
+// lookups slower, so failures are logged, surfaced, and retried. Each attempt
+// gets its own timeout so a cancelled build is retried (and its invalid
+// leftover dropped) on the next pass.
+func (s *Store) EnsureUsageGroupIndex(ctx context.Context, retry time.Duration) {
+	if retry <= 0 {
+		retry = 5 * time.Minute
+	}
+	for {
+		buildCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+		err := s.ensureUsageGroupIndexWithLock(buildCtx)
+		cancel()
+		if err == nil {
+			slog.Info("usage_events filtered-recent index ready", "index", usageGroupActivityIndex)
+			return
+		}
+		slog.Error("usage_events filtered-recent index unavailable — filtered /recent stays bounded in SQL but slower; retrying",
+			"index", usageGroupActivityIndex, "error", err, "retry", retry)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(retry):
+		}
+	}
+}
+
 func (s *Store) migrate(ctx context.Context) error {
 	slog.Info("running database migrations")
 	lockConn, err := s.db.Conn(ctx)
@@ -1628,11 +1715,6 @@ var migrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_group ON usage_events (group_name)`,
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_model ON usage_events (model)`,
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_ts_user_model ON usage_events (timestamp, username, model)`,
-	// Filtered /recent (group scope) otherwise walks the timestamp index
-	// backwards until it finds LIMIT matches, so a group with no recent
-	// traffic scans more of the ledger as it grows. CONCURRENTLY: a deploy
-	// must not block ingestion writes while the index builds.
-	`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_group_ts ON usage_events (group_name, timestamp DESC)`,
 	`CREATE TABLE IF NOT EXISTS user_month_spend (
 		username TEXT NOT NULL,
 		month DATE NOT NULL,

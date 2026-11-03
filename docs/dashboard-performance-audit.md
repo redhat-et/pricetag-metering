@@ -105,9 +105,11 @@ normal page load.
    check runs.
 6. **`/org/person` now uses the rollup too (fixed).** The raw drill-down was
    232 ms for the busiest user; the hourly variant is 17 ms.
-7. **Manager endpoints are cached per caller (fixed).** `/api/v1/org/usage`
-   and `/api/v1/org/charts` share the dashboard TTL and single-flight, keyed
-   by resolved caller identity plus query, inside the auth wrapper.
+7. **Manager endpoints are cached per caller and per resolved scope
+   (fixed).** `/api/v1/org/usage` and `/api/v1/org/charts` share the dashboard
+   TTL and single-flight. The cache wrapper runs `scopeRoot` (the real
+   authorization gate) before every lookup and keys on caller + resolved root
+   + query, so a revoked role or subtree cannot read a cached response.
 8. **Partner batch report moved to the read replica (fixed).**
    `/api/v1/usage/reports` keeps its raw aggregate because it exposes
    `reasoning_tokens`, which `usage_hourly` does not carry; moving it off the
@@ -116,10 +118,13 @@ normal page load.
 ## Follow-ups implemented in the performance follow-up PR
 
 1. **Filtered-recent index.** `CREATE INDEX CONCURRENTLY IF NOT EXISTS
-   idx_usage_events_group_ts ON usage_events (group_name, timestamp DESC)`,
-   run through the normal migration path (concurrent, so ingestion writes are
-   never blocked). The planner uses it for the small-group case; for a
-   mid-size group the timestamp walk is already ~20 ms.
+   idx_usage_events_group_ts ON usage_events (group_name, timestamp DESC)`.
+   It runs in a background index-ensure loop, not the startup migration path:
+   each attempt has its own 30-minute timeout, an invalid/not-ready leftover
+   from a cancelled concurrent build is dropped and retried, and failure never
+   fails startup (it only leaves filtered `/recent` slower). The planner uses
+   it for the small-group case; for a mid-size group the timestamp walk is
+   already ~20 ms.
 2. **Parity red no longer falls back to raw.** Reads are gated on
    flag + backfill-ready + parity confirmed once, with the last verdict
    hydrated from `rollup_meta` on boot. A red check is an alert; the rollups
@@ -128,7 +133,23 @@ normal page load.
    as the parity fallback. `/api/v1/usage/reports` goes to the read replica.
    (It exposes `reasoning_tokens`, which the rollup does not carry.)
 4. **Manager response cache** for `/api/v1/org/usage` and `/org/charts`,
-   keyed by resolved caller + query, same TTL as the dashboard cache.
+   keyed by caller + resolved scope root + query, same TTL as the dashboard
+   cache, with `scopeRoot` running before every lookup.
+
+## Parity-red runbook
+
+Serving continuously rebuilt rollups while parity is red is an accepted
+trade-off: the alternative is full-window raw scans on the shared primary.
+There is no automatic max-staleness fallback, so alert on it:
+
+- `metering_rollup_parity_green == 0` for 15 minutes
+- `time() - metering_rollup_parity_checked_at_seconds > 900` (maintenance stalled)
+
+On alert: check `rollup_meta.parity_healthy` / `parity_checked_at`, inspect the
+`ROLLUP PARITY RED` log line for the mismatching shapes, and compare raw vs
+`usage_hourly` for that window. If the rollup is wrong, rebuild the affected
+hours; if it cannot be repaired quickly, set `DASHBOARD_USE_ROLLUPS=false` as
+the explicit rollback to raw (accepting the primary load) until it is fixed.
 
 ## Remaining follow-up
 

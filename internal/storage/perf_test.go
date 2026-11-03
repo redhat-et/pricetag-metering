@@ -35,10 +35,16 @@ func TestFilteredRecentHasBoundedWindow(t *testing.T) {
 	}
 }
 
-func TestMigrationsAddGroupTimestampIndex(t *testing.T) {
-	all := strings.Join(migrations, "\n")
+func TestUsageGroupIndexRunsOutsideStartupMigrations(t *testing.T) {
 	want := "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_group_ts ON usage_events (group_name, timestamp DESC)"
-	if !strings.Contains(all, want) {
-		t.Fatalf("migrations missing filtered-recent index: %s", want)
+	if usageGroupActivityIndexDDL != want {
+		t.Fatalf("index DDL drifted: %s", usageGroupActivityIndexDDL)
+	}
+	all := strings.Join(migrations, "\n")
+	if strings.Contains(all, "CONCURRENTLY") {
+		t.Fatal("a CONCURRENTLY build must not run under the fixed startup migration timeout")
+	}
+	if !strings.Contains(all, "idx_usage_events_group ON usage_events (group_name)") {
+		t.Fatal("the plain group index should remain for non-time-scoped predicates")
 	}
 }

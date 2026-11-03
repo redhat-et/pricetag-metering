@@ -268,6 +268,10 @@ func main() {
 	if meteringMode.RunsMaintenance() {
 		go store.EnsureRollupsBackfilled(context.Background())
 	}
+	// Build the filtered-/recent index in the background on every mode: it is
+	// read-path-only, never blocks startup, and the advisory lock serialises
+	// replicas that start together.
+	go store.EnsureUsageGroupIndex(context.Background(), 5*time.Minute)
 
 	// Only api mode needs the shared-verdict sync: all mode owns the loop in
 	// this process, and rollup mode has no dashboard reads.
