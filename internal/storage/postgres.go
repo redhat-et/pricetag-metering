@@ -871,7 +871,7 @@ func (s *Store) enrichDashboardUsers(ctx context.Context, users []UserSummary) e
 	for _, user := range users {
 		usernames = append(usernames, user.Username)
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader().QueryContext(ctx, `
 		SELECT l.username, p.user_id::text, p.tags
 		FROM partner_user_logins l
 		JOIN partner_users p ON p.user_id = l.user_id

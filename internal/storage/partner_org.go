@@ -41,8 +41,30 @@ type OrgUsageRow struct {
 // GetPartnerOrgUsage rolls usage up per partner user for the subtree under
 // rootUserID over a window. An empty rootUserID means the whole organisation
 // (every active partner user). It reuses costUSDExpr — one cost model shared
-// with every other dashboard number — and reads usage_events without writing.
+// with every other dashboard number — and never writes.
+//
+// When live rollups are available it aggregates usage_hourly instead of the
+// raw ledger. That matters for the manager page: an all-organisation November
+// window is ~1.3M raw rows and takes seconds on the shared primary, while the
+// same window is ~25K hourly rows and answers in tens of milliseconds. The
+// hourly path reports LastUsed at hour granularity (the rollup's finest
+// resolution); the raw path is kept only for the parity-fallback case.
 func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since, until time.Time) ([]OrgUsageRow, error) {
+	from := `partner_user_logins l ON l.user_id = st.user_id
+			JOIN usage_events e ON e.username = l.username
+			LEFT JOIN model_pricing p ON e.model = p.model`
+	window := `e.timestamp >= $2 AND e.timestamp < $3`
+	requests := `COUNT(*)`
+	cost := fmt.Sprintf(`COALESCE(ROUND(SUM(%s)::numeric,2),0)`, costUSDExpr)
+	lastUsed := `MAX(e.timestamp)`
+	if s.rollupsLive() {
+		from = `partner_user_logins l ON l.user_id = st.user_id
+			JOIN usage_hourly e ON e.username = l.username`
+		window = `e.hour >= $2 AND e.hour < $3`
+		requests = `COALESCE(SUM(e.requests),0)`
+		cost = `COALESCE(ROUND(SUM(e.cost_usd)::numeric,2),0)`
+		lastUsed = `MAX(e.hour)`
+	}
 	query := fmt.Sprintf(`
 		WITH RECURSIVE subtree(user_id, depth, path) AS (
 			SELECT p.user_id, 0, ARRAY[p.user_id]
@@ -55,32 +77,36 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 		),
 		u AS (
 			SELECT l.user_id,
-				COUNT(*) AS requests,
+				%s AS requests,
 				COALESCE(SUM(e.total_tokens),0) AS total_tokens,
-				COALESCE(ROUND(SUM(%s)::numeric,2),0) AS cost_usd,
-				MAX(e.timestamp) AS last_used
+				%s AS cost_usd,
+				%s AS last_used
 			FROM (SELECT DISTINCT user_id FROM subtree) st
-			JOIN partner_user_logins l ON l.user_id = st.user_id
-			JOIN usage_events e ON e.username = l.username
-			LEFT JOIN model_pricing p ON e.model = p.model
-			WHERE e.timestamp >= $2 AND e.timestamp < $3
+			JOIN %s
+			WHERE %s
 			GROUP BY l.user_id
+		),
+		managers AS (
+			SELECT DISTINCT manager_user_id AS user_id
+			FROM partner_users
+			WHERE active AND manager_user_id IS NOT NULL
 		)
 		SELECT DISTINCT st.user_id::text,
 			COALESCE(%s, cl.username, '') AS full_name,
 			COALESCE(cl.username,''),
 			COALESCE(pu.manager_user_id::text,''),
-			EXISTS (SELECT 1 FROM partner_users r WHERE r.active AND r.manager_user_id = st.user_id),
+			(m.user_id IS NOT NULL),
 			COALESCE(u.requests,0), COALESCE(u.total_tokens,0), COALESCE(u.cost_usd,0),
 			to_char(u.last_used, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		FROM (SELECT DISTINCT user_id FROM subtree) st
 		JOIN partner_users pu ON pu.user_id = st.user_id
+		LEFT JOIN managers m ON m.user_id = st.user_id
 		LEFT JOIN LATERAL (
 			SELECT username FROM partner_user_logins WHERE user_id = st.user_id
 			ORDER BY is_current DESC, username LIMIT 1
 		) cl ON true
 		LEFT JOIN u ON u.user_id = st.user_id
-		ORDER BY 8 DESC, 2`, costUSDExpr, partnerFullNameExpr)
+		ORDER BY 8 DESC, 2`, requests, cost, lastUsed, from, window, partnerFullNameExpr)
 	rows, err := s.db.QueryContext(ctx, query, rootUserID, since, until)
 	if err != nil {
 		return nil, err

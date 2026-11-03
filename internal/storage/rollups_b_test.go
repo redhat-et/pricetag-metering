@@ -301,3 +301,22 @@ func TestParityShapesAvoidIllegalGroupBy(t *testing.T) {
 		}
 	}
 }
+
+// The manager org table is the heaviest manager-page read: an all-org window
+// is millions of raw rows. It must aggregate usage_hourly whenever the live
+// rollups are healthy, and keep the raw ledger only as the parity fallback.
+func TestPartnerOrgUsageSwitchesToHourlyRollups(t *testing.T) {
+	body := funcBody(t, "partner_org.go", "func (s *Store) GetPartnerOrgUsage")
+	if !strings.Contains(body, "s.rollupsLive()") {
+		t.Fatal("GetPartnerOrgUsage no longer gates on rollupsLive()")
+	}
+	if !strings.Contains(body, "JOIN usage_hourly e") {
+		t.Fatal("GetPartnerOrgUsage lost its hourly rollup source")
+	}
+	if !strings.Contains(body, "JOIN usage_events e") {
+		t.Fatal("GetPartnerOrgUsage lost its raw fallback source")
+	}
+	if !strings.Contains(body, "e.hour >= $2 AND e.hour < $3") {
+		t.Fatal("GetPartnerOrgUsage rollup path lost its hour window")
+	}
+}
