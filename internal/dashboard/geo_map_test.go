@@ -48,6 +48,8 @@ func TestGeoMapUsesCountryFillHeat(t *testing.T) {
 	}
 	for _, want := range []string{
 		"class','geo-country-heat'",
+		"class','geo-country-transition'",
+		"geo-country-edge-blur",
 		"class','geo-state-heat'",
 		"pointer-events:all;transition:stroke .18s,stroke-width .18s,opacity .18s",
 		"geo-country.geo-hover",
@@ -57,6 +59,7 @@ func TestGeoMapUsesCountryFillHeat(t *testing.T) {
 		"stroke:#071421;stroke-width:.18;opacity:1",
 		"geo-activity-spark",
 		"queueGeoFlashes(data)",
+		"if(cycle===geoActivityCycle)queueGeoFlashes(queued)",
 		"var t=geoIntensity(value,max),eased=t*t*(3-2*t),count=geoHotspotCount(value,max);",
 		"parts.path.classed('is-on',eased>0)",
 		"const countryHeatLayer=svg.append('g').attr('class','geo-country-heat-layer');",
