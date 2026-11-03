@@ -123,7 +123,7 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-state-heat{stroke:none;pointer-events:none;mix-blend-mode:normal;filter:none}
 #geo-map .geo-country-heat.is-on,#geo-map .geo-state-heat.is-on{opacity:1}
 #geo-map .geoHeatFlash{animation:geoHeatFlash 1.9s ease-out}
-#geo-map .geo-country:hover,#geo-map .geo-country.geo-hover{stroke:#fff8ee;stroke-width:.82;opacity:.98}
+#geo-map .geo-country:hover,#geo-map .geo-country.geo-hover{stroke-width:.24;opacity:1}
 #geo-map .geo-glow{pointer-events:none;mix-blend-mode:screen;opacity:0}
 #geo-map .geo-glow-halo{filter:url(#geo-glow-blur)}
 #geo-map .geo-glow-core{filter:url(#geo-core-blur)}
@@ -1343,7 +1343,7 @@ function geoScaleTransform(center,scale){
 }
 var GEO_LAND_COLOR='#394b59';
 var GEO_GLOW_STOPS=['#394b59','#8d5b3d','#d47b3e','#ffb36c','#fff2d8'];
-var geoMapDefs=null;
+var geoMapDefs=null,geoCountryHeatBase=new Map();
 var geoMapReady=false,geoMapLoading=false,geoCountryPaths=null,geoStatePaths=null,geoCountryGlows=null,geoStateGlows=null,geoCountryDots=null,geoStateDots=null,geoContinentByCountry=new Map(),geoAnimFrame=null,geoMaxValue=0;
 var geoMapInView=false,geoPaintPending=false,geoObserverStarted=false;
 var geoHasUSStateData=false;
@@ -1401,6 +1401,12 @@ function geoHeatEdgeColor(color){
 }
 function geoCountryHeatCss(color){
   return 'radial-gradient(circle at 50% 50%,'+color+' 0%,'+color+' 62%,'+geoHeatEdgeColor(color)+' 100%)';
+}
+function geoHoverBorderColor(code){
+  var c=d3.color(geoCountryHeatBase.get(code)||GEO_LAND_COLOR);
+  if(!c)return '#fff8ee';
+  var luminance=(c.r*.299+c.g*.587+c.b*.114)/255;
+  return luminance>.62?'#071421':'#fff8ee';
 }
 function geoHotspotCount(value,max){
   var t=geoIntensity(value,max);
@@ -1533,9 +1539,10 @@ async function initGeoMap(){
     const countryGlowLayer=svg.append('g').attr('class','geo-country-glow-layer');
     const countryHeatLayer=svg.append('g').attr('class','geo-country-heat-layer');
     const countryBorderLayer=svg.append('g').attr('class','geo-country-border-layer');
-    geoCountryPaths=new Map();
-    geoCountryGlows=new Map();
-    geoCountryDots=new Map();
+     geoCountryPaths=new Map();
+     geoCountryGlows=new Map();
+     geoCountryDots=new Map();
+     geoCountryHeatBase=new Map();
     geoContinentByCountry=new Map();
     var usTransform=null;
     topojson.feature(world,world.objects.countries).features.forEach(function(f){
@@ -1569,9 +1576,9 @@ async function initGeoMap(){
       if(transform)borderGroup.attr('transform',transform);
       const p=borderGroup.append('path').datum(f).attr('d',path).attr('class','geo-country').attr('data-country',code);
       if(code)geoCountryPaths.set(code,p);
-       p.on('mouseenter',function(evt){if(!code)return;geoHoverZoom(borderGroup,transform,centroid,true);p.classed('geo-hover',true);const v=(geoValueByCountry.get(code)||0);geoMapTooltip(evt,geoRegionName(code),v,'country total');})
-        .on('mousemove',function(evt){const v=(geoValueByCountry.get(code)||0);if(!code)return;geoMapTooltip(evt,geoRegionName(code),v,'country total');})
-        .on('mouseleave',function(){geoHoverZoom(borderGroup,transform,centroid,false);p.classed('geo-hover',false);hideGeoMapTooltip();});
+       p.on('mouseenter',function(evt){if(!code)return;geoHoverZoom(borderGroup,transform,centroid,true);p.attr('stroke',geoHoverBorderColor(code)).classed('geo-hover',true);const v=(geoValueByCountry.get(code)||0);geoMapTooltip(evt,geoRegionName(code),v,'country total');})
+         .on('mousemove',function(evt){const v=(geoValueByCountry.get(code)||0);if(!code)return;geoMapTooltip(evt,geoRegionName(code),v,'country total');})
+         .on('mouseleave',function(){geoHoverZoom(borderGroup,transform,centroid,false);p.attr('stroke',null).classed('geo-hover',false);hideGeoMapTooltip();});
     });
 
     const stateGlowLayer=svg.append('g').attr('class','geo-state-glow-layer');
@@ -1647,7 +1654,9 @@ function renderGeoMap(){
   geoStateDots.forEach(function(d){setGeoDots(d,0,stateMax);});
   geoCountryPaths.forEach(function(p,code){
     const value=byCountry.get(code)||0;
-    p.attr('fill',geoRankHeatColor(heatRankByCountry.get(code)||0)).classed('geo-active',value>0);
+    const heatBase=geoRankHeatColor(heatRankByCountry.get(code)||0);
+    geoCountryHeatBase.set(code,heatBase);
+    p.attr('fill',heatBase).classed('geo-active',value>0);
   });
 
   const targets=[];

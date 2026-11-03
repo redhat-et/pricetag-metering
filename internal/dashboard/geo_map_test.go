@@ -51,6 +51,8 @@ func TestGeoMapUsesCountryFillHeat(t *testing.T) {
 		"class','geo-state-heat'",
 		"pointer-events:all;transition:stroke .18s,stroke-width .18s,opacity .18s",
 		"geo-country.geo-hover",
+		"geoHoverBorderColor(code)",
+		"stroke-width:.24;opacity:1",
 		"geo-activity-spark",
 		"queueGeoFlashes(data)",
 		"var t=geoIntensity(value,max),eased=t*t*(3-2*t),count=geoHotspotCount(value,max);",
