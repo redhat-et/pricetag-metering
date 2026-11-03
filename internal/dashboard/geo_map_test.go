@@ -5,23 +5,25 @@ import (
 	"testing"
 )
 
-func TestGeoMapUsesNightLightGlowStyle(t *testing.T) {
+func TestGeoMapUsesRaisedDeepSpaceStyle(t *testing.T) {
 	data, err := FS.ReadFile("dashboard.html")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"var GEO_LAND_COLOR='#0b1221';",
-		"var GEO_GLOW_STOPS=['#4b1f87','#8b2cff','#e62cff','#ff77d9','#ffe0f8'];",
-		"background:linear-gradient(90deg,#171536,#6425ad,#e62cff,#ff8fdc,#ffe0f8)",
+		"var GEO_LAND_COLOR='#29495b';",
+		"var GEO_GLOW_STOPS=['#35566b','#6f91a0','#d47b3e','#ffb36c','#fff2d8'];",
+		"background:linear-gradient(90deg,#28475b,#4d7890,#d47b3e,#ffb36c,#fff2d8)",
 		"d3.interpolateRgbBasis(GEO_GLOW_STOPS)",
 		"defs.append('radialGradient').attr('id','geo-glow-grad')",
-		"d3.geoGraticule10()",
 		"geoHotspotCount(value,max)",
 		"geoGlowRadius(value,max)",
 		"mix-blend-mode:screen",
 		"const countryBorderLayer=svg.append('g').attr('class','geo-country-border-layer');",
 		"const stateBorderLayer=svg.append('g').attr('class','geo-state-border-layer');",
+		"d3.geoNaturalEarth1().fitExtent",
+		"geo-atmosphere",
+		"geo-depth-shadow",
 	} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("dashboard.html no longer contains %q", want)
@@ -30,6 +32,11 @@ func TestGeoMapUsesNightLightGlowStyle(t *testing.T) {
 	for _, old := range []string{"#39d353", "#9be9a8", "GEO_ZERO_COLOR"} {
 		if strings.Contains(string(data), old) {
 			t.Errorf("dashboard.html still contains old choropleth color %q", old)
+		}
+	}
+	for _, removed := range []string{"d3.geoGraticule10()", "filter:url(#geo-border-glow)", "const borderGlow="} {
+		if strings.Contains(string(data), removed) {
+			t.Errorf("dashboard.html still contains removed map treatment %q", removed)
 		}
 	}
 }
@@ -63,6 +70,7 @@ func TestGeoMapUsesCountryTotalWhenUSStateBreakdownIsMissing(t *testing.T) {
 		"US country total; state breakdown unavailable",
 		"geoStateGlows.get(code)",
 		"geoHasUSStateData){",
+		"const dotCentroid=code==='US'?projection([-74,40.5]):centroid;",
 	} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("dashboard.html no longer contains %q", want)

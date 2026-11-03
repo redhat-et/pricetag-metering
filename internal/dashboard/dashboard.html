@@ -108,16 +108,18 @@ tr.clickable{cursor:pointer}
 .model-hosted-split .hs-head{font-size:9px;gap:5px}
 .model-hosted-split .hs-head b,.model-hosted-split .hs-head .frontier{font-size:10px}
 .model-hosted-split .hs-track{height:4px;margin-top:5px}
-.geo-card{background:linear-gradient(180deg,#140c33,#0c0922);border:1px solid #352a66;border-radius:12px;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:14px;align-items:stretch;max-width:1180px;margin:0 auto;box-shadow:0 18px 50px rgba(0,0,0,.28)}
-.geo-wrap{position:relative;min-width:0;height:360px;background:#17104a;border-radius:9px;overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 120px rgba(10,4,40,.75)}
+.geo-card{background:linear-gradient(180deg,#101b2a,#07101c);border:1px solid #1b3042;border-radius:12px;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:14px;align-items:stretch;max-width:1180px;margin:0 auto;box-shadow:0 20px 55px rgba(0,0,0,.38)}
+.geo-wrap{position:relative;min-width:0;height:360px;background:radial-gradient(ellipse at 50% 45%,#173b52 0%,#0b2132 48%,#030b13 100%);border-radius:9px;overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 -34px 80px rgba(0,0,0,.5),inset 0 12px 40px rgba(79,166,205,.08)}
 #geo-map{width:100%;max-width:none;height:360px;display:block}
 #geo-map .geo-ocean{fill:url(#geo-ocean-grad)}
-#geo-map .geo-graticule{fill:none;stroke:#7b5cff;stroke-width:.4;opacity:.3;pointer-events:none}
+#geo-map .geo-atmosphere{fill:none;stroke:#8ac7db;stroke-width:1.2;opacity:.13;filter:url(#geo-atmosphere-glow);pointer-events:none}
+#geo-map .geo-graticule{display:none}
 #geo-map .geo-country-fill{fill:url(#geo-land-grad);stroke:none;pointer-events:none}
-#geo-map .geo-country{fill:none;stroke:#f3e9ff;stroke-width:.55;vector-effect:non-scaling-stroke;filter:url(#geo-border-glow);transition:stroke .18s}
-#geo-map .geo-country.geo-active{stroke:#ffffff}
-#geo-map .geo-state{fill:none;stroke:#c9b6ff;stroke-width:.4;vector-effect:non-scaling-stroke;opacity:.7;pointer-events:all}
-#geo-map .geo-country:hover{stroke:#ffffff;stroke-width:.95}
+#geo-map .geo-country-shadow{fill:#071421;stroke:#02070d;stroke-width:1.2;opacity:.9;pointer-events:none;filter:url(#geo-depth-shadow)}
+#geo-map .geo-country{fill:none;stroke:#d8e8ee;stroke-width:.18;vector-effect:non-scaling-stroke;opacity:.25;transition:stroke .18s,opacity .18s}
+#geo-map .geo-country.geo-active{stroke:#e9f5f7;opacity:.38}
+#geo-map .geo-state{fill:none;stroke:#c2dbe3;stroke-width:.16;vector-effect:non-scaling-stroke;opacity:.2;pointer-events:all}
+#geo-map .geo-country:hover{stroke:#ffffff;stroke-width:.35;opacity:.55}
 #geo-map .geo-glow{pointer-events:none;mix-blend-mode:screen;opacity:0}
 #geo-map .geo-glow-halo{filter:url(#geo-glow-blur)}
 #geo-map .geo-glow-core{filter:url(#geo-core-blur)}
@@ -126,7 +128,7 @@ tr.clickable{cursor:pointer}
 .geo-tooltip{position:absolute;pointer-events:none;display:none;background:rgba(18,9,42,.96);border:1px solid rgba(255,110,226,.35);border-radius:7px;padding:7px 10px;font-size:11px;line-height:1.5;box-shadow:0 8px 26px rgba(0,0,0,.6),0 0 18px rgba(255,45,205,.12);z-index:5;white-space:nowrap;color:var(--text)}
 .geo-side{display:flex;flex-direction:column;gap:10px;min-width:0}
 .geo-scale{font-size:11px;color:var(--text2)}
-.geo-scale .gs-bar{height:8px;border-radius:4px;margin:5px 0 3px;background:linear-gradient(90deg,#171536,#6425ad,#e62cff,#ff8fdc,#ffe0f8);box-shadow:0 0 14px rgba(225,45,255,.16)}
+.geo-scale .gs-bar{height:8px;border-radius:4px;margin:5px 0 3px;background:linear-gradient(90deg,#28475b,#4d7890,#d47b3e,#ffb36c,#fff2d8);box-shadow:0 0 14px rgba(255,163,83,.16)}
 .geo-scale .gs-labels{display:flex;justify-content:space-between;font-size:10px}
 .geo-scale .gs-sub{font-size:10px;color:#6e7a89;margin-left:4px}
 .geo-top{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
@@ -494,7 +496,7 @@ tr.clickable{cursor:pointer}
     </div>
     <div class="geo-card">
       <div class="geo-wrap">
-        <svg id="geo-map" role="img" aria-label="Purple world map with glowing usage heat by country and US state"></svg>
+        <svg id="geo-map" role="img" aria-label="Raised deep-space world map with glowing usage heat by country and US state"></svg>
         <div class="geo-tooltip" id="geo-tooltip"></div>
       </div>
       <div class="geo-side">
@@ -1298,16 +1300,19 @@ var US_STATE_CODES={"Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR",
 var EUROPE_FOCUS=new Set(['AL','AT','BE','BA','BG','CH','CY','CZ','DE','DK','EE','ES','FI','FR','GB','GR','HR','HU','IE','IS','IT','LT','LU','LV','MC','MD','ME','MK','MT','NL','NO','PL','PT','RO','RS','SE','SI','SK','UA']);
 function geoFocusScale(country){
   country=String(country||'').toUpperCase();
-  if(country==='US')return 1.32;
-  if(EUROPE_FOCUS.has(country))return 1.28;
+  // Natural Earth already preserves the useful US/Greenland relationship;
+  // this small lift gives the US the same foreground emphasis as the
+  // reference without distorting every country independently.
+  if(country==='US')return 1.1;
+  return 1;
   return 1;
 }
 function geoScaleTransform(center,scale){
   if(!center||scale===1)return null;
   return 'translate('+center[0]+','+center[1]+') scale('+scale+') translate('+(-center[0])+','+(-center[1])+')';
 }
-var GEO_LAND_COLOR='#0b1221';
-var GEO_GLOW_STOPS=['#4b1f87','#8b2cff','#e62cff','#ff77d9','#ffe0f8'];
+var GEO_LAND_COLOR='#29495b';
+var GEO_GLOW_STOPS=['#35566b','#6f91a0','#d47b3e','#ffb36c','#fff2d8'];
 var geoMapReady=false,geoMapLoading=false,geoCountryPaths=null,geoStatePaths=null,geoCountryGlows=null,geoStateGlows=null,geoAnimFrame=null,geoMaxValue=0;
 var geoMapInView=false,geoPaintPending=false,geoObserverStarted=false;
 var geoHasUSStateData=false;
@@ -1406,48 +1411,47 @@ async function initGeoMap(){
     const svg=d3.select('#geo-map').attr('viewBox','0 0 '+width+' '+height).attr('preserveAspectRatio','xMidYMid meet');
     svg.selectAll('*').remove();
 
-    // A satellite-style ocean, faint graticule and warm point blooms. The
-    // dashboard only has country/state aggregates, so the glow is anchored to
-    // each region's centroid rather than pretending to be city-level data.
+    // A dark, outer-space ocean with a subtle atmospheric horizon and warm
+    // point blooms. The dashboard only has country/state aggregates, so the
+    // glow is anchored to each region's centroid rather than pretending to be
+    // city-level data.
     const defs=svg.append('defs');
-    const ocean=defs.append('radialGradient').attr('id','geo-ocean-grad').attr('cx','52%').attr('cy','40%').attr('r','80%');
-    ocean.append('stop').attr('offset','0%').attr('stop-color','#2a1d6e');
-    ocean.append('stop').attr('offset','55%').attr('stop-color','#1a1250');
-    ocean.append('stop').attr('offset','100%').attr('stop-color','#0f0a33');
-    const landGrad=defs.append('linearGradient').attr('id','geo-land-grad').attr('x1','0').attr('y1','0').attr('x2','0').attr('y2','1');
-    landGrad.append('stop').attr('offset','0%').attr('stop-color','#6a44e0');
-    landGrad.append('stop').attr('offset','100%').attr('stop-color','#4321a6');
+    const ocean=defs.append('radialGradient').attr('id','geo-ocean-grad').attr('cx','50%').attr('cy','38%').attr('r','78%');
+    ocean.append('stop').attr('offset','0%').attr('stop-color','#21485e');
+    ocean.append('stop').attr('offset','58%').attr('stop-color','#0d2638');
+    ocean.append('stop').attr('offset','100%').attr('stop-color','#020911');
+    const landGrad=defs.append('linearGradient').attr('id','geo-land-grad').attr('x1','0').attr('y1','0').attr('x2','0.8').attr('y2','1');
+    landGrad.append('stop').attr('offset','0%').attr('stop-color','#9eb7c0');
+    landGrad.append('stop').attr('offset','42%').attr('stop-color','#527487');
+    landGrad.append('stop').attr('offset','100%').attr('stop-color','#1a3448');
     const glowGrad=defs.append('radialGradient').attr('id','geo-glow-grad');
     glowGrad.append('stop').attr('offset','0%').attr('stop-color','#fff0ff').attr('stop-opacity','.98');
-    glowGrad.append('stop').attr('offset','9%').attr('stop-color','#ffb5ef').attr('stop-opacity','.9');
-    glowGrad.append('stop').attr('offset','24%').attr('stop-color','#ff5ae8').attr('stop-opacity','.62');
-    glowGrad.append('stop').attr('offset','52%').attr('stop-color','#d23cff').attr('stop-opacity','.24');
-    glowGrad.append('stop').attr('offset','100%').attr('stop-color','#9b2cff').attr('stop-opacity','0');
+    glowGrad.append('stop').attr('offset','9%').attr('stop-color','#fff2d8').attr('stop-opacity','.9');
+    glowGrad.append('stop').attr('offset','24%').attr('stop-color','#ffb36c').attr('stop-opacity','.62');
+    glowGrad.append('stop').attr('offset','52%').attr('stop-color','#d47b3e').attr('stop-opacity','.24');
+    glowGrad.append('stop').attr('offset','100%').attr('stop-color','#7d4b35').attr('stop-opacity','0');
     const coreGrad=defs.append('radialGradient').attr('id','geo-core-grad');
     coreGrad.append('stop').attr('offset','0%').attr('stop-color','#ffffff').attr('stop-opacity','1');
-    coreGrad.append('stop').attr('offset','48%').attr('stop-color','#ffc6f4').attr('stop-opacity','.88');
-    coreGrad.append('stop').attr('offset','100%').attr('stop-color','#ff5ae8').attr('stop-opacity','0');
+    coreGrad.append('stop').attr('offset','48%').attr('stop-color','#ffd39b').attr('stop-opacity','.88');
+    coreGrad.append('stop').attr('offset','100%').attr('stop-color','#ff9b52').attr('stop-opacity','0');
     defs.append('filter').attr('id','geo-glow-blur').attr('x','-70%').attr('y','-70%').attr('width','240%').attr('height','240%')
       .append('feGaussianBlur').attr('stdDeviation','7');
     defs.append('filter').attr('id','geo-core-blur').attr('x','-80%').attr('y','-80%').attr('width','260%').attr('height','260%')
       .append('feGaussianBlur').attr('stdDeviation','1.5');
-    const borderGlow=defs.append('filter').attr('id','geo-border-glow').attr('x','-40%').attr('y','-40%').attr('width','180%').attr('height','180%');
-    borderGlow.append('feGaussianBlur').attr('in','SourceGraphic').attr('stdDeviation','1.3').attr('result','b');
-    const borderMerge=borderGlow.append('feMerge');
-    borderMerge.append('feMergeNode').attr('in','b');
-    borderMerge.append('feMergeNode').attr('in','SourceGraphic');
+    const depthShadow=defs.append('filter').attr('id','geo-depth-shadow').attr('x','-30%').attr('y','-20%').attr('width','170%').attr('height','170%');
+    depthShadow.append('feGaussianBlur').attr('stdDeviation','1.8');
+    const atmosphereGlow=defs.append('filter').attr('id','geo-atmosphere-glow').attr('x','-20%').attr('y','-80%').attr('width','140%').attr('height','260%');
+    atmosphereGlow.append('feGaussianBlur').attr('stdDeviation','5');
 
-    // Focus on the populated operating regions rather than fitting the
-    // entire globe. This removes most of Antarctica and open ocean while
-    // retaining the Americas, Europe, Africa and Asia for the usage view.
-    const focusArea={type:'Polygon',coordinates:[[[-130,-42],[158,-42],[158,72],[-130,72],[-130,-42]]]};
-    // A rectangular Mercator crop keeps the active operating band large and
-    // removes the globe-shaped empty margins from the Natural Earth view.
-    const projection=d3.geoMercator().fitExtent([[0,0],[width,height]],focusArea);
+    // Natural Earth gives the map the gently curved, outside-the-earth feel
+    // from the reference while keeping the US visibly larger than Greenland.
+    // Unlike Mercator, it does not inflate Greenland at the top of the map.
+    const projection=d3.geoNaturalEarth1().fitExtent([[10,18],[990,482]],{type:'Sphere'});
     const path=d3.geoPath(projection);
     svg.append('rect').attr('class','geo-ocean').attr('width',width).attr('height',height);
-    svg.append('path').datum(d3.geoGraticule10()).attr('class','geo-graticule').attr('d',path);
+    svg.append('ellipse').attr('class','geo-atmosphere').attr('cx',width/2).attr('cy',height+20).attr('rx',width*.57).attr('ry',height*.32);
 
+    const landShadowLayer=svg.append('g').attr('class','geo-land-shadow-layer');
     const landLayer=svg.append('g').attr('class','geo-land-layer');
     const countryGlowLayer=svg.append('g').attr('class','geo-country-glow-layer');
     const countryBorderLayer=svg.append('g').attr('class','geo-country-border-layer');
@@ -1460,13 +1464,21 @@ async function initGeoMap(){
       // otherwise consume valuable map area at the bottom of the projection.
       if(code==='AQ'||String(f.properties&&f.properties.name||'').toLowerCase()==='antarctica')return;
       const centroid=path.centroid(f);
+      // A country-only US aggregate has no meaningful city/state position;
+      // keep it on the East Coast rather than placing a misleading dot in the
+      // geographic center/western side of the country. State data uses the
+      // actual state centroid below.
+      const dotCentroid=code==='US'?projection([-74,40.5]):centroid;
       const countryScale=geoFocusScale(code);
-      const transform=countryScale>1?geoScaleTransform(centroid,countryScale):null;
+      const transform=countryScale!==1?geoScaleTransform(centroid,countryScale):null;
+      const shadowGroup=landShadowLayer.append('g').attr('class','geo-country-shadow-group');
+      if(transform)shadowGroup.attr('transform',transform);
+      shadowGroup.append('path').datum(f).attr('d',path).attr('class','geo-country-shadow').attr('transform','translate(0,7)');
       const fillGroup=landLayer.append('g').attr('class','geo-country-group');
       if(transform)fillGroup.attr('transform',transform);
       if(code==='US')usTransform=transform;
       fillGroup.append('path').datum(f).attr('d',path).attr('class','geo-country-fill').attr('data-country',code);
-      if(code)geoCountryGlows.set(code,geoDotCluster(countryGlowLayer,code,centroid,transform));
+      if(code)geoCountryGlows.set(code,geoDotCluster(countryGlowLayer,code,dotCentroid,transform));
       const borderGroup=countryBorderLayer.append('g');
       if(transform)borderGroup.attr('transform',transform);
       const p=borderGroup.append('path').datum(f).attr('d',path).attr('class','geo-country').attr('data-country',code);
