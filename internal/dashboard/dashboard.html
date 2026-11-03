@@ -125,7 +125,11 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-country.geo-active{stroke:#fff1df;opacity:.58}
 #geo-map .geo-state{fill:none;stroke:#e8c8a7;stroke-width:.18;vector-effect:non-scaling-stroke;opacity:.28;pointer-events:all}
 #geo-map .geo-country-heat{stroke:none;pointer-events:none;mix-blend-mode:normal;filter:none}
-#geo-map .geo-country-transition{fill:none;stroke:currentColor;stroke-width:13;stroke-opacity:.42;vector-effect:non-scaling-stroke;pointer-events:none;filter:url(#geo-country-edge-blur)}
+/* Active countries paint their border in their own heat color at partial
+   opacity. Each border stroke straddles the shared boundary, so half of it
+   tints the neighbour's fill and half tints its own: the border line reads as
+   a crisp gradient between the two countries, with no blur. */
+#geo-map .geo-country.geo-border-heat{stroke-width:2.4;stroke-opacity:.62;vector-effect:non-scaling-stroke}
 #geo-map .geo-state-heat{stroke:none;pointer-events:none;mix-blend-mode:normal;filter:none}
 #geo-map .geo-country-heat.is-on,#geo-map .geo-state-heat.is-on{opacity:1}
 #geo-map .geoHeatFlash{animation:geoHeatFlash 1.9s ease-out}
@@ -138,8 +142,8 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-glow.geo-flash{animation:geoGlowFlash 1.9s ease-out}
 #geo-map .geo-glow.geo-activity-spark{animation:geoActivitySpark 1.45s ease-out;filter:none;transform:none}
 #geo-map .geo-glow.geo-activity-spark .geo-glow-halo,#geo-map .geo-glow.geo-activity-spark .geo-glow-core{filter:none}
-#geo-map .geo-spark-halo{pointer-events:none;mix-blend-mode:screen;opacity:0;filter:url(#geo-glow-blur);animation:geoSparkHalo 1.8s ease-out forwards}
-#geo-map .geo-spark-dot{pointer-events:none;mix-blend-mode:screen;opacity:0;animation:geoSparkDot 1.8s ease-out forwards}
+#geo-map .geo-spark-halo{pointer-events:none;mix-blend-mode:screen;opacity:0;filter:url(#geo-glow-blur);animation:geoSparkHalo 2.4s ease-out forwards}
+#geo-map .geo-spark-dot{pointer-events:none;mix-blend-mode:screen;opacity:0;animation:geoSparkDot 2.4s ease-out forwards}
 .geo-tooltip{position:absolute;pointer-events:none;display:none;background:rgba(5,18,29,.97);border:1px solid rgba(210,235,241,.5);border-radius:8px;padding:9px 12px;font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.58),0 0 22px rgba(178,225,239,.2);z-index:5;white-space:nowrap;color:var(--text);transform:scale(1);transform-origin:bottom left;animation:geoTooltipPop .16s ease-out}
 .geo-tooltip b{color:#fff;font-size:13px}
 @keyframes geoTooltipPop{from{opacity:0;transform:translateY(5px) scale(.88)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -1358,7 +1362,7 @@ function geoScaleTransform(center,scale){
 }
 var GEO_LAND_COLOR='#394b59';
 var GEO_GLOW_STOPS=['#394b59','#8d5b3d','#d47b3e','#ffb36c','#fff2d8'];
-var geoMapDefs=null,geoCountryHeatBase=new Map();
+var geoMapDefs=null,geoCountryHeatBase=new Map(),geoSparkLayer=null,geoUSStateTransform=null;
 var geoMapReady=false,geoMapLoading=false,geoCountryPaths=null,geoStatePaths=null,geoCountryGlows=null,geoStateGlows=null,geoCountryDots=null,geoStateDots=null,geoContinentByCountry=new Map(),geoAnimFrame=null,geoMaxValue=0;
 var geoMapInView=false,geoPaintPending=false,geoObserverStarted=false;
 var geoHasUSStateData=false;
@@ -1398,24 +1402,14 @@ function geoRankHeatColor(rank){
   if(!(rank>0))return GEO_LAND_COLOR;
   return d3.interpolateRgbBasis(GEO_GLOW_STOPS)(Math.max(0,Math.min(1,(11-rank)/10)));
 }
+// Country fills stay flat and crisp. Colour interpolation happens only on the
+// boundary between neighbouring countries, via the semi-transparent border
+// stroke painted in each country's heat colour.
 function geoCountryHeatGradient(code,color){
-  if(!geoMapDefs)return color;
-  var id='geo-country-gradient-'+String(code||'').toLowerCase();
-  var gradient=geoMapDefs.select('#'+id);
-  var edge=geoHeatEdgeColor(color);
-  if(gradient.empty())gradient=geoMapDefs.append('radialGradient').attr('id',id).attr('gradientUnits','objectBoundingBox').attr('cx','.5').attr('cy','.5').attr('r','.78');
-  gradient.selectAll('*').remove();
-  gradient.append('stop').attr('offset','0%').attr('stop-color',color);
-  gradient.append('stop').attr('offset','62%').attr('stop-color',color);
-  gradient.append('stop').attr('offset','100%').attr('stop-color',edge);
-  return 'url(#'+id+')';
-}
-function geoHeatEdgeColor(color){
-  var c=d3.color(color);
-  return c?'rgb('+Math.round(c.r*.7)+','+Math.round(c.g*.7)+','+Math.round(c.b*.7)+')':color;
+  return color;
 }
 function geoCountryHeatCss(color){
-  return 'radial-gradient(circle at 50% 50%,'+color+' 0%,'+color+' 62%,'+geoHeatEdgeColor(color)+' 100%)';
+  return color;
 }
 function geoHoverBorderColor(code){
   var c=d3.color(geoCountryHeatBase.get(code)||GEO_LAND_COLOR);
@@ -1540,8 +1534,7 @@ async function initGeoMap(){
     atmosphereGlow.append('feGaussianBlur').attr('stdDeviation','5');
     const heatBlur=defs.append('filter').attr('id','geo-heat-blur').attr('x','-20%').attr('y','-20%').attr('width','140%').attr('height','140%');
     heatBlur.append('feGaussianBlur').attr('stdDeviation','2.5');
-    const countryEdgeBlur=defs.append('filter').attr('id','geo-country-edge-blur').attr('x','-20%').attr('y','-20%').attr('width','140%').attr('height','140%');
-    countryEdgeBlur.append('feGaussianBlur').attr('stdDeviation','2.2');
+
 
     // Natural Earth gives the map the gently curved, outside-the-earth feel
     // from the reference while keeping the US visibly larger than Greenland.
@@ -1586,7 +1579,7 @@ async function initGeoMap(){
          geoContinentByCountry.set(code,geoContinentFor(code));
          const heatGroup=countryHeatLayer.append('g');
          if(transform)heatGroup.attr('transform',transform);
-         geoCountryGlows.set(code,{path:heatGroup.append('path').datum(f).attr('d',path).attr('class','geo-country-heat').attr('data-country',code),transition:heatGroup.append('path').datum(f).attr('d',path).attr('class','geo-country-transition').attr('data-country',code)});
+         geoCountryGlows.set(code,{path:heatGroup.append('path').datum(f).attr('d',path).attr('class','geo-country-heat').attr('data-country',code)});
          geoCountryDots.set(code,geoDotCluster(countryGlowLayer,code,dotCentroid,transform));
        }
       const borderGroup=countryBorderLayer.append('g');
@@ -1595,13 +1588,17 @@ async function initGeoMap(){
       if(code)geoCountryPaths.set(code,p);
        p.on('mouseenter',function(evt){if(!code)return;p.style('stroke',geoHoverBorderColor(code)).classed('geo-hover',true);const v=(geoValueByCountry.get(code)||0);geoMapTooltip(evt,geoRegionName(code),v,'country total');})
          .on('mousemove',function(evt){const v=(geoValueByCountry.get(code)||0);if(!code)return;geoMapTooltip(evt,geoRegionName(code),v,'country total');})
-         .on('mouseleave',function(){p.style('stroke',null).classed('geo-hover',false);hideGeoMapTooltip();});
+         .on('mouseleave',function(){p.style('stroke',geoCountryHeatBase.get(code)||null).classed('geo-hover',false);hideGeoMapTooltip();});
     });
 
     const stateGlowLayer=svg.append('g').attr('class','geo-state-glow-layer');
     const stateHeatLayer=svg.append('g').attr('class','geo-state-heat-layer');
     const stateBorderLayer=svg.append('g').attr('class','geo-state-border-layer');
     if(usTransform){stateGlowLayer.attr('transform',usTransform);stateHeatLayer.attr('transform',usTransform);stateBorderLayer.attr('transform',usTransform);}
+    geoUSStateTransform=usTransform||null;
+    // Sparks live above every heat and border layer: the opaque country fill
+    // would otherwise hide them completely.
+    geoSparkLayer=svg.append('g').attr('class','geo-spark-layer').attr('pointer-events','none');
     geoStatePaths=new Map();
     geoStateGlows=new Map();
     geoStateDots=new Map();
@@ -1635,7 +1632,6 @@ function setGeoGlow(parts,value,max,color){
   var t=geoIntensity(value,max);
   var eased=t*t*(3-2*t);
   parts.path.classed('is-on',eased>0).attr('fill',eased>0?(color||geoColorFor(value,max)):'transparent').attr('opacity',eased>0?.88+eased*.12:0);
-  if(parts.transition)parts.transition.attr('opacity',eased>0?.9:0);
 }
 
 function renderGeoMap(){
@@ -1674,7 +1670,7 @@ function renderGeoMap(){
     const value=byCountry.get(code)||0;
     const heatBase=geoRankHeatColor(heatRankByCountry.get(code)||0);
     geoCountryHeatBase.set(code,heatBase);
-    p.attr('fill',heatBase).classed('geo-active',value>0);
+    p.attr('fill',heatBase).classed('geo-active',value>0).style('stroke',null).classed('geo-border-heat',false);
   });
 
   const targets=[];
@@ -1694,9 +1690,9 @@ function renderGeoMap(){
   function paint(t,value){
     if(t.kind==='country')t.p.attr('fill',t.heatColor);
     setGeoGlow(t.glow,t.heatValue*value,t.glowMax,t.heatColor);
-    if(t.kind==='country'&&t.glow){
-      t.glow.path.attr('color',t.heatBase);
-      t.glow.transition.attr('color',t.heatBase).attr('stroke-width',t.heatValue*value>0?8:0).attr('stroke-opacity',t.heatValue*value>0?.3:0);
+    if(t.kind==='country'){
+      var heated=t.heatValue*value>0;
+      t.p.style('stroke',heated?t.heatBase:null).classed('geo-border-heat',heated);
     }
     setGeoDots(t.dots,(t.dotValue===undefined?t.value:t.dotValue)*value,dotMax);
   }
@@ -1745,24 +1741,32 @@ function renderGeoMap(){
 function flashGeo(country,state,color){
   country=String(country||'').toUpperCase();state=String(state||'').toUpperCase();
   if(!geoMapReady||!geoMapInView){pendingGeoFlashes.push({country:country,state:state,color:color});return;}
-  var dots=country==='US'&&state&&geoStateDots?geoStateDots.get(state):null;
-  if(!dots&&geoCountryDots)dots=geoCountryDots.get(country);
+  if(!geoSparkLayer)return;
+  var dots=null,transform=null;
+  if(country==='US'&&state&&geoStateDots&&geoStateDots.get(state)){
+    dots=geoStateDots.get(state);transform=geoUSStateTransform;
+  }
+  if((!dots||!dots.length)&&geoCountryDots&&geoCountryDots.get(country)){
+    dots=geoCountryDots.get(country);
+    if(dots&&dots.length){
+      var cluster=dots[0].group.node().parentNode;
+      transform=cluster?cluster.getAttribute('transform'):null;
+    }
+  }
   if(!dots||!dots.length)return;
-  var anchor=dots[0].group.node();
-  if(!anchor||!anchor.parentNode)return;
-  // Sparks live in the region's own cluster so they inherit its transform and
-  // always land inside the correct country/state, independent of whether that
-  // region currently has heat dots switched on.
+  // Draw far above the heat and border layers: an opaque country fill would
+  // otherwise cover every spark, which is why the effect was never visible.
   var cx=Number(dots[0].halo.attr('cx'))||0,cy=Number(dots[0].halo.attr('cy'))||0;
   var seed=geoHash(country+'|'+state+'|'+geoActivityTick);
-  var ox=((seed%17)-8)*0.55,oy=(((seed>>>5)%17)-8)*0.45;
+  var ox=((seed%17)-8)*0.7,oy=(((seed>>>5)%17)-8)*0.5;
   var id='geo-spark-'+(geoSparkSeq++);
-  var group=d3.select(anchor.parentNode);
-  group.append('circle').attr('class','geo-spark-halo').attr('data-spark',id)
-    .attr('cx',cx+ox).attr('cy',cy+oy).attr('r',3.6).attr('fill',color||'#ffb36c');
-  group.append('circle').attr('class','geo-spark-dot').attr('data-spark',id)
-    .attr('cx',cx+ox).attr('cy',cy+oy).attr('r',1.6).attr('fill','#fff6e6');
-  setTimeout(function(){group.selectAll('[data-spark="'+id+'"]').remove();},2000);
+  var group=geoSparkLayer.append('g').attr('data-spark',id);
+  if(transform)group.attr('transform',transform);
+  group.append('circle').attr('class','geo-spark-halo')
+    .attr('cx',cx+ox).attr('cy',cy+oy).attr('r',6.5).attr('fill',color||'#ffb36c');
+  group.append('circle').attr('class','geo-spark-dot')
+    .attr('cx',cx+ox).attr('cy',cy+oy).attr('r',2.4).attr('fill','#fff6e6');
+  setTimeout(function(){group.remove();},2600);
 }
 function requestFlashColor(event){
   var client=friendlyClient(event&&event.user_agent||'');
