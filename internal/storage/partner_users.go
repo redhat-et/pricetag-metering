@@ -162,15 +162,40 @@ func normalizePartnerUserTags(tags map[string]any) (map[string]any, string, erro
 			}
 			clean[key] = nil
 		case string:
-			if len(value) > partnerUserMaxTagValue {
-				return nil, "", fmt.Errorf("%w: tag %q exceeds %d bytes", ErrInvalidPartnerUser, key, partnerUserMaxTagValue)
+			if err := validatePartnerTagString(key, value); err != nil {
+				return nil, "", err
 			}
-			for _, r := range value {
-				if unicode.IsControl(r) {
-					return nil, "", fmt.Errorf("%w: tag %q contains a control character", ErrInvalidPartnerUser, key)
+			clean[key] = value
+		case []string:
+			if !isPartnerGroupTag(key) {
+				return nil, "", fmt.Errorf("%w: tag %q must be a string", ErrInvalidPartnerUser, key)
+			}
+			for _, group := range value {
+				if err := validatePartnerTagString(key, group); err != nil {
+					return nil, "", err
 				}
 			}
 			clean[key] = value
+		case []any:
+			// encoding/json decodes a JSON array as []any, which is how an
+			// OIDC groups claim arrives. Only group-list tags may be arrays;
+			// every other tag stays a single string so the directory contract
+			// does not silently widen.
+			if !isPartnerGroupTag(key) {
+				return nil, "", fmt.Errorf("%w: tag %q must be a string", ErrInvalidPartnerUser, key)
+			}
+			groups := make([]string, 0, len(value))
+			for _, item := range value {
+				group, ok := item.(string)
+				if !ok {
+					return nil, "", fmt.Errorf("%w: tag %q must contain only strings", ErrInvalidPartnerUser, key)
+				}
+				if err := validatePartnerTagString(key, group); err != nil {
+					return nil, "", err
+				}
+				groups = append(groups, group)
+			}
+			clean[key] = groups
 		default:
 			return nil, "", fmt.Errorf("%w: tag %q must be a string", ErrInvalidPartnerUser, key)
 		}
@@ -204,6 +229,26 @@ func normalizePartnerUserTags(tags map[string]any) (map[string]any, string, erro
 		}
 	}
 	return clean, email, nil
+}
+
+// isPartnerGroupTag reports whether a tag may carry a list of strings. The
+// directory's existing dev personas use dev_groups; OIDC persists groups.
+// Keeping this an explicit allow-list prevents arbitrary arrays from slipping
+// into the tag contract.
+func isPartnerGroupTag(key string) bool {
+	return key == "groups" || strings.HasSuffix(key, "_groups")
+}
+
+func validatePartnerTagString(key, value string) error {
+	if len(value) > partnerUserMaxTagValue {
+		return fmt.Errorf("%w: tag %q exceeds %d bytes", ErrInvalidPartnerUser, key, partnerUserMaxTagValue)
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return fmt.Errorf("%w: tag %q contains a control character", ErrInvalidPartnerUser, key)
+		}
+	}
+	return nil
 }
 
 func scanPartnerUser(row interface{ Scan(...any) error }) (PartnerUser, error) {
@@ -698,7 +743,7 @@ func (s *Store) DeletePartnerUserModelAllowlist(ctx context.Context, actor, user
 func (s *Store) PartnerUserByMaaSUsername(ctx context.Context, username string) (PartnerUser, error) {
 	user, err := scanPartnerUser(s.db.QueryRowContext(ctx, partnerUserSelect+`
 		JOIN partner_user_logins l ON l.user_id = p.user_id
-		WHERE l.username = $1`, strings.TrimSpace(username)))
+		WHERE LOWER(l.username) = LOWER($1) AND l.is_current AND p.active`, strings.TrimSpace(username)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return PartnerUser{}, ErrPartnerUserNotFound
 	}

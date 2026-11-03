@@ -198,6 +198,44 @@ func (h *DashboardHandler) HandleTools(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, result)
 }
 
+func (h *DashboardHandler) HandleGeo(w http.ResponseWriter, r *http.Request) {
+	since, until := parseTimeWindow(r)
+	group, user, model := parseFilters(r)
+	var ok bool
+	if user, ok = resolveScope(w, r, h.store, h.cfg, user); !ok {
+		return
+	}
+	result, err := h.store.GetDashboardGeo(r.Context(), since, until, group, user, model)
+	if err != nil {
+		slog.Error("dashboard geo query failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if result == nil {
+		result = []storage.GeoSummary{}
+	}
+	writeJSON(w, result)
+}
+
+func (h *DashboardHandler) HandleCostCenters(w http.ResponseWriter, r *http.Request) {
+	since, until := parseTimeWindow(r)
+	group, user, model := parseFilters(r)
+	var ok bool
+	if user, ok = resolveScope(w, r, h.store, h.cfg, user); !ok {
+		return
+	}
+	result, err := h.store.GetDashboardCostCenters(r.Context(), since, until, group, user, model)
+	if err != nil {
+		slog.Error("dashboard cost-center query failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if result == nil {
+		result = []storage.CostCenterSummary{}
+	}
+	writeJSON(w, result)
+}
+
 func (h *DashboardHandler) HandleTimeline(w http.ResponseWriter, r *http.Request) {
 	since, until := parseTimeWindow(r)
 	group, user, model := parseFilters(r)
@@ -261,10 +299,16 @@ func parseTimeWindow(r *http.Request) (since, until time.Time) {
 		return time.Date(y, m, 1, 0, 0, 0, 0, now.Location()), now
 	case "30d":
 		return now.Add(-30 * 24 * time.Hour), now
+	case "90d":
+		return now.Add(-90 * 24 * time.Hour), now
+	case "180d":
+		return now.Add(-180 * 24 * time.Hour), now
+	case "365d":
+		return now.Add(-365 * 24 * time.Hour), now
 	case "custom":
 		const layout = "2006-01-02"
-		from, errFrom := time.Parse(layout, r.URL.Query().Get("from"))
-		to, errTo := time.Parse(layout, r.URL.Query().Get("to"))
+		from, errFrom := time.ParseInLocation(layout, r.URL.Query().Get("from"), now.Location())
+		to, errTo := time.ParseInLocation(layout, r.URL.Query().Get("to"), now.Location())
 		if errFrom != nil || errTo != nil {
 			return now.Add(-7 * 24 * time.Hour), now
 		}
