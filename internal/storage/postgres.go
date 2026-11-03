@@ -119,10 +119,11 @@ type Store struct {
 	// RunRollupMaintenance, servingRollups the last decision made — used
 	// only to log transitions once. Enforcement and the Recent feed never
 	// consult these; they stay on raw for freshness and detail.
-	useRollups     atomic.Bool
-	liveRollups    atomic.Bool
-	parityHealthy  atomic.Bool
-	servingRollups atomic.Bool
+	useRollups      atomic.Bool
+	liveRollups     atomic.Bool
+	parityHealthy   atomic.Bool
+	parityConfirmed atomic.Bool
+	servingRollups  atomic.Bool
 	// parityMetaMissing suppresses the "worker has not reported yet" warning
 	// after the first occurrence; it resets once a verdict appears.
 	parityMetaMissing atomic.Bool
@@ -1473,9 +1474,23 @@ type RecentEvent struct {
 	StatusCode *int `json:"status_code"`
 }
 
+// recentActivityWindow caps the walk-back for FILTERED recent-activity
+// lookups. Without it, a group/user/model with no recent traffic makes the
+// timestamp index scan backwards until it finds LIMIT matches, which grows
+// with the age of the ledger. "Recent" beyond a month is not a useful answer
+// on these surfaces, and the unfiltered feed keeps its pure LIMIT behaviour.
+const recentActivityWindow = 30 * 24 * time.Hour
+
 func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, model string) ([]RecentEvent, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
+	}
+	filtered := group != "" || user != "" || model != ""
+	recentClause := ""
+	args := []any{limit, group, user, model}
+	if filtered {
+		recentClause = " AND e.timestamp >= $5"
+		args = append(args, time.Now().UTC().Add(-recentActivityWindow))
 	}
 	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
 		SELECT e.timestamp, e.username, %s, COALESCE(pu.tags->>'country',''), COALESCE(pu.tags->>'state',''), COALESCE(pu.tags->>'cost_center_description',''), COALESCE(NULLIF(e.group_name, ''), 'unknown'), e.model, COALESCE(e.provider,''),
@@ -1489,9 +1504,9 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 		LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
 		LEFT JOIN partner_user_logins pul ON pul.username = e.username AND pul.is_current
 		LEFT JOIN partner_users pu ON pu.user_id = pul.user_id
-		WHERE ($2 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $2) AND ($3 = '' OR e.username = ANY(string_to_array($3, ','))) AND ($4 = '' OR e.model = $4)
+		WHERE ($2 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $2) AND ($3 = '' OR e.username = ANY(string_to_array($3, ','))) AND ($4 = '' OR e.model = $4)`+recentClause+`
 		ORDER BY e.timestamp DESC
-		LIMIT $1`, displayNameExpr, costUSDExpr), limit, group, user, model)
+		LIMIT $1`, displayNameExpr, costUSDExpr), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1613,6 +1628,11 @@ var migrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_group ON usage_events (group_name)`,
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_model ON usage_events (model)`,
 	`CREATE INDEX IF NOT EXISTS idx_usage_events_ts_user_model ON usage_events (timestamp, username, model)`,
+	// Filtered /recent (group scope) otherwise walks the timestamp index
+	// backwards until it finds LIMIT matches, so a group with no recent
+	// traffic scans more of the ledger as it grows. CONCURRENTLY: a deploy
+	// must not block ingestion writes while the index builds.
+	`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_group_ts ON usage_events (group_name, timestamp DESC)`,
 	`CREATE TABLE IF NOT EXISTS user_month_spend (
 		username TEXT NOT NULL,
 		month DATE NOT NULL,

@@ -1,0 +1,110 @@
+package handler
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"net/http"
+	"time"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
+	"golang.org/x/sync/singleflight"
+
+	"github.com/redhat-et/pricetag-metering/internal/config"
+)
+
+// Manager-page response cache.
+//
+// /api/v1/org/usage and /api/v1/org/charts are comparatively expensive
+// (rollup aggregation plus directory joins) and are hit again whenever a
+// manager changes range, opens a person, or navigates back. They are not
+// polled, so a short TTL is enough; the point is to collapse duplicate
+// computations, not to bound a 30s fan-out like DashboardCache.
+//
+// Keying: the resolved caller identity plus method, path and raw query. The
+// response depends only on who the caller is (which fixes their subtree) and
+// the query, so two callers can never share an entry. Authorization still
+// runs on every request because this wrapper sits INSIDE managerAuth.
+type orgResponseCache struct {
+	cfg     config.Config
+	entries *expirable.LRU[string, cachedResponse]
+	flights singleflight.Group
+	enabled bool
+}
+
+func newOrgResponseCache(cfg config.Config) *orgResponseCache {
+	if !cfg.DashboardCacheEnabled {
+		return &orgResponseCache{}
+	}
+	ttl := time.Duration(cfg.DashboardCacheTTLSeconds) * time.Second
+	if ttl <= 0 {
+		ttl = 60 * time.Second
+	}
+	return &orgResponseCache{
+		cfg:     cfg,
+		entries: expirable.NewLRU[string, cachedResponse](256, nil, ttl),
+		enabled: true,
+	}
+}
+
+func (c *orgResponseCache) wrap(next http.HandlerFunc) http.HandlerFunc {
+	if c == nil || !c.enabled {
+		return next
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if bypassDashboardCache(r) {
+			next(w, r)
+			return
+		}
+		identity := caller(r, c.cfg)
+		if identity == "" {
+			// No resolved identity: let the handler produce its own
+			// unauthorized/forbidden response instead of caching it.
+			next(w, r)
+			return
+		}
+		key := orgCacheKey(identity, r)
+		if entry, found := c.entries.Get(key); found {
+			writeCached(w, entry)
+			return
+		}
+		v, _, _ := c.flights.Do(key, func() (any, error) {
+			if entry, found := c.entries.Get(key); found {
+				return entry, nil
+			}
+			inner := &capture{header: make(http.Header)}
+			// Do not let the first caller's disconnect cancel a computation
+			// other waiters are riding.
+			ctx := context.WithoutCancel(r.Context())
+			next.ServeHTTP(inner, r.WithContext(ctx))
+			if inner.status == http.StatusOK {
+				entry := cachedResponse{
+					status:      inner.status,
+					contentType: inner.header.Get("Content-Type"),
+					body:        append([]byte(nil), inner.body.Bytes()...),
+				}
+				c.entries.Add(key, entry)
+				return entry, nil
+			}
+			return responseOnly{rec: inner}, nil
+		})
+		switch res := v.(type) {
+		case cachedResponse:
+			writeCached(w, res)
+		case responseOnly:
+			res.rec.replayTo(w)
+		}
+	}
+}
+
+func orgCacheKey(identity string, r *http.Request) string {
+	h := sha256.New()
+	h.Write([]byte(identity))
+	h.Write([]byte("\n"))
+	h.Write([]byte(r.Method))
+	h.Write([]byte("\n"))
+	h.Write([]byte(r.URL.Path))
+	h.Write([]byte("\n"))
+	h.Write([]byte(r.URL.RawQuery))
+	return hex.EncodeToString(h.Sum(nil))
+}

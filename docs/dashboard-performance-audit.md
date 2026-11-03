@@ -48,7 +48,7 @@ responses**; they add no new SQL.
 | --- | --- | --- | --- |
 | `/api/v1/org/usage` (all org, November) | raw → rollup | **9.28 s**, ~1.07M shared buffers | **71 ms**, 32K buffers |
 | `/api/v1/org/charts` (5 aggregates) | rollup | ~250–400 ms total | unchanged |
-| `/api/v1/org/person` (3-day drill-down) | raw | 232 ms | unchanged |
+| `/api/v1/org/person` (3-day drill-down) | raw → rollup | 232 ms | 17 ms |
 
 The org table was the one real regression: it joined every login to every raw
 event in the window and re-priced them, then ran an `EXISTS` subquery per
@@ -89,36 +89,49 @@ normal page load.
 3. **`/directory-users` bypassed the response cache (fixed).** It was queried
    on every 30s dashboard refresh despite being static directory data. It now
    rides the 60s cache.
-4. **`/recent` has no lower time bound (open, bounded today).** Unfiltered it
-   is an index-only backwards scan (1 ms). With a group filter that has no
-   recent rows it walks the timestamp index backwards until it finds 20
-   matches: 22 ms for a small group after 48K rows scanned today, and it grows
-   linearly with table age. Mitigation options are below.
-5. **Raw fallback is a cliff (open).** If `DASHBOARD_USE_ROLLUPS=true` but the
-   parity probe goes unhealthy, all eight aggregates silently revert to raw
-   queries over the full window. The 60s cache and single-flight bound the
-   damage to one computation per key per minute, but that is still multiple
-   multi-second scans. The rollup tables are maintained even when parity is
-   red, so serving the (slightly stale) rollups would be safer than falling
-   back to raw.
-6. **`/org/person` still scans the caller's raw rows three times.** It is
-   scoped to one person's logins (28K rows for the busiest user, 232 ms) and
-   only runs on drill-down, so it is not a polling load. A rollup variant is
-   possible but not urgent.
+4. **`/recent` filter walk-back (fixed).** Unfiltered it is an index-only
+   backwards scan (1 ms). A group filter with no recent matches used to walk
+   the timestamp index until it found 20 rows: 22 ms for a small group after
+   48K rows scanned, growing with table age. Filtered lookups now carry a
+   30-day lower bound, and `(group_name, timestamp DESC)` makes the
+   small-group case a bounded index scan.
+5. **Raw fallback was a cliff (fixed).** If `DASHBOARD_USE_ROLLUPS=true` but
+   the parity probe went unhealthy, all eight aggregates silently reverted to
+   raw queries over the full window. Parity is now an alert, not a read gate:
+   once a deployment has confirmed parity green, a later red check keeps
+   serving the continuously rebuilt rollups (and logs/metrics the alert).
+   The flag remains the explicit rollback. The last-known verdict is persisted
+   in `rollup_meta`, so a restart does not reopen the cliff while the first
+   check runs.
+6. **`/org/person` now uses the rollup too (fixed).** The raw drill-down was
+   232 ms for the busiest user; the hourly variant is 17 ms.
+7. **Manager endpoints are cached per caller (fixed).** `/api/v1/org/usage`
+   and `/api/v1/org/charts` share the dashboard TTL and single-flight, keyed
+   by resolved caller identity plus query, inside the auth wrapper.
+8. **Partner batch report moved to the read replica (fixed).**
+   `/api/v1/usage/reports` keeps its raw aggregate because it exposes
+   `reasoning_tokens`, which `usage_hourly` does not carry; moving it off the
+   primary removes the contention without changing the response.
 
-## Recommended follow-ups (not applied here)
+## Follow-ups implemented in the performance follow-up PR
 
-Index changes run on the production schema at the next deploy, and the
-EnMaaS production database is out of scope for this change. These should be
-scheduled deliberately:
+1. **Filtered-recent index.** `CREATE INDEX CONCURRENTLY IF NOT EXISTS
+   idx_usage_events_group_ts ON usage_events (group_name, timestamp DESC)`,
+   run through the normal migration path (concurrent, so ingestion writes are
+   never blocked). The planner uses it for the small-group case; for a
+   mid-size group the timestamp walk is already ~20 ms.
+2. **Parity red no longer falls back to raw.** Reads are gated on
+   flag + backfill-ready + parity confirmed once, with the last verdict
+   hydrated from `rollup_meta` on boot. A red check is an alert; the rollups
+   keep being rebuilt every maintenance tick.
+3. **`/org/person` uses `usage_hourly`** when live, with the raw query kept
+   as the parity fallback. `/api/v1/usage/reports` goes to the read replica.
+   (It exposes `reasoning_tokens`, which the rollup does not carry.)
+4. **Manager response cache** for `/api/v1/org/usage` and `/org/charts`,
+   keyed by resolved caller + query, same TTL as the dashboard cache.
 
-1. `CREATE INDEX CONCURRENTLY idx_usage_events_group_ts ON usage_events (group_name, timestamp DESC)`
-   — makes the filtered `/recent` lookup a bounded index scan regardless of
-   table age.
-2. Replace the raw fallback with "serve stale rollups + alert" (or a circuit
-   breaker that returns the last cached response) so a parity blip cannot
-   trigger full-ledger scans.
-3. Optionally move `/org/person` onto `usage_hourly` and cache `/org/usage`
-   and `/org/charts` per (scope, range) if manager concurrency grows.
-4. Keep an eye on `usage_events` retention (PSAP-3111). The raw paths still
-   need a bounded recent window; retention is the structural fix.
+## Remaining follow-up
+
+`usage_events` retention (PSAP-3111) is still the structural fix for the raw
+paths (`/recent`, the parity fallback, and the reprice job). The app-level
+bounds above keep those reads predictable, but the table itself keeps growing.

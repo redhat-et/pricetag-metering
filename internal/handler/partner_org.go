@@ -15,10 +15,17 @@ import (
 type PartnerOrgHandler struct {
 	store *storage.Store
 	cfg   config.Config
+	cache *orgResponseCache
 }
 
 func NewPartnerOrgHandler(store *storage.Store, cfg config.Config) *PartnerOrgHandler {
-	return &PartnerOrgHandler{store: store, cfg: cfg}
+	return &PartnerOrgHandler{store: store, cfg: cfg, cache: newOrgResponseCache(cfg)}
+}
+
+// Cached wraps a manager read in the short-lived, per-caller response cache.
+// Auth runs outside this wrapper, so a hit never skips session validation.
+func (h *PartnerOrgHandler) Cached(next http.HandlerFunc) http.HandlerFunc {
+	return h.cache.wrap(next)
 }
 
 // ServeManager serves the manager.html page from the embedded dashboard FS.
