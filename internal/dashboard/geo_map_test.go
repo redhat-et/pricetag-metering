@@ -61,6 +61,7 @@ func TestGeoMapUsesCountryFillHeat(t *testing.T) {
 		"queueGeoFlashes(data)",
 		"geoActivityTimer=setTimeout(step,1100)",
 		"geo-spark-dot",
+		"geo-spark-light",
 		"var t=geoIntensity(value,max),eased=t*t*(3-2*t),count=geoHotspotCount(value,max);",
 		"parts.path.classed('is-on',eased>0)",
 		"const countryHeatLayer=svg.append('g').attr('class','geo-country-heat-layer');",

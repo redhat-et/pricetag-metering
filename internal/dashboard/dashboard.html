@@ -140,6 +140,10 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-glow.geo-activity-spark .geo-glow-halo,#geo-map .geo-glow.geo-activity-spark .geo-glow-core{filter:none}
 #geo-map .geo-spark-halo{pointer-events:none;mix-blend-mode:screen;opacity:0;filter:url(#geo-glow-blur);animation:geoSparkHalo 2.4s ease-out forwards}
 #geo-map .geo-spark-dot{pointer-events:none;mix-blend-mode:screen;opacity:0;animation:geoSparkDot 2.4s ease-out forwards}
+/* On a light (high-heat) country a white spark is invisible, so the light
+   variant drops screen blending and draws a dark core inside a white ring. */
+#geo-map .geo-spark-light .geo-spark-halo{mix-blend-mode:normal;animation-name:geoSparkHaloSoft}
+#geo-map .geo-spark-light .geo-spark-dot{mix-blend-mode:normal}
 .geo-tooltip{position:absolute;pointer-events:none;display:none;background:rgba(5,18,29,.97);border:1px solid rgba(210,235,241,.5);border-radius:8px;padding:9px 12px;font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.58),0 0 22px rgba(178,225,239,.2);z-index:5;white-space:nowrap;color:var(--text);transform:scale(1);transform-origin:bottom left;animation:geoTooltipPop .16s ease-out}
 .geo-tooltip b{color:#fff;font-size:13px}
 @keyframes geoTooltipPop{from{opacity:0;transform:translateY(5px) scale(.88)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -166,6 +170,7 @@ tr.clickable{cursor:pointer}
 @keyframes geoActivitySpark{0%{opacity:0}18%{opacity:1}55%{opacity:.9}100%{opacity:0}}
 @keyframes geoSparkDot{0%{opacity:0}18%{opacity:1}55%{opacity:.92}100%{opacity:0}}
 @keyframes geoSparkHalo{0%{opacity:0}18%{opacity:.9}55%{opacity:.5}100%{opacity:0}}
+@keyframes geoSparkHaloSoft{0%{opacity:0}18%{opacity:.45}55%{opacity:.25}100%{opacity:0}}
 .user-rank{display:flex;flex-direction:column;gap:5px;min-width:0}
 .user-rank .ur-row{display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:8px;font-size:12px;line-height:17px}
 .user-rank .ur-rank{color:var(--text2);font-size:10px;font-variant-numeric:tabular-nums;text-align:right}
@@ -1755,10 +1760,19 @@ function flashGeo(country,state,color){
   var id='geo-spark-'+(geoSparkSeq++);
   var group=geoSparkLayer.append('g').attr('data-spark',id);
   if(transform)group.attr('transform',transform);
+  var background=null;
+  if(country==='US'&&state&&geoStateGlows&&geoStateGlows.get(state))background=geoStateGlows.get(state).path.attr('fill');
+  if(!background)background=geoCountryHeatBase.get(country)||GEO_LAND_COLOR;
+  var bg=d3.color(background);
+  var onLight=!!bg&&(bg.r*.299+bg.g*.587+bg.b*.114)/255>.58;
+  if(onLight)group.classed('geo-spark-light',true);
   group.append('circle').attr('class','geo-spark-halo')
-    .attr('cx',cx+ox).attr('cy',cy+oy).attr('r',6.5).attr('fill',color||'#ffb36c');
+    .attr('cx',cx+ox).attr('cy',cy+oy).attr('r',6.5)
+    .attr('fill',onLight?'#2a1a12':(color||'#ffb36c'))
+    .attr('opacity',onLight?.18:undefined);
   group.append('circle').attr('class','geo-spark-dot')
-    .attr('cx',cx+ox).attr('cy',cy+oy).attr('r',2.4).attr('fill','#fff6e6');
+    .attr('cx',cx+ox).attr('cy',cy+oy).attr('r',2.4)
+    .attr('fill',onLight?'#0d2233':'#fff6e6');
   setTimeout(function(){group.remove();},2600);
 }
 function requestFlashColor(event){
