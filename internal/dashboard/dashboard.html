@@ -116,18 +116,19 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-graticule{display:none}
 #geo-map .geo-country-fill{fill:#394b59;stroke:none;pointer-events:none}
 #geo-map .geo-country-shadow{fill:#071421;stroke:#02070d;stroke-width:1.2;opacity:.9;pointer-events:none;filter:url(#geo-depth-shadow)}
-#geo-map .geo-country{fill:none;stroke:#f1d1ad;stroke-width:.24;vector-effect:non-scaling-stroke;opacity:.42;transition:stroke .18s,opacity .18s}
+#geo-map .geo-country{fill:none;stroke:#f1d1ad;stroke-width:.24;vector-effect:non-scaling-stroke;opacity:.42;pointer-events:all;transition:stroke .18s,stroke-width .18s,opacity .18s}
 #geo-map .geo-country.geo-active{stroke:#fff1df;opacity:.58}
 #geo-map .geo-state{fill:none;stroke:#e8c8a7;stroke-width:.18;vector-effect:non-scaling-stroke;opacity:.28;pointer-events:all}
 #geo-map .geo-country-heat,#geo-map .geo-state-heat{stroke:none;pointer-events:none;mix-blend-mode:normal;filter:none}
 #geo-map .geo-country-heat.is-on,#geo-map .geo-state-heat.is-on{opacity:1}
 #geo-map .geoHeatFlash{animation:geoHeatFlash 1.9s ease-out}
-#geo-map .geo-country:hover{stroke:#fff8ee;stroke-width:.42;opacity:.82}
+#geo-map .geo-country:hover,#geo-map .geo-country.geo-hover{stroke:#fff8ee;stroke-width:.82;opacity:.98}
 #geo-map .geo-glow{pointer-events:none;mix-blend-mode:screen;opacity:0}
 #geo-map .geo-glow-halo{filter:url(#geo-glow-blur)}
 #geo-map .geo-glow-core{filter:url(#geo-core-blur)}
 #geo-map .geo-glow.is-on{opacity:1}
 #geo-map .geo-glow.geo-flash{animation:geoGlowFlash 1.9s ease-out}
+#geo-map .geo-glow.geo-activity-spark{animation:geoActivitySpark 1.45s ease-out}
 .geo-tooltip{position:absolute;pointer-events:none;display:none;background:rgba(5,18,29,.97);border:1px solid rgba(210,235,241,.5);border-radius:8px;padding:9px 12px;font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.58),0 0 22px rgba(178,225,239,.2);z-index:5;white-space:nowrap;color:var(--text);transform:scale(1);transform-origin:bottom left;animation:geoTooltipPop .16s ease-out}
 .geo-tooltip b{color:#fff;font-size:13px}
 @keyframes geoTooltipPop{from{opacity:0;transform:translateY(5px) scale(.88)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -151,6 +152,7 @@ tr.clickable{cursor:pointer}
 .geo-flash{animation:geoFlash 1.9s ease-out}
 @keyframes geoFlash{0%{filter:brightness(2.8) drop-shadow(0 0 7px var(--geo-flash-color,#fff));stroke:var(--geo-flash-color,#fff);stroke-width:1.6}45%{filter:brightness(1.5) drop-shadow(0 0 4px var(--geo-flash-color,#fff));stroke:var(--geo-flash-color,#fff);stroke-width:1}100%{filter:none;stroke:#30405e;stroke-width:.35}}
 @keyframes geoGlowFlash{0%{opacity:1;filter:brightness(3.8) drop-shadow(0 0 12px #ffb5ef)}45%{opacity:.95;filter:brightness(1.8) drop-shadow(0 0 6px #f04bff)}100%{opacity:1;filter:none}}
+@keyframes geoActivitySpark{0%{opacity:0;transform:scale(.35)}18%{opacity:1;transform:scale(1.35);filter:brightness(3.5) drop-shadow(0 0 9px #fff2d8)}55%{opacity:.85;transform:scale(1);filter:brightness(1.6) drop-shadow(0 0 4px #ffb36c)}100%{opacity:0;transform:scale(.55);filter:none}}
 .user-rank{display:flex;flex-direction:column;gap:5px;min-width:0}
 .user-rank .ur-row{display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:8px;font-size:12px;line-height:17px}
 .user-rank .ur-rank{color:var(--text2);font-size:10px;font-variant-numeric:tabular-nums;text-align:right}
@@ -609,7 +611,7 @@ let cachedGroups=[], cachedModels=[], cachedTools=[], chartUsers=[], directoryUs
 let cachedGeo=[], cachedCostCenters=[];
 // Recent-event keys from the previous refresh, used to flash only genuinely
 // new live requests on the map rather than replaying the whole feed.
-let lastRecentKeys=new Set(), pendingGeoFlashes=[];
+let lastRecentKeys=new Set(), pendingGeoFlashes=[], geoActivityCycle=0;
 // Overview payload of the current refresh; it carries the server-computed
 // "Saved · Hosted Models" KPI (the sum of the user table's saved_usd
 // column), which is what the card shows — no client-side re-derivation.
@@ -785,7 +787,10 @@ function renderRecent(data){
     if(lastRecentKeys.size&&!lastRecentKeys.has(key))fresh.push(r);
   });
   lastRecentKeys=nextKeys;
-  if(fresh.length)queueGeoFlashes(fresh);
+  // Replay the current recent-activity feed as a short, ordered star cycle on
+  // every refresh. The API is newest-first, so the most recent areas sparkle
+  // first and the cycle finishes well before the next 30-second refresh.
+  if(data&&data.length)queueGeoFlashes(data);
   tbody.innerHTML=data.map(r=>{
     const provColor=r.provider==='anthropic'?'var(--orange)':r.provider==='openai'?'var(--green)':'var(--cyan)';
     const client=friendlyClient(r.user_agent);
@@ -1651,7 +1656,7 @@ function renderGeoMap(){
     const heatColor=geoRankHeatColor(heatRankByCountry.get(code)||0);
     const heatFill=geoCountryHeatGradient(code,heatColor);
     if(value<=0&&heatValue<=0)return;
-    targets.push({p:p,value:value,dotValue:code==='US'&&geoHasUSStateData?0:value,heatValue:heatValue,heatColor:heatFill,glow:geoCountryGlows.get(code),dots:geoCountryDots.get(code),glowMax:countryMax,kind:'country',delay:(targets.length%48)*7});
+    targets.push({p:p,value:value,dotValue:code==='US'&&geoHasUSStateData?0:value,heatValue:heatValue,heatColor:heatFill,heatBase:heatColor,glow:geoCountryGlows.get(code),dots:geoCountryDots.get(code),glowMax:countryMax,kind:'country',delay:(targets.length%48)*7});
   });
   if(geoHasUSStateData){
     geoStatePaths.forEach(function(p,code){
@@ -1661,6 +1666,9 @@ function renderGeoMap(){
   function paint(t,value){
     if(t.kind==='country')t.p.attr('fill',t.heatColor);
     setGeoGlow(t.glow,t.heatValue*value,t.glowMax,t.heatColor);
+    if(t.kind==='country'&&t.glow){
+      t.glow.path.attr('stroke',t.heatBase).attr('stroke-width',t.heatValue*value>0?1.15:0).attr('stroke-opacity',t.heatValue*value>0?.28:0);
+    }
     setGeoDots(t.dots,(t.dotValue===undefined?t.value:t.dotValue)*value,dotMax);
   }
   if(!geoMapInView){
@@ -1722,7 +1730,14 @@ function flashGeo(country,state,color){
   setTimeout(function(){gn.classList.remove('geoHeatFlash');},2000);
   var dots=country==='US'&&state&&geoStateDots?geoStateDots.get(state):null;
   if(!dots&&geoCountryDots)dots=geoCountryDots.get(country);
-  if(dots)dots.forEach(function(dot){var node=dot.group.node();node.classList.remove('geo-flash');void node.getBoundingClientRect();node.classList.add('geo-flash');setTimeout(function(){node.classList.remove('geo-flash');},2000);});
+  if(dots&&dots.length){
+    var spark=dots[geoHash(country+'|'+state)%dots.length];
+    var node=spark.group.node();
+    node.classList.remove('geo-activity-spark');
+    void node.getBoundingClientRect();
+    node.classList.add('geo-activity-spark');
+    setTimeout(function(){node.classList.remove('geo-activity-spark');},1500);
+  }
 }
 function requestFlashColor(event){
   var client=friendlyClient(event&&event.user_agent||'');
@@ -1732,7 +1747,7 @@ function replayPendingGeoFlashes(){
   if(!geoMapReady||!geoMapInView||!pendingGeoFlashes.length)return;
   const queued=pendingGeoFlashes.slice(-20);
   pendingGeoFlashes=[];
-  queued.forEach(function(e,i){setTimeout(function(){flashGeo(e.country,e.state,e.color);},i*140);});
+  queueGeoFlashes(queued);
 }
 function setupGeoVisibility(){
   if(geoObserverStarted)return;
@@ -1752,8 +1767,14 @@ function setupGeoVisibility(){
   observer.observe(section);
 }
 function queueGeoFlashes(events){
-  (events||[]).slice(0,20).forEach(function(e,i){
-    setTimeout(function(){flashGeo(e.country,e.state,requestFlashColor(e));},i*120);
+  var cycle=++geoActivityCycle;
+  var queued=(events||[]).slice(0,20);
+  if(!geoMapReady||!geoMapInView){pendingGeoFlashes=queued;return;}
+  queued.forEach(function(e,i){
+    setTimeout(function(){
+      if(cycle!==geoActivityCycle)return;
+      flashGeo(e.country,e.state,requestFlashColor(e));
+    },i*180);
   });
 }
 
