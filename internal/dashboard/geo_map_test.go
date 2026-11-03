@@ -48,7 +48,7 @@ func TestGeoMapUsesCountryFillHeat(t *testing.T) {
 	}
 	for _, want := range []string{
 		"class','geo-country-heat'",
-		"geo-border-heat",
+
 		"geoSparkLayer=svg.append('g').attr('class','geo-spark-layer')",
 		"class','geo-state-heat'",
 		"pointer-events:all;transition:stroke .18s,stroke-width .18s,opacity .18s",

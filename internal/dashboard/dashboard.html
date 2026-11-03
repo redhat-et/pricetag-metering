@@ -125,11 +125,7 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-country.geo-active{stroke:#fff1df;opacity:.58}
 #geo-map .geo-state{fill:none;stroke:#e8c8a7;stroke-width:.18;vector-effect:non-scaling-stroke;opacity:.28;pointer-events:all}
 #geo-map .geo-country-heat{stroke:none;pointer-events:none;mix-blend-mode:normal;filter:none}
-/* Active countries paint their border in their own heat color at partial
-   opacity. Each border stroke straddles the shared boundary, so half of it
-   tints the neighbour's fill and half tints its own: the border line reads as
-   a crisp gradient between the two countries, with no blur. */
-#geo-map .geo-country.geo-border-heat{stroke-width:2.4;stroke-opacity:.62;vector-effect:non-scaling-stroke}
+
 #geo-map .geo-state-heat{stroke:none;pointer-events:none;mix-blend-mode:normal;filter:none}
 #geo-map .geo-country-heat.is-on,#geo-map .geo-state-heat.is-on{opacity:1}
 #geo-map .geoHeatFlash{animation:geoHeatFlash 1.9s ease-out}
@@ -1588,7 +1584,7 @@ async function initGeoMap(){
       if(code)geoCountryPaths.set(code,p);
        p.on('mouseenter',function(evt){if(!code)return;p.style('stroke',geoHoverBorderColor(code)).classed('geo-hover',true);const v=(geoValueByCountry.get(code)||0);geoMapTooltip(evt,geoRegionName(code),v,'country total');})
          .on('mousemove',function(evt){const v=(geoValueByCountry.get(code)||0);if(!code)return;geoMapTooltip(evt,geoRegionName(code),v,'country total');})
-         .on('mouseleave',function(){p.style('stroke',geoCountryHeatBase.get(code)||null).classed('geo-hover',false);hideGeoMapTooltip();});
+         .on('mouseleave',function(){p.style('stroke',null).classed('geo-hover',false);hideGeoMapTooltip();});
     });
 
     const stateGlowLayer=svg.append('g').attr('class','geo-state-glow-layer');
@@ -1670,7 +1666,7 @@ function renderGeoMap(){
     const value=byCountry.get(code)||0;
     const heatBase=geoRankHeatColor(heatRankByCountry.get(code)||0);
     geoCountryHeatBase.set(code,heatBase);
-    p.attr('fill',heatBase).classed('geo-active',value>0).style('stroke',null).classed('geo-border-heat',false);
+    p.attr('fill',heatBase).classed('geo-active',value>0).style('stroke',null);
   });
 
   const targets=[];
@@ -1690,10 +1686,7 @@ function renderGeoMap(){
   function paint(t,value){
     if(t.kind==='country')t.p.attr('fill',t.heatColor);
     setGeoGlow(t.glow,t.heatValue*value,t.glowMax,t.heatColor);
-    if(t.kind==='country'){
-      var heated=t.heatValue*value>0;
-      t.p.style('stroke',heated?t.heatBase:null).classed('geo-border-heat',heated);
-    }
+    if(t.kind==='country')t.p.style('stroke',null);
     setGeoDots(t.dots,(t.dotValue===undefined?t.value:t.dotValue)*value,dotMax);
   }
   if(!geoMapInView){
