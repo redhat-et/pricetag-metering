@@ -114,7 +114,7 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-ocean{fill:url(#geo-ocean-grad)}
 #geo-map .geo-atmosphere{fill:none;stroke:#8ac7db;stroke-width:1.2;opacity:.13;filter:url(#geo-atmosphere-glow);pointer-events:none}
 #geo-map .geo-graticule{display:none}
-#geo-map .geo-country-fill{fill:#1b5790;stroke:none;pointer-events:none}
+#geo-map .geo-country-fill{fill:#394b59;stroke:none;pointer-events:none}
 #geo-map .geo-country-shadow{fill:#071421;stroke:#02070d;stroke-width:1.2;opacity:.9;pointer-events:none;filter:url(#geo-depth-shadow)}
 #geo-map .geo-country{fill:none;stroke:#f1d1ad;stroke-width:.24;vector-effect:non-scaling-stroke;opacity:.42;transition:stroke .18s,opacity .18s}
 #geo-map .geo-country.geo-active{stroke:#fff1df;opacity:.58}
@@ -1335,9 +1335,8 @@ function geoScaleTransform(center,scale){
   if(!center||scale===1)return null;
   return 'translate('+center[0]+','+center[1]+') scale('+scale+') translate('+(-center[0])+','+(-center[1])+')';
 }
-var GEO_LAND_COLOR='#1b5790';
+var GEO_LAND_COLOR='#394b59';
 var GEO_GLOW_STOPS=['#394b59','#8d5b3d','#d47b3e','#ffb36c','#fff2d8'];
-var GEO_RANK_HEAT_STOPS=['#1688ef','#4b55e8','#a947d8','#e77eae','#ffef08'];
 var geoMapReady=false,geoMapLoading=false,geoCountryPaths=null,geoStatePaths=null,geoCountryGlows=null,geoStateGlows=null,geoCountryDots=null,geoStateDots=null,geoContinentByCountry=new Map(),geoAnimFrame=null,geoMaxValue=0;
 var geoMapInView=false,geoPaintPending=false,geoObserverStarted=false;
 var geoHasUSStateData=false;
@@ -1375,7 +1374,7 @@ function geoLandColorFor(value,max){
 }
 function geoRankHeatColor(rank){
   if(!(rank>0))return GEO_LAND_COLOR;
-  return d3.interpolateRgbBasis(GEO_RANK_HEAT_STOPS)(Math.max(0,Math.min(1,(11-rank)/10)));
+  return d3.interpolateRgbBasis(GEO_GLOW_STOPS)(Math.max(0,Math.min(1,(11-rank)/10)));
 }
 function geoHotspotCount(value,max){
   var t=geoIntensity(value,max);
@@ -1383,11 +1382,11 @@ function geoHotspotCount(value,max){
 }
 function geoGlowRadius(value,max){
   var t=geoIntensity(value,max);
-  return t>0?2+t*8:0;
+  return t>0?1.5+t*4:0;
 }
 function geoGlowCoreRadius(value,max){
   var t=geoIntensity(value,max);
-  return t>0?.7+t*1.8:0;
+  return t>0?.55+t*1.2:0;
 }
 function geoGlowOpacity(value,max){
   var t=geoIntensity(value,max);
@@ -1405,7 +1404,7 @@ function geoDotCluster(layer,code,centroid,transform){
   var seed=geoHash(code),dots=[];
    for(var i=0;i<24;i++){
     var angle=((seed%360)+i*137.5)*Math.PI/180;
-    var distance=i===0?0:5+((seed>>>((i%4)*8))%19);
+     var distance=i===0?0:1.5+((seed>>>((i%4)*8))%8);
     var x=centroid[0]+Math.cos(angle)*distance;
     var y=centroid[1]+Math.sin(angle)*distance*.72;
     var dot=cluster.append('g').attr('class','geo-glow');
@@ -1484,7 +1483,7 @@ async function initGeoMap(){
     coreGrad.append('stop').attr('offset','48%').attr('stop-color','#ffd39b').attr('stop-opacity','.88');
     coreGrad.append('stop').attr('offset','100%').attr('stop-color','#ff9b52').attr('stop-opacity','0');
     defs.append('filter').attr('id','geo-glow-blur').attr('x','-70%').attr('y','-70%').attr('width','240%').attr('height','240%')
-      .append('feGaussianBlur').attr('stdDeviation','7');
+      .append('feGaussianBlur').attr('stdDeviation','2.5');
     defs.append('filter').attr('id','geo-core-blur').attr('x','-80%').attr('y','-80%').attr('width','260%').attr('height','260%')
       .append('feGaussianBlur').attr('stdDeviation','1.5');
     const depthShadow=defs.append('filter').attr('id','geo-depth-shadow').attr('x','-30%').attr('y','-20%').attr('width','170%').attr('height','170%');
@@ -1630,7 +1629,7 @@ function renderGeoMap(){
     const heatValue=value;
     const heatColor=geoRankHeatColor(heatRankByCountry.get(code)||0);
     if(value<=0&&heatValue<=0)return;
-    targets.push({p:p,value:value,heatValue:heatValue,heatColor:heatColor,glow:geoCountryGlows.get(code),dots:geoCountryDots.get(code),glowMax:countryMax,kind:'country',delay:(targets.length%48)*7});
+    targets.push({p:p,value:value,dotValue:code==='US'&&geoHasUSStateData?0:value,heatValue:heatValue,heatColor:heatColor,glow:geoCountryGlows.get(code),dots:geoCountryDots.get(code),glowMax:countryMax,kind:'country',delay:(targets.length%48)*7});
   });
   if(geoHasUSStateData){
     geoStatePaths.forEach(function(p,code){
@@ -1640,7 +1639,7 @@ function renderGeoMap(){
   function paint(t,value){
     if(t.kind==='country')t.p.attr('fill',t.heatColor);
     setGeoGlow(t.glow,t.heatValue*value,t.glowMax,t.heatColor);
-    setGeoDots(t.dots,t.value*value,dotMax);
+    setGeoDots(t.dots,(t.dotValue===undefined?t.value:t.dotValue)*value,dotMax);
   }
   if(!geoMapInView){
     // Show final fills before the section is visible, then animate them when
