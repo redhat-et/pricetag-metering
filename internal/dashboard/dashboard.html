@@ -125,7 +125,7 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-country.geo-active{stroke:#fff1df;opacity:.58}
 #geo-map .geo-state{fill:none;stroke:#e8c8a7;stroke-width:.18;vector-effect:non-scaling-stroke;opacity:.28;pointer-events:all}
 #geo-map .geo-country-heat{stroke:none;pointer-events:none;mix-blend-mode:normal;filter:none}
-#geo-map .geo-country-transition{fill:none;stroke:currentColor;stroke-width:8;stroke-opacity:.3;vector-effect:non-scaling-stroke;pointer-events:none;filter:url(#geo-country-edge-blur)}
+#geo-map .geo-country-transition{fill:none;stroke:currentColor;stroke-width:13;stroke-opacity:.42;vector-effect:non-scaling-stroke;pointer-events:none;filter:url(#geo-country-edge-blur)}
 #geo-map .geo-state-heat{stroke:none;pointer-events:none;mix-blend-mode:normal;filter:none}
 #geo-map .geo-country-heat.is-on,#geo-map .geo-state-heat.is-on{opacity:1}
 #geo-map .geoHeatFlash{animation:geoHeatFlash 1.9s ease-out}
@@ -138,6 +138,8 @@ tr.clickable{cursor:pointer}
 #geo-map .geo-glow.geo-flash{animation:geoGlowFlash 1.9s ease-out}
 #geo-map .geo-glow.geo-activity-spark{animation:geoActivitySpark 1.45s ease-out;filter:none;transform:none}
 #geo-map .geo-glow.geo-activity-spark .geo-glow-halo,#geo-map .geo-glow.geo-activity-spark .geo-glow-core{filter:none}
+#geo-map .geo-spark-halo{pointer-events:none;mix-blend-mode:screen;opacity:0;filter:url(#geo-glow-blur);animation:geoSparkHalo 1.8s ease-out forwards}
+#geo-map .geo-spark-dot{pointer-events:none;mix-blend-mode:screen;opacity:0;animation:geoSparkDot 1.8s ease-out forwards}
 .geo-tooltip{position:absolute;pointer-events:none;display:none;background:rgba(5,18,29,.97);border:1px solid rgba(210,235,241,.5);border-radius:8px;padding:9px 12px;font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.58),0 0 22px rgba(178,225,239,.2);z-index:5;white-space:nowrap;color:var(--text);transform:scale(1);transform-origin:bottom left;animation:geoTooltipPop .16s ease-out}
 .geo-tooltip b{color:#fff;font-size:13px}
 @keyframes geoTooltipPop{from{opacity:0;transform:translateY(5px) scale(.88)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -162,6 +164,8 @@ tr.clickable{cursor:pointer}
 @keyframes geoFlash{0%{filter:brightness(2.8) drop-shadow(0 0 7px var(--geo-flash-color,#fff));stroke:var(--geo-flash-color,#fff);stroke-width:1.6}45%{filter:brightness(1.5) drop-shadow(0 0 4px var(--geo-flash-color,#fff));stroke:var(--geo-flash-color,#fff);stroke-width:1}100%{filter:none;stroke:#30405e;stroke-width:.35}}
 @keyframes geoGlowFlash{0%{opacity:1;filter:brightness(3.8) drop-shadow(0 0 12px #ffb5ef)}45%{opacity:.95;filter:brightness(1.8) drop-shadow(0 0 6px #f04bff)}100%{opacity:1;filter:none}}
 @keyframes geoActivitySpark{0%{opacity:0}18%{opacity:1}55%{opacity:.9}100%{opacity:0}}
+@keyframes geoSparkDot{0%{opacity:0}18%{opacity:1}55%{opacity:.92}100%{opacity:0}}
+@keyframes geoSparkHalo{0%{opacity:0}18%{opacity:.9}55%{opacity:.5}100%{opacity:0}}
 .user-rank{display:flex;flex-direction:column;gap:5px;min-width:0}
 .user-rank .ur-row{display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:8px;font-size:12px;line-height:17px}
 .user-rank .ur-rank{color:var(--text2);font-size:10px;font-variant-numeric:tabular-nums;text-align:right}
@@ -623,6 +627,7 @@ let cachedGeo=[], cachedCostCenters=[];
 // Recent-event keys from the previous refresh, used to flash only genuinely
 // new live requests on the map rather than replaying the whole feed.
 let lastRecentKeys=new Set(), pendingGeoFlashes=[], geoActivityCycle=0;
+let geoActivityTimer=null, geoActivityTick=0, geoSparkSeq=0;
 // Overview payload of the current refresh; it carries the server-computed
 // "Saved · Hosted Models" KPI (the sum of the user table's saved_usd
 // column), which is what the card shows — no client-side re-derivation.
@@ -1588,9 +1593,9 @@ async function initGeoMap(){
       if(transform)borderGroup.attr('transform',transform);
       const p=borderGroup.append('path').datum(f).attr('d',path).attr('class','geo-country').attr('data-country',code);
       if(code)geoCountryPaths.set(code,p);
-       p.on('mouseenter',function(evt){if(!code)return;geoHoverZoom(borderGroup,transform,centroid,true);p.attr('stroke',geoHoverBorderColor(code)).classed('geo-hover',true);const v=(geoValueByCountry.get(code)||0);geoMapTooltip(evt,geoRegionName(code),v,'country total');})
+       p.on('mouseenter',function(evt){if(!code)return;p.style('stroke',geoHoverBorderColor(code)).classed('geo-hover',true);const v=(geoValueByCountry.get(code)||0);geoMapTooltip(evt,geoRegionName(code),v,'country total');})
          .on('mousemove',function(evt){const v=(geoValueByCountry.get(code)||0);if(!code)return;geoMapTooltip(evt,geoRegionName(code),v,'country total');})
-         .on('mouseleave',function(){geoHoverZoom(borderGroup,transform,centroid,false);p.attr('stroke',null).classed('geo-hover',false);hideGeoMapTooltip();});
+         .on('mouseleave',function(){p.style('stroke',null).classed('geo-hover',false);hideGeoMapTooltip();});
     });
 
     const stateGlowLayer=svg.append('g').attr('class','geo-state-glow-layer');
@@ -1610,9 +1615,9 @@ async function initGeoMap(){
          geoStateGlows.set(code,{path:stateHeatLayer.append('path').datum(f).attr('d',path).attr('class','geo-state-heat').attr('data-state',code)});
          geoStateDots.set(code,geoDotCluster(stateGlowLayer,code,centroid,null));
        }
-       p.on('mouseenter',function(evt){const v=geoHasUSStateData?(geoValueByState.get('US|'+code)||0):(geoValueByCountry.get('US')||0);geoHoverZoom(stateGroup,null,centroid,true);p.attr('stroke','#071421').classed('geo-hover',true);geoMapTooltip(evt,geoFullName('US',code),v,geoHasUSStateData?'US state':'US country total; state breakdown unavailable');})
+       p.on('mouseenter',function(evt){const v=geoHasUSStateData?(geoValueByState.get('US|'+code)||0):(geoValueByCountry.get('US')||0);p.style('stroke','#071421').classed('geo-hover',true);geoMapTooltip(evt,geoFullName('US',code),v,geoHasUSStateData?'US state':'US country total; state breakdown unavailable');})
          .on('mousemove',function(evt){const v=geoHasUSStateData?(geoValueByState.get('US|'+code)||0):(geoValueByCountry.get('US')||0);geoMapTooltip(evt,geoFullName('US',code),v,geoHasUSStateData?'US state':'US country total; state breakdown unavailable');})
-         .on('mouseleave',function(){geoHoverZoom(stateGroup,null,centroid,false);p.attr('stroke',null).classed('geo-hover',false);hideGeoMapTooltip();});
+         .on('mouseleave',function(){p.style('stroke',null).classed('geo-hover',false);hideGeoMapTooltip();});
     });
     geoMapReady=true;
     renderGeoMap();
@@ -1740,25 +1745,24 @@ function renderGeoMap(){
 function flashGeo(country,state,color){
   country=String(country||'').toUpperCase();state=String(state||'').toUpperCase();
   if(!geoMapReady||!geoMapInView){pendingGeoFlashes.push({country:country,state:state,color:color});return;}
-  var path=null,glow=null;
-  if(country==='US'&&state&&geoStatePaths)path=geoStatePaths.get(state);
-  if(!path&&geoCountryPaths)path=geoCountryPaths.get(country);
-  if(country==='US'&&state&&geoStateGlows)glow=geoStateGlows.get(state);
-  if(!glow&&geoCountryGlows)glow=geoCountryGlows.get(country);
-  if(!path||!glow)return;
-  if(!glow.path.classed('is-on'))return;
   var dots=country==='US'&&state&&geoStateDots?geoStateDots.get(state):null;
   if(!dots&&geoCountryDots)dots=geoCountryDots.get(country);
-  if(dots&&dots.length){
-    var spark=dots[geoHash(country+'|'+state)%dots.length];
-    var node=spark.group.node();
-    spark.halo.attr('r',2.2).attr('opacity',.82);
-    spark.core.attr('r',.9).attr('opacity',1);
-    node.classList.remove('geo-activity-spark');
-    void node.getBoundingClientRect();
-    node.classList.add('geo-activity-spark');
-    setTimeout(function(){node.classList.remove('geo-activity-spark');},1500);
-  }
+  if(!dots||!dots.length)return;
+  var anchor=dots[0].group.node();
+  if(!anchor||!anchor.parentNode)return;
+  // Sparks live in the region's own cluster so they inherit its transform and
+  // always land inside the correct country/state, independent of whether that
+  // region currently has heat dots switched on.
+  var cx=Number(dots[0].halo.attr('cx'))||0,cy=Number(dots[0].halo.attr('cy'))||0;
+  var seed=geoHash(country+'|'+state+'|'+geoActivityTick);
+  var ox=((seed%17)-8)*0.55,oy=(((seed>>>5)%17)-8)*0.45;
+  var id='geo-spark-'+(geoSparkSeq++);
+  var group=d3.select(anchor.parentNode);
+  group.append('circle').attr('class','geo-spark-halo').attr('data-spark',id)
+    .attr('cx',cx+ox).attr('cy',cy+oy).attr('r',3.6).attr('fill',color||'#ffb36c');
+  group.append('circle').attr('class','geo-spark-dot').attr('data-spark',id)
+    .attr('cx',cx+ox).attr('cy',cy+oy).attr('r',1.6).attr('fill','#fff6e6');
+  setTimeout(function(){group.selectAll('[data-spark="'+id+'"]').remove();},2000);
 }
 function requestFlashColor(event){
   var client=friendlyClient(event&&event.user_agent||'');
@@ -1790,16 +1794,21 @@ function setupGeoVisibility(){
 function queueGeoFlashes(events){
   var cycle=++geoActivityCycle;
   var queued=(events||[]).slice(0,20);
+  if(geoActivityTimer){clearTimeout(geoActivityTimer);geoActivityTimer=null;}
   if(!geoMapReady||!geoMapInView){pendingGeoFlashes=queued;return;}
-  queued.forEach(function(e,i){
-    setTimeout(function(){
-      if(cycle!==geoActivityCycle)return;
-      flashGeo(e.country,e.state,requestFlashColor(e));
-    },i*180);
-  });
-  if(queued.length)setTimeout(function(){
-    if(cycle===geoActivityCycle)queueGeoFlashes(queued);
-  },Math.max(6500,queued.length*180+2200));
+  if(!queued.length)return;
+  var i=0;
+  function step(){
+    if(cycle!==geoActivityCycle)return;
+    var e=queued[i%queued.length];
+    i++;
+    geoActivityTick++;
+    flashGeo(e.country,e.state,requestFlashColor(e));
+    // Keep one spark appearing at a time for the whole refresh interval, so
+    // the effect stays visible instead of finishing within a few seconds.
+    geoActivityTimer=setTimeout(step,1100);
+  }
+  step();
 }
 
 function setGroupFilter(g){groupFilter=g;userFilter=[];updateUserFilterLabel();renderUserChecklist();refresh()}
