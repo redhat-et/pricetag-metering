@@ -112,6 +112,7 @@ func main() {
 	}
 	defer store.Close()
 	store.SetQuotaEnforcement(cfg.QuotaEnforcementEnabled)
+	store.SetTokenWarningQuota(int64(cfg.MonthlyTokenWarningQuota))
 	store.SetMonthSpendEnabled(cfg.MonthSpendEnabled)
 	store.SetMonthSpendWrites(cfg.MonthSpendWrites)
 	store.SetLiveRollups(cfg.LiveRollupsEnabled)
