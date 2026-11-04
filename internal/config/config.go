@@ -18,10 +18,6 @@ import (
 // when MONTHLY_TOKEN_QUOTA is unset.
 const DefaultMonthlyTokenQuota = 25_000_000_000
 
-// DefaultMonthlyTokenWarningQuota is the monthly usage level at which the
-// entitlement response warns about approaching the hard token limit.
-const DefaultMonthlyTokenWarningQuota = 10_000_000_000
-
 // MeteringMode selects which workloads a process runs.
 //
 //   - all: serves the HTTP API and owns rollup maintenance/backfill (default;
@@ -95,10 +91,6 @@ type Config struct {
 	// MonthlyTokenQuota caps per-user monthly token usage. Balance checks
 	// report no access once a user exceeds it.
 	MonthlyTokenQuota float64
-	// MonthlyTokenWarningQuota marks the monthly usage level where the
-	// entitlement response reports an approaching-limit warning. Zero
-	// disables the warning.
-	MonthlyTokenWarningQuota float64
 	// QuotaEnforcementEnabled controls whether entitlement decisions can block
 	// inference. Usage accounting remains active when this is false.
 	QuotaEnforcementEnabled bool
@@ -415,12 +407,11 @@ func Load() Config {
 	}
 
 	return Config{
-		DatabaseURL:              os.Getenv("DATABASE_URL"),
-		Port:                     envDefault("PORT", "8080"),
-		MetricsPort:              envDefault("METRICS_PORT", "9902"),
-		MeteringMode:             parseMeteringModeOrRaw(os.Getenv("METERING_MODE")),
-		MonthlyTokenQuota:        envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
-		MonthlyTokenWarningQuota: envFloat("MONTHLY_TOKEN_WARNING_QUOTA", DefaultMonthlyTokenWarningQuota),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		Port:              envDefault("PORT", "8080"),
+		MetricsPort:       envDefault("METRICS_PORT", "9902"),
+		MeteringMode:      parseMeteringModeOrRaw(os.Getenv("METERING_MODE")),
+		MonthlyTokenQuota: envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
 		// The $600 safety net is on by default. Operators can still use the
 		// environment as a deployment-level kill switch while the policy's
 		// enforced field is the normal super-admin control.

@@ -89,14 +89,6 @@ var (
 		Help: "Quota denials recorded via RecordQuotaDenial.",
 	})
 
-	// TokenQuotaWarningsTotal counts the first time a user enters the
-	// monthly token warning band in a process's lifetime. It is a transition
-	// counter, not a per-request counter.
-	TokenQuotaWarningsTotal = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "metering_token_quota_warnings_total",
-		Help: "Users crossing the monthly token warning threshold.",
-	})
-
 	// QosClassDecisionsTotal counts QoS classification decisions by class
 	// and whether the result was served from the process-local cache.
 	QosClassDecisionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -205,7 +197,6 @@ var (
 		DBPoolWaitSecondsTotal,
 		QuotaChecksTotal,
 		QuotaDenialsTotal,
-		TokenQuotaWarningsTotal,
 		QosClassDecisionsTotal,
 		QosWindowTokens,
 		QosClassTransitionsTotal,

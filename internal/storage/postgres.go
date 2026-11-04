@@ -51,13 +51,6 @@ type UsageStats struct {
 	Overage      float64 `json:"overage"`
 	ModelAllowed bool    `json:"modelAllowed"`
 
-	// Token warning is independent of access. The gateway ignores these
-	// additive fields; dashboards and operators use them to identify users
-	// approaching the hard monthly token cap.
-	TokenWarning          bool    `json:"tokenWarning,omitempty"`
-	TokenWarningThreshold float64 `json:"tokenWarningThreshold,omitempty"`
-	TokenWarningBalance   float64 `json:"tokenWarningBalance,omitempty"`
-
 	// Dollar quota (see quota.go). QuotaUSD is the effective monthly limit
 	// including grants; SpendUSD the month-to-date spend on the same basis
 	// the dashboard shows. MonthEnds is when the month's budget resets.
@@ -97,13 +90,7 @@ type Store struct {
 	// entitlement endpoint. A value <= 0 means unlimited: the service
 	// reports usage but does not gate access. It stays as an outer safety
 	// net alongside the dollar quota in quota.go.
-	tokenQuota        int64
-	tokenWarningQuota int64
-
-	// warningMu guards the per-month set used to emit the token warning
-	// transition metric once per process, rather than on every request.
-	warningMu   sync.Mutex
-	warningSeen map[string]struct{}
+	tokenQuota int64
 
 	// quotaCache memoises the entitlement decision per person for
 	// quotaCacheTTL; see QuotaDecisionCached. Guarded by quotaMu.
@@ -190,10 +177,6 @@ func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) 
 	return s, nil
 }
 func (s *Store) SetQuotaEnforcement(enabled bool) { s.quotaEnforcement.Store(enabled) }
-
-// SetTokenWarningQuota sets the monthly usage level that triggers the
-// approaching-limit warning. Zero disables the warning.
-func (s *Store) SetTokenWarningQuota(quota int64) { s.tokenWarningQuota = quota }
 
 // SetMonthSpendEnabled switches quota reads to the pre-aggregated monthly
 // spend table. It stays off until that table has been backfilled and verified;
@@ -514,9 +497,9 @@ func (s *Store) GetTeamUsage(ctx context.Context, groupName string) ([]TeamUserU
 }
 
 // GetMonthlyUsage backs the gateway's blocking entitlement subrequest.
-// hasAccess is the AND of two independent gates: the token budget
-// (tokenQuota <= 0 disables the hard gate) and the dollar quota from quota.go
-// (inert while the policy's enforced flag is
+// hasAccess is the AND of two independent gates: the legacy token budget
+// (a configurable outer safety net; tokenQuota <= 0 disables it) and the
+// dollar quota from quota.go (inert while the policy's enforced flag is
 // false, and never applied to exempt callers — super-admins). Errors
 // propagate as a 5xx, which the gateway treats as metering unavailability
 // and admits the request (fail_open) — so a metering outage disables
@@ -526,7 +509,7 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 	if err != nil {
 		return UsageStats{}, err
 	}
-	stats := computeUsageStats(decision.TokensUsed, s.tokenQuota, s.tokenWarningQuota)
+	stats := computeUsageStats(decision.TokensUsed, s.tokenQuota)
 	enforce := s.quotaEnforcement.Load()
 	stats.QuotaUSD = decision.LimitUSD
 	stats.SpendUSD = decision.SpentUSD
@@ -579,70 +562,33 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 	} else {
 		metrics.QuotaChecksTotal.WithLabelValues("denied", cachedLabel).Inc()
 	}
-	s.recordTokenWarning(decision.Month, username, stats.TokenWarning)
 	return stats, nil
-}
-
-// recordTokenWarning emits the warning transition metric once per username
-// and month in this process. A user who falls back below the threshold (for
-// example after an operator raises it) can trigger a new warning later.
-func (s *Store) recordTokenWarning(month, username string, warning bool) {
-	key := month + "|" + username
-	s.warningMu.Lock()
-	defer s.warningMu.Unlock()
-	if !warning {
-		delete(s.warningSeen, key)
-		return
-	}
-	if s.warningSeen == nil {
-		s.warningSeen = map[string]struct{}{}
-	}
-	if _, ok := s.warningSeen[key]; ok {
-		return
-	}
-	if len(s.warningSeen) >= 10_000 {
-		prefix := month + "|"
-		for existing := range s.warningSeen {
-			if !strings.HasPrefix(existing, prefix) {
-				delete(s.warningSeen, existing)
-			}
-		}
-	}
-	s.warningSeen[key] = struct{}{}
-	metrics.TokenQuotaWarningsTotal.Inc()
 }
 
 // computeUsageStats derives entitlement stats from token usage and a quota.
 // A quota <= 0 means unlimited: usage is reported but access is never gated.
-// The warning threshold is independent of the hard quota and never changes
-// HasAccess. Quota enforcement is the gateway's responsibility
-// (praxis-proxy/ai#121).
-func computeUsageStats(used, tokenQuota, tokenWarningQuota int64) UsageStats {
+// Quota enforcement is the gateway's responsibility (praxis-proxy/ai#121).
+func computeUsageStats(used, tokenQuota int64) UsageStats {
 	usage := float64(used)
-	stats := UsageStats{HasAccess: true, Usage: usage}
 
-	if tokenQuota > 0 {
-		quota := float64(tokenQuota)
-		balance := quota - usage
-		if balance < 0 {
-			stats.Overage = -balance
-			balance = 0
-		}
-		stats.HasAccess = usage < quota
-		stats.Balance = balance
+	if tokenQuota <= 0 {
+		return UsageStats{HasAccess: true, Usage: usage}
 	}
 
-	if tokenWarningQuota > 0 {
-		warning := float64(tokenWarningQuota)
-		stats.TokenWarningThreshold = warning
-		stats.TokenWarning = usage >= warning
-		stats.TokenWarningBalance = warning - usage
-		if stats.TokenWarningBalance < 0 {
-			stats.TokenWarningBalance = 0
-		}
+	quota := float64(tokenQuota)
+	balance := quota - usage
+	overage := float64(0)
+	if balance < 0 {
+		overage = -balance
+		balance = 0
 	}
 
-	return stats
+	return UsageStats{
+		HasAccess: usage < quota,
+		Balance:   balance,
+		Usage:     usage,
+		Overage:   overage,
+	}
 }
 
 // Dashboard types
