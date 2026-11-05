@@ -52,8 +52,11 @@ Empty LDAP values are skipped, so a missing attribute never erases a value
 that PriceTag already has. A `manager` DN is resolved through the same LDAP
 result set; unresolved manager DNs are counted in the run summary and leave
 the existing manager untouched. When a manager UUID resolves but that manager
-is not a partner user yet, `manager_user_id` is set to `NULL` (the tag keeps
-the intended UUID), rather than silently keeping an obsolete manager.
+is not a partner user yet, the sync creates a minimal `partner_users` row for
+them (directory name, optional email, `created_by`/`updated_by = ldap-sync`)
+before setting `manager_user_id`, so the report stays under the new manager in
+the org chart. Rollback removes those rows again unless SSO has since claimed
+them.
 
 Use `--fields` to narrow the sync for a one-off run, for example:
 
@@ -65,6 +68,9 @@ Use `--fields` to narrow the sync for a one-off run, for example:
 ## Safety properties
 
 - LDAP is read-only; no LDAP writes, provisioning, or password changes.
+- The only `partner_users` rows created are minimal manager stubs for a
+  resolved manager DN that is not a partner user yet. They are recorded in the
+  backup file and deleted by rollback (unless SSO has since claimed them).
 - `--apply` is required. Dry run is the default.
 - The DB URL is translated to a temporary libpq service file and `PGPASSFILE`;
   the URL/password never appears in a `psql` argv or process command line.
@@ -150,9 +156,10 @@ Review the printed aggregate counts and the SQL file. Then apply once:
 ```
 
 The apply prints `matched_partner_users`, `partner_users_without_ldap_match`,
-`email_conflicts`, and `updated_partner_users`. A healthy production run
-currently matches about 3,348 users; the six unmatched rows are expected
-(active users without an LDAP record plus inactive load-test rows).
+`email_conflicts`, `updated_partner_users`, `manager_stub_candidates`, and
+`manager_stubs_created`. A healthy production run currently matches about
+3,348 users; the six unmatched rows are expected (active users without an LDAP
+record plus inactive load-test rows).
 
 Post-apply checks:
 
@@ -173,8 +180,9 @@ psql ... -v ON_ERROR_STOP=1 -f "$OUTPUT_DIR/ldap-directory-<stamp>.rollback.sql"
 ```
 
 Treat both files as sensitive PII and delete them when they are no longer
-needed. The rollback SQL restores `tags` and `manager_user_id`; it does not
-touch `updated_at` because the sync never changed it.
+needed. The rollback SQL restores `tags` and `manager_user_id`, deletes manager
+rows this run created, and does not touch `updated_at` because the sync never
+changed it.
 
 ## Scheduling notes
 

@@ -72,6 +72,8 @@ grep -Fq "$desc" "$csv" || fail "folded base64 value was not decoded before unfo
 grep -Fq 'Platform Engineering' "$csv" || fail "organization missing from CSV"
 grep -Fq '22222222-2222-2222-2222-222222222222' "$csv" || fail "manager UUID missing from CSV"
 grep -q 'manager_user_id' "$main_sql" || fail "manager_user_id is not updated"
+grep -q '_ldap_manager_stubs' "$main_sql" || fail "missing manager stub provisioning"
+grep -q 'manager_stubs_created' "$main_sql" || fail "missing manager stub count"
 grep -q 'IS DISTINCT FROM' "$main_sql" || fail "changed-only guard missing"
 if grep -q 'updated_at' "$main_sql"; then fail "sync must not touch updated_at"; fi
 grep -q 'SET LOCAL lock_timeout' "$main_sql" || fail "lock_timeout missing"
@@ -98,8 +100,9 @@ for arg in "$@"; do
   prev="$arg"
 done
 if [[ "$file" == *backup.sql ]]; then
-  echo 'user_id,tags,manager_user_id'
-  echo '11111111-1111-1111-1111-111111111111,"{""email"": ""old@example.com""}","22222222-2222-2222-2222-222222222222"'
+  echo 'kind,user_id,tags,manager_user_id'
+  echo 'user,11111111-1111-1111-1111-111111111111,"{""email"": ""old@example.com""}","22222222-2222-2222-2222-222222222222"'
+  echo 'stub,33333333-3333-3333-3333-333333333333,,'
 else
   echo 'updated_partner_users=1'
 fi
@@ -125,6 +128,7 @@ rollback_sql="$(find "$tmp/out-apply" -name '*.rollback.sql' | head -1)"
 [[ "$(file_mode "$backup_csv")" == "600" ]] || fail "backup CSV is not mode 600"
 [[ "$(file_mode "$rollback_sql")" == "600" ]] || fail "rollback SQL is not mode 600"
 grep -q 'UPDATE partner_users' "$rollback_sql" || fail "rollback SQL does not restore partner_users"
+grep -q 'DELETE FROM partner_users' "$rollback_sql" || fail "rollback SQL does not remove created manager stubs"
 
 # --- kube mode still reads the DSN from the configured Secret ---------------
 cat > "$tmp/bin/kubectl" <<'SH'
@@ -146,7 +150,7 @@ if [[ " $* " == *" psql "* ]]; then
     prev="$arg"
   done
   if [[ "$file" == *backup.sql ]]; then
-    echo 'user_id,tags,manager_user_id'
+    echo 'kind,user_id,tags,manager_user_id'
   else
     echo 'updated_partner_users=1'
   fi

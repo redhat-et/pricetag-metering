@@ -69,8 +69,11 @@ have a non-empty LDAP value. Its default `directory` field set keeps
 `partner_user_logins`, so email changes should go through the partner API (or a
 future SQL path that reconciles logins in the same transaction). An LDAP
 `manager` DN is resolved to the manager's `rhatUUID` and written to
-`tags.manager_uuid`; when that manager is a partner user, the self-referencing
-`manager_user_id` column is updated too. Unresolved manager DNs leave the
-existing manager untouched. The job never changes `updated_at`, never
-provisions users, and writes a rollback artifact before every apply. See
+`tags.manager_uuid`; the self-referencing `manager_user_id` column is updated
+too. If that manager is not a partner user yet (for example, they have never
+signed in), the sync creates a minimal `partner_users` row for them from the
+same LDAP result set, so the manager link and org-chart containment are
+preserved. Unresolved manager DNs leave the existing manager untouched. The
+job never changes `updated_at`, only provisions rows for resolved managers,
+and writes a rollback artifact before every apply. See
 [deploy/ldap-sync/README.md](../deploy/ldap-sync/README.md).

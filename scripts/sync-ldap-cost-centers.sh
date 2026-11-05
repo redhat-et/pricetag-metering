@@ -33,6 +33,9 @@
 #   LDAP rhatTermDate          -> tags.term_date
 #   LDAP rhatDeactivated       -> tags.deactivated
 #   LDAP manager DN            -> tags.manager_uuid and manager_user_id
+#                                (a minimal partner_users row is created for a
+#                                resolved manager who is not a partner user yet,
+#                                so the org chart keeps the manager link)
 #
 # Requirements:
 #   - Red Hat VPN for production IPA.
@@ -289,6 +292,7 @@ fi
 python3 - "$ldif" "$csv" "$sql" "$backup_sql" "$LDAP_FIELDS" "$MIN_MATCHED" <<'PY'
 import base64
 import csv
+import json
 import re
 import sys
 import uuid
@@ -466,6 +470,34 @@ for uid, record in records:
         continue
     rows[uid] = values
 
+# A resolved manager may not be a partner user yet (for example, a manager who
+# has never signed in to PriceTag). manager_user_id is a self-referencing
+# foreign key, so the row must exist before it can be referenced. Build a
+# minimal profile for each referenced manager from this same LDAP dump; the
+# generated SQL creates only the rows that are still missing.
+STUB_NAME_FIELDS = ("first_name", "last_name")
+manager_ids = sorted({v["manager_uuid"] for v in rows.values() if v.get("manager_uuid")})
+manager_profiles = {}
+for uid, record in records:
+    if uid not in manager_ids or uid in manager_profiles:
+        continue
+    profile = {}
+    for field in STUB_NAME_FIELDS:
+        value = clean(first(record, FIELD_ATTRS[field]))
+        if value:
+            profile[field] = value
+    if not profile:
+        common_name = clean(first(record, "cn"))
+        if common_name:
+            profile["first_name"] = common_name
+    if not profile:
+        profile["ldap_sync_stub"] = "true"
+    manager_profiles[uid] = {
+        "tags": profile,
+        "email": clean(first(record, "mail")),
+        "active": clean(first(record, "rhatDeactivated")).lower() not in ("true", "1", "yes"),
+    }
+
 csv_fields = ["user_id"] + [f for f in selected if f != "manager"]
 if "manager" in selected:
     csv_fields.append("manager_uuid")
@@ -509,6 +541,39 @@ def write_update_sql(fh):
         fh.write("  SELECT count(*) INTO matched FROM _ldap_sync u JOIN partner_users pu USING (user_id);\n")
         fh.write(f"  IF matched < {min_matched} THEN RAISE EXCEPTION 'matched_partner_users % is below --min-matched {min_matched}', matched; END IF;\n")
         fh.write("END $$;\n")
+
+    if "manager" in selected and manager_profiles:
+        fh.write("CREATE TEMP TABLE _ldap_manager_stubs (\n")
+        fh.write("  user_id uuid PRIMARY KEY,\n  tags jsonb NOT NULL,\n  email text,\n  active boolean NOT NULL\n) ON COMMIT DROP;\n")
+        fh.write("INSERT INTO _ldap_manager_stubs (user_id, tags, email, active) VALUES\n")
+        stub_items = sorted(manager_profiles.items())
+        for index, (uid, profile) in enumerate(stub_items):
+            suffix = ",\n" if index + 1 < len(stub_items) else ";\n"
+            tags_json = json.dumps(profile["tags"], separators=(",", ":"), ensure_ascii=False)
+            cells = [
+                q(uid),
+                q(tags_json) + "::jsonb",
+                q(profile["email"]),
+                "TRUE" if profile["active"] else "FALSE",
+            ]
+            fh.write("  (" + ", ".join(cells) + ")" + suffix)
+        fh.write("CREATE TEMP TABLE _ldap_created_stubs (user_id uuid PRIMARY KEY) ON COMMIT DROP;\n")
+        fh.write("WITH created AS (\n")
+        fh.write("  INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)\n")
+        fh.write("  SELECT s.user_id,\n")
+        fh.write("         CASE WHEN s.email IS NOT NULL AND NOT EXISTS (\n")
+        fh.write("             SELECT 1 FROM partner_users x WHERE lower(x.tags->>'email') = lower(s.email)\n")
+        fh.write("           ) THEN s.tags || jsonb_build_object('email', s.email)\n")
+        fh.write("         ELSE s.tags END,\n")
+        fh.write("         'user', s.active, 'ldap-sync', 'ldap-sync'\n")
+        fh.write("  FROM _ldap_manager_stubs s\n")
+        fh.write("  WHERE NOT EXISTS (SELECT 1 FROM partner_users p WHERE p.user_id = s.user_id)\n")
+        fh.write("  ON CONFLICT DO NOTHING\n")
+        fh.write("  RETURNING user_id\n")
+        fh.write(")\n")
+        fh.write("INSERT INTO _ldap_created_stubs (user_id) SELECT user_id FROM created;\n")
+        fh.write("SELECT 'manager_stub_candidates=' || count(*) FROM _ldap_manager_stubs;\n")
+        fh.write("SELECT 'manager_stubs_created=' || count(*) FROM _ldap_created_stubs;\n")
 
     if rows:
         object_items = []
@@ -564,10 +629,22 @@ with open(backup_sql_path, "w", encoding="utf-8") as fh:
         for index, uid in enumerate(items):
             suffix = ",\n" if index + 1 < len(items) else ";\n"
             fh.write(f"  ('{uid}'){suffix}")
+    fh.write("CREATE TEMP TABLE _ldap_backup_managers (user_id uuid PRIMARY KEY) ON COMMIT DROP;\n")
+    if manager_ids:
+        fh.write("INSERT INTO _ldap_backup_managers (user_id) VALUES\n")
+        for index, uid in enumerate(manager_ids):
+            suffix = ",\n" if index + 1 < len(manager_ids) else ";\n"
+            fh.write(f"  ('{uid}'){suffix}")
+    # kind=user rows are restored in place; kind=stub rows did not exist before
+    # the apply and are removed again by the rollback file.
     fh.write("COPY (\n")
-    fh.write("  SELECT pu.user_id, pu.tags::text, pu.manager_user_id::text\n")
+    fh.write("  SELECT 'user' AS kind, pu.user_id, pu.tags::text AS tags, pu.manager_user_id::text AS manager_user_id\n")
     fh.write("  FROM partner_users pu JOIN _ldap_backup_ids i USING (user_id)\n")
-    fh.write("  ORDER BY pu.user_id\n")
+    fh.write("  UNION ALL\n")
+    fh.write("  SELECT 'stub', m.user_id, NULL, NULL\n")
+    fh.write("  FROM _ldap_backup_managers m\n")
+    fh.write("  WHERE NOT EXISTS (SELECT 1 FROM partner_users p WHERE p.user_id = m.user_id)\n")
+    fh.write("  ORDER BY 2\n")
     fh.write(") TO STDOUT WITH (FORMAT csv, HEADER true);\n")
     fh.write("COMMIT;\n")
 
@@ -735,19 +812,36 @@ def q(value):
 with open(backup_path, "r", encoding="utf-8", newline="") as fh:
     rows = list(csv.DictReader(fh))
 
+user_rows = [row for row in rows if (row.get("kind") or "user") == "user"]
+stub_rows = [row for row in rows if row.get("kind") == "stub"]
+
 with open(rollback_path, "w", encoding="utf-8") as fh:
     fh.write("BEGIN;\n")
     fh.write("SET LOCAL lock_timeout = '10s';\n")
     fh.write("SET LOCAL statement_timeout = '120s';\n")
+    if stub_rows:
+        fh.write("CREATE TEMP TABLE _ldap_rollback_stubs (user_id uuid PRIMARY KEY) ON COMMIT DROP;\n")
+        fh.write("INSERT INTO _ldap_rollback_stubs (user_id) VALUES\n")
+        for index, row in enumerate(stub_rows):
+            suffix = ",\n" if index + 1 < len(stub_rows) else ";\n"
+            fh.write("  (" + q(row.get("user_id")) + ")" + suffix)
+        # Only delete manager rows this sync created; never a row that SSO (or
+        # an admin) created after the backup was taken. ON DELETE SET NULL on
+        # manager_user_id detaches children, and the restore below re-points
+        # them at their pre-apply managers.
+        fh.write("DELETE FROM partner_users p USING _ldap_rollback_stubs s\n")
+        fh.write("WHERE p.user_id = s.user_id\n")
+        fh.write("  AND p.created_by = 'ldap-sync'\n")
+        fh.write("  AND NOT EXISTS (SELECT 1 FROM partner_user_logins l WHERE l.user_id = p.user_id);\n")
     fh.write("CREATE TEMP TABLE _ldap_rollback (\n")
     fh.write("  user_id uuid PRIMARY KEY,\n")
     fh.write("  tags jsonb NOT NULL,\n")
     fh.write("  manager_user_id uuid\n")
     fh.write(") ON COMMIT DROP;\n")
-    if rows:
+    if user_rows:
         fh.write("INSERT INTO _ldap_rollback (user_id, tags, manager_user_id) VALUES\n")
-        for index, row in enumerate(rows):
-            suffix = ",\n" if index + 1 < len(rows) else ";\n"
+        for index, row in enumerate(user_rows):
+            suffix = ",\n" if index + 1 < len(user_rows) else ";\n"
             fh.write(
                 "  ("
                 + q(row.get("user_id"))
