@@ -43,6 +43,24 @@
 #   - LDAP password in a mode 600/400 file (default: ~/.ldap_key).
 #   - LDAP CA file (default: ~/enmaas-ldap/2022-IT-Root-CA.pem).
 #
+# LDAP credential model:
+#   - Bind DN: LDAP_BIND_DN
+#     (default uid=enmaas-ldap,cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com).
+#   - Bind password: a file path, not an inline value. Set LDAP_PASSWORD_FILE
+#     (default ~/.ldap_key) or --password-file. The file must be mode 600/400
+#     and readable by the account running the sync.
+#   - TLS CA: LDAP_CA_CERT (default ~/enmaas-ldap/2022-IT-Root-CA.pem) or
+#     --ca-file. It must be readable.
+#   - The password is copied to a mode-600 temp file and passed to ldapsearch
+#     with -y, so it never appears in argv or the process environment.
+#   - deploy/ldap-sync mounts these host paths read-only in Docker Compose
+#     (LDAP_PASSWORD_FILE_HOST, LDAP_CA_CERT_HOST) and passes the container
+#     paths as LDAP_PASSWORD_FILE/LDAP_CA_CERT. The systemd unit reads the same
+#     paths from /etc/pricetag-ldap-sync/env; the service account must be able
+#     to read them.
+#   - PostgreSQL credentials are separate: DATABASE_URL or
+#     --database-url-file, or --pg-secret/--pg-secret-key in kube mode.
+#
 # Usage:
 #   ./scripts/sync-ldap-cost-centers.sh                 # dry run, generates files
 #   ./scripts/sync-ldap-cost-centers.sh --apply ...     # write to PriceTag DB
