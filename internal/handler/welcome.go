@@ -20,12 +20,18 @@ const (
 
 // ServeWelcome renders the public welcome page. It is intentionally
 // unauthenticated — it is what you send to a new user before they have a
-// key. The page template carries {{...}} placeholders instead of cluster
-// hosts; the real endpoints are substituted here, at serve time, from the
-// deployment environment (config.Welcome), so no cluster-specific URL ever
-// enters the repository.
+// key. The EnMaaS content lives in enmaas-welcome.html, the same fragment
+// maintained for the Source page, and is injected into the welcome.html
+// shell at serve time. The production gateway host in that fragment is
+// replaced with the configured gateway so local and non-production
+// deployments do not send users to production.
 func (h *DashboardHandler) ServeWelcome(w http.ResponseWriter, r *http.Request) {
-	data, err := fs.ReadFile(dashboard.FS, "welcome.html")
+	page, err := fs.ReadFile(dashboard.FS, "welcome.html")
+	if err != nil {
+		http.Error(w, "welcome page not found", http.StatusInternalServerError)
+		return
+	}
+	fragment, err := fs.ReadFile(dashboard.FS, "enmaas-welcome.html")
 	if err != nil {
 		http.Error(w, "welcome page not found", http.StatusInternalServerError)
 		return
@@ -41,15 +47,20 @@ func (h *DashboardHandler) ServeWelcome(w http.ResponseWriter, r *http.Request) 
 		// Deployments should set WELCOME_DASHBOARD_URL explicitly.
 		dash = welcomeDashboardFallback
 	}
-	page := strings.NewReplacer(
+	fragmentHTML := strings.ReplaceAll(
+		string(fragment),
+		"https://api.enmaas.devshift.net",
+		html.EscapeString(gateway),
+	)
+	pageHTML := strings.ReplaceAll(string(page), "{{ENMAAS_WELCOME}}", fragmentHTML)
+	pageHTML = strings.NewReplacer(
 		"{{GATEWAY_URL}}", html.EscapeString(gateway),
 		"{{DASHBOARD_URL}}", html.EscapeString(dash),
 		"{{QUOTA_LABEL}}", html.EscapeString(quotaLabel(h.cfg.MonthlyTokenQuota)),
-	).Replace(string(data))
+	).Replace(pageHTML)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Write([]byte(page))
+	w.Write([]byte(pageHTML))
 }
 
 // quotaLabel renders a token quota compactly for the welcome page prose:

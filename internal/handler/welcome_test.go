@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -23,24 +24,40 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
-		"https://gateway.test",
+		"https://gateway.test/v1",
 		"Welcome to",
-		"MaaS User Guide",
+		"About EnMaaS",
+		"Access is managed through Atlas.",
+		"Model discovery and limits",
+		"Route supported models through one gateway.",
+		"Use the tools you already know.",
 		"Claude Code",
 		"Codex",
 		"OpenCode",
 		"Pi",
-		"What you need",
-		"Make a test request",
-		"Find a supported model",
-		"MAAS_BASE_URL",
-		"MAAS_API_KEY",
-		"MAAS_MODEL",
-		"your-maas-host.example",
-		"https://gateway.test/v1",
-		"/chat/completions",
-		"/models",
-		"Replace them with details from your service provider.",
+		"Goose",
+		"Hosted models, now including DeepSeek.",
+		"Your dashboard is coming soon.",
+		"Know what to expect.",
+		"rits/zai-org/glm-5-3",
+		"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+		"1,000,000-token context window",
+		"65,536-token maximum output",
+		"CLAUDE_CODE_USE_VERTEX",
+		"systemctl --user unset-environment",
+		"customApiKeyResponses",
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+		"service_tier = &quot;default&quot;",
+		"supportsMidConvoEffort",
+		"additional_tools",
+		"10 MiB",
+		"enmaas-welcome-height",
+		"modelPicker",
+		"behavesAs",
+		"model-line",
+		"enmaas-glm-5-3",
+		"openai-completions",
+		"rits/zai-org/glm-5-3[1m]",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page missing %q", want)
@@ -49,16 +66,24 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 	if strings.Contains(body, "{{") {
 		t.Errorf("page contains unsubstituted placeholder")
 	}
+	if strings.Contains(body, "https://api.enmaas.devshift.net") {
+		t.Errorf("page still contains the production gateway host after substitution")
+	}
 	if strings.Contains(body, "Current status") {
 		t.Errorf("page still contains removed Current status section")
 	}
-	for _, url := range regexp.MustCompile(`https?://[^"'\s]+`).FindAllString(body, -1) {
+	for _, url := range regexp.MustCompile(`https?://[^"'\s]+`).FindAllString(html.UnescapeString(body), -1) {
 		allowed := false
 		for _, origin := range []string{
 			"https://gateway.test",
-			"https://your-maas-host.example",
 			"https://fonts.googleapis.com",
 			"https://fonts.gstatic.com",
+			"https://devservices.dpp.openshift.com",
+			"https://redhat.enterprise.slack.com",
+			"https://source.redhat.com",
+			"https://github.com",
+			"https://opencode.ai",
+			"http://www.apple.com",
 		} {
 			if url == origin || strings.HasPrefix(url, origin+"/") {
 				allowed = true

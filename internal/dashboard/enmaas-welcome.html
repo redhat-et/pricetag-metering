@@ -1,0 +1,1440 @@
+<!-- EnMaaS welcome content. This file is maintained in the repository and mirrored to the Source page. -->
+<div id="enmaas-welcome">
+	<style type="text/css">
+		@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800"); @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600"); @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600"); #enmaas-welcome {
+			all: initial; display: block; position: relative; color: #15231d; background: #fff; font: 16px/1.65 "IBM Plex Sans", sans-serif; -webkit-font-smoothing: antialiased; text-align: left;
+		}
+		
+		#enmaas-welcome * {
+			color: inherit; font-family: inherit;
+		}
+		
+		#enmaas-welcome *,
+		#enmaas-welcome *::before,
+		#enmaas-welcome *::after {
+			box-sizing: border-box;
+		}
+		
+		#enmaas-welcome #flow {
+			pointer-events: none;
+		}
+		
+		#enmaas-welcome {
+			--bg: #fff; --soft: #f5f8f6; --card: #fff; --ink: #15231d; --muted: #52655b; --dim: #788a80; --line: #dce7df; --en: #087f50; --maas: #2f65c8; --amber: #d39218; --red: #c84d4d; --code: #14251d; --shadow: 0 12px 30px rgba(21, 35, 29, 0.09);
+		}
+		
+		#enmaas-welcome * {
+			box-sizing: border-box;
+		}
+		
+		#enmaas-welcome {
+			scroll-behavior: smooth;
+		}
+		
+		#enmaas-welcome {
+			margin: 0; color: var(--ink); background: var(--bg); font: 16px/1.65 "IBM Plex Sans", sans-serif; -webkit-font-smoothing: antialiased;
+		}
+		
+		#enmaas-welcome a {
+			color: var(--maas);
+		}
+		
+		#enmaas-welcome code,
+		#enmaas-welcome pre,
+		#enmaas-welcome .mono {
+			font-family: "IBM Plex Mono", monospace;
+		}
+		
+		#enmaas-welcome .shell {
+			max-width: 1120px; margin: auto; padding: 0 28px;
+		}
+		
+		#enmaas-welcome .top {
+			position: sticky; top: 0; z-index: 5; background: rgba(255, 255, 255, 0.93); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line);
+		}
+		
+		#enmaas-welcome .top .shell {
+			height: 66px; display: flex; align-items: center; gap: 28px;
+		}
+		
+		#enmaas-welcome .brand {
+			color: var(--ink); text-decoration: none; font: 800 24px "Bricolage Grotesque", sans-serif; letter-spacing: -0.04em;
+		}
+		
+		#enmaas-welcome .brand .en {
+			color: var(--en);
+		}
+		
+		#enmaas-welcome .brand .maas {
+			color: var(--maas);
+		}
+		
+		#enmaas-welcome .nav {
+			margin-left: auto; display: flex; gap: 20px; overflow: auto;
+		}
+		
+		#enmaas-welcome .nav a {
+			color: var(--muted); text-decoration: none; font-size: 13px; white-space: nowrap;
+		}
+		
+		#enmaas-welcome .nav a:hover {
+			color: var(--maas);
+		}
+		
+		#enmaas-welcome .nav .key {
+			color: #fff; background: var(--maas); padding: 5px 10px; border-radius: 6px; font-weight: 600;
+		}
+		
+		#enmaas-welcome .hero {
+			position: relative; overflow: hidden; background: linear-gradient(125deg, #eef8f1, #f7f9ff 68%, #fff); border-bottom: 1px solid var(--line);
+		}
+		
+		#enmaas-welcome 50% {
+			transform: translate3d(12px, -18px, 0) rotate(3deg); opacity: 0.75;
+		}
+		
+		#enmaas-welcome .hero .shell {
+			position: relative; padding: 28px 28px 62px;
+		}
+		
+		#enmaas-welcome .eyebrow {
+			display: inline-block; color: var(--en); background: #e3f4e9; border: 1px solid #b9e2c8; border-radius: 99px; padding: 5px 11px; text-transform: uppercase; letter-spacing: 0.14em; font: 600 11px "IBM Plex Mono", monospace;
+		}
+		
+		#enmaas-welcome h1,
+		#enmaas-welcome h2,
+		#enmaas-welcome h3 {
+			font-family: "Bricolage Grotesque", sans-serif; line-height: 1.08; margin: 0;
+		}
+		
+		#enmaas-welcome h1 {
+			max-width: 750px; margin-top: 19px; font-size: clamp(42px, 7vw, 76px); letter-spacing: -0.05em;
+		}
+		
+		#enmaas-welcome h1 .en {
+			color: var(--en);
+		}
+		
+		#enmaas-welcome h1 .maas {
+			color: var(--maas);
+		}
+		
+		#enmaas-welcome .hero p {
+			max-width: 650px; color: var(--muted); font-size: 18px; margin: 20px 0 0;
+		}
+		
+		#enmaas-welcome .actions {
+			display: flex; gap: 10px; flex-wrap: wrap; margin-top: 26px;
+		}
+		
+		#enmaas-welcome .btn {
+			display: inline-block; text-decoration: none; border-radius: 7px; padding: 9px 14px; background: var(--maas); color: #fff; font-weight: 600; font-size: 14px;
+		}
+		
+		#enmaas-welcome .btn:hover {
+			filter: brightness(1.08);
+		}
+		
+		#enmaas-welcome .btn.alt {
+			background: transparent; border: 1px solid var(--line); color: var(--maas);
+		}
+		
+		#enmaas-welcome .gateway {
+			display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 25px; padding: 13px 15px; border: 1px solid #b9d8c4; border-radius: 10px; background: rgba(255, 255, 255, 0.8); max-width: 850px;
+		}
+		
+		#enmaas-welcome .gateway-label {
+			color: var(--en); font: 600 11px "IBM Plex Mono", monospace; letter-spacing: 0.1em; text-transform: uppercase;
+		}
+		
+		#enmaas-welcome .gateway code {
+			color: var(--ink); font-size: 14px; font-weight: 600;
+		}
+		
+		#enmaas-welcome .gateway small {
+			color: var(--muted); font-size: 12px;
+		}
+		
+		#enmaas-welcome .chips {
+			display: flex; gap: 8px; flex-wrap: wrap; margin-top: 25px;
+		}
+		
+		#enmaas-welcome .chip {
+			padding: 4px 9px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); background: #fff; font: 500 11px "IBM Plex Mono", monospace;
+		}
+		
+		#enmaas-welcome .source-section {
+			padding: 62px 0 0; scroll-margin-top: 82px;
+		}
+		
+		#enmaas-welcome .head {
+			max-width: 690px; margin-bottom: 24px;
+		}
+		
+		#enmaas-welcome h2 {
+			font-size: clamp(29px, 4vw, 43px); letter-spacing: -0.035em;
+		}
+		
+		#enmaas-welcome .lede {
+			margin: 11px 0 0; color: var(--muted); font-size: 17px;
+		}
+		
+		#enmaas-welcome .grid {
+			display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+		}
+		
+		#enmaas-welcome .card {
+			padding: 23px; border: 1px solid var(--line); border-radius: 13px; background: var(--card); box-shadow: var(--shadow);
+		}
+		
+		#enmaas-welcome .card h3 {
+			font-size: 20px; margin-bottom: 6px;
+		}
+		
+		#enmaas-welcome .card p {
+			color: var(--muted); margin: 0 0 13px;
+		}
+		
+		#enmaas-welcome .accent {
+			border-top: 4px solid var(--en);
+		}
+		
+		#enmaas-welcome .blue {
+			border-top: 4px solid var(--maas);
+		}
+		
+		#enmaas-welcome .warning {
+			display: flex; gap: 12px; padding: 16px 18px; border: 1px solid #f1d99e; border-radius: 11px; background: #fffaf0; color: var(--muted);
+		}
+		
+		#enmaas-welcome .warning strong {
+			color: #94620d;
+		}
+		
+		#enmaas-welcome .warning .icon {
+			color: var(--amber); font: 600 17px "IBM Plex Mono", monospace;
+		}
+		
+		#enmaas-welcome .fallback {
+			margin-top: 11px; border-color: #e9bcbc; background: #fff6f6;
+		}
+		
+		#enmaas-welcome .fallback strong {
+			color: var(--red);
+		}
+		
+		#enmaas-welcome .code {
+			position: relative; margin-top: 13px;
+		}
+		
+		#enmaas-welcome .code pre {
+			margin: 0; overflow: auto; padding: 16px; border-radius: 9px; background: var(--code); color: #d9eee0; font-size: 12px; line-height: 1.65;
+		}
+		
+		#enmaas-welcome .about-grid {
+			display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; max-width: 1080px;
+		}
+		
+		#enmaas-welcome .about-grid .card {
+			padding: 28px 30px; border-top: 4px solid var(--en); background: linear-gradient(145deg, #f5fbf7, #fff); box-shadow: 0 10px 26px rgba(21, 35, 29, 0.07);
+		}
+		
+		#enmaas-welcome .about-grid .card:nth-child(2) {
+			border-top-color: var(--maas); background: linear-gradient(145deg, #f5f8ff, #fff);
+		}
+		
+		#enmaas-welcome .about-grid h3 {
+			font-size: 22px; margin-bottom: 12px;
+		}
+		
+		#enmaas-welcome .about-grid p {
+			max-width: 60ch; margin: 0; color: var(--muted); font-size: 16px; line-height: 1.75;
+		}
+		
+		#enmaas-welcome .about-grid .highlight-green,
+		#enmaas-welcome .about-grid .highlight-blue {
+			font-weight: 600;
+		}
+		
+		#enmaas-welcome .about-grid .highlight-green {
+			color: #087f50;
+		}
+		
+		#enmaas-welcome .about-grid .highlight-blue {
+			color: #2f65c8;
+		}
+		
+		#enmaas-welcome .model-line {
+			display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px;
+		}
+		
+		#enmaas-welcome .model-id {
+			color: var(--ink); font: 600 14px "IBM Plex Mono", monospace;
+		}
+		
+		#enmaas-welcome .model-note {
+			color: var(--muted); font-size: 13px;
+		}
+		
+		#enmaas-welcome .tool {
+			display: grid; grid-template-columns: 68px 1fr; gap: 17px; align-items: start; padding: 20px 0; border-top: 1px solid var(--line);
+		}
+		
+		#enmaas-welcome .tool:first-child {
+			border-top: 0;
+		}
+		
+		#enmaas-welcome .tool-icon {
+			width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; background: #eef4ff; color: var(--maas); font: 700 21px "Bricolage Grotesque", sans-serif;
+		}
+		
+		#enmaas-welcome .tool-icon .tool-mark {
+			font: 700 21px "Bricolage Grotesque", sans-serif;
+		}
+		
+		#enmaas-welcome .claude-logo {
+			background: #fff0e6; color: #d97735;
+		}
+		
+		#enmaas-welcome .claude-logo svg {
+			fill: currentColor; stroke: none;
+		}
+		
+		#enmaas-welcome .codex-logo {
+			background: #eaf3ed; color: #16805b;
+		}
+		
+		#enmaas-welcome .opencode-logo {
+			background: #eef4ff; color: var(--maas);
+		}
+		
+		#enmaas-welcome .goose-logo {
+			background: #fff8e8; color: #94620d;
+		}
+		
+		#enmaas-welcome .setup-heading {
+			margin: 18px 0 5px; color: var(--ink); font: 600 17px "Bricolage Grotesque", sans-serif;
+		}
+		
+		#enmaas-welcome .setup-heading code {
+			font: 600 15px "IBM Plex Mono", monospace;
+		}
+		
+		#enmaas-welcome .setup-copy {
+			margin: 0 0 9px !important; color: var(--muted) !important; font-size: 13px !important;
+		}
+		
+		#enmaas-welcome .tool-info {
+			margin-top: 11px !important; padding: 10px 12px; border-left: 3px solid var(--maas); background: #f5f8ff; color: var(--muted) !important; font-size: 13px !important;
+		}
+		
+		#enmaas-welcome .tool-note {
+			margin: 0 0 7px !important; color: var(--dim) !important; font: 400 11px "IBM Plex Mono", monospace !important; letter-spacing: 0.01em;
+		}
+		
+		#enmaas-welcome .tool h3 {
+			font-size: 20px;
+		}
+		
+		#enmaas-welcome .tool p {
+			margin: 4px 0 8px; color: var(--muted); font-size: 14px;
+		}
+		
+		#enmaas-welcome .tool pre {
+			font-size: 11.5px; padding: 12px;
+		}
+		
+		#enmaas-welcome .tool .copy {
+			top: 5px;
+		}
+		
+		#enmaas-welcome .soon {
+			display: flex; align-items: center; gap: 10px; padding: 13px 15px; border: 1px dashed #b8c8df; border-radius: 9px; color: var(--muted); background: #f6f9ff;
+		}
+		
+		#enmaas-welcome .soon b {
+			color: var(--maas);
+		}
+		
+		#enmaas-welcome .tabs {
+			margin-top: 13px; border: 1px solid var(--line); border-radius: 11px; background: #fff; overflow: hidden;
+		}
+		
+		#enmaas-welcome .dashboard-card {
+			position: relative; overflow: hidden; background: linear-gradient(135deg, #07120d, #0b1721 58%, #07100c); border-color: #1c4936; color: #e6f6eb; box-shadow: 0 16px 48px rgba(5, 16, 10, 0.24);
+		}
+		
+		#enmaas-welcome .dashboard-card:before {
+			content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.22; background-image: linear-gradient(rgba(57, 229, 140, 0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(47, 101, 200, 0.13) 1px, transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(135deg, #000, transparent 80%);
+		}
+		
+		#enmaas-welcome .dashboard-card > * {
+			position: relative; z-index: 1;
+		}
+		
+		#enmaas-welcome .dashboard-card .preview-tag {
+			color: #70e6a6; text-shadow: 0 0 12px rgba(57, 229, 140, 0.45);
+		}
+		
+		#enmaas-welcome .dashboard-card .bar-label {
+			color: #b8d7c2;
+		}
+		
+		#enmaas-welcome .dashboard-card .bar-track {
+			background: #14271e; border-color: #244737;
+		}
+		
+		#enmaas-welcome .dashboard-card .pie {
+			box-shadow: 0 0 28px rgba(57, 229, 140, 0.18), inset 0 0 24px rgba(0, 0, 0, 0.35);
+		}
+		
+		#enmaas-welcome .dashboard-card .pie:after {
+			background: #07120d; box-shadow: inset 0 0 0 1px #244737;
+		}
+		
+		#enmaas-welcome .dashboard-card .pie-label {
+			color: #e6f6eb;
+		}
+		
+		#enmaas-welcome .dashboard-card .bar-fill {
+			box-shadow: 0 0 12px rgba(57, 229, 140, 0.48);
+		}
+		
+		#enmaas-welcome .dashboard-card .bar-fill.blue {
+			box-shadow: 0 0 12px rgba(120, 160, 255, 0.5);
+		}
+		
+		#enmaas-welcome .dashboard-card .bar-fill.amber {
+			box-shadow: 0 0 12px rgba(255, 209, 102, 0.45);
+		}
+		
+		#enmaas-welcome .dashboard {
+			display: block;
+		}
+		
+		#enmaas-welcome .pie-grid {
+			display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin: 14px 0 26px;
+		}
+		
+		#enmaas-welcome .mini-pie-card {
+			display: grid; justify-items: center; gap: 10px; color: #b8d7c2; font: 500 12px "IBM Plex Mono", monospace;
+		}
+		
+		#enmaas-welcome .mini-pie {
+			width: 126px; height: 126px; border-radius: 50%; position: relative;
+		}
+		
+		#enmaas-welcome .mini-pie:after {
+			content: ""; position: absolute; inset: 27px; border-radius: 50%; background: #07120d; box-shadow: inset 0 0 0 1px #244737;
+		}
+		
+		#enmaas-welcome .mini-pie-label {
+			position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; text-align: center; color: #e6f6eb; font: 600 11px "IBM Plex Mono", monospace;
+		}
+		
+		#enmaas-welcome .pie-hosted {
+			background: conic-gradient(var(--en) 0 68%, var(--maas) 68% 100%);
+		}
+		
+		#enmaas-welcome .pie-models {
+			background: conic-gradient( var(--maas) 0 44%, var(--en) 44% 76%, var(--amber) 76% 100%);
+		}
+		
+		#enmaas-welcome .pie-tokens {
+			background: conic-gradient( var(--amber) 0 51%, var(--en) 51% 79%, var(--maas) 79% 100%);
+		}
+		
+		#enmaas-welcome .bars {
+			display: grid; gap: 13px;
+		}
+		
+		#enmaas-welcome .bar-row {
+			display: grid; grid-template-columns: 290px minmax(0, 1fr) auto; align-items: center; gap: 16px; margin: 10px 0;
+		}
+		
+		#enmaas-welcome .bar-name {
+			color: #d3e6d8; font: 500 13px "IBM Plex Mono", monospace;
+		}
+		
+		#enmaas-welcome .bar-amount {
+			min-width: 92px; text-align: right; color: #e6f6eb; font: 600 13px "IBM Plex Mono", monospace; white-space: nowrap;
+		}
+		
+		#enmaas-welcome .bar-row .bar-track {
+			margin-top: 0;
+		}
+		
+		#enmaas-welcome .bar-label {
+			display: flex; justify-content: space-between; gap: 24px; color: var(--muted); font: 12px "IBM Plex Mono", monospace;
+		}
+		
+		#enmaas-welcome .bar-track {
+			height: 13px; margin-top: 5px; border-radius: 99px; background: #edf3ef; overflow: hidden;
+		}
+		
+		#enmaas-welcome .bar-fill {
+			width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--en), #65d997);
+		}
+		
+		#enmaas-welcome .bar-fill.blue {
+			background: linear-gradient(90deg, #7a9ee6, var(--maas));
+		}
+		
+		#enmaas-welcome .bar-fill.amber {
+			background: linear-gradient(90deg, #e3bc62, var(--amber));
+		}
+		
+		#enmaas-welcome .preview-tag {
+			display: inline-block; margin-bottom: 9px; color: var(--maas); font: 600 11px "IBM Plex Mono", monospace; letter-spacing: 0.08em; text-transform: uppercase;
+		}
+		
+		#enmaas-welcome to {
+			transform: none; opacity: 1;
+		}
+		
+		#enmaas-welcome .temporary-note {
+			display: grid; gap: 8px; margin-top: 22px; padding: 18px 20px; border: 1px solid #b8ccef; border-left: 4px solid var(--maas); border-radius: 10px; background: #f5f8ff; max-width: 850px;
+		}
+		
+		#enmaas-welcome .temporary-note strong {
+			color: var(--ink); font: 600 16px "Bricolage Grotesque", sans-serif;
+		}
+		
+		#enmaas-welcome .temporary-note span {
+			color: var(--muted); font-size: 14px;
+		}
+		
+		#enmaas-welcome .temporary-note .btn {
+			justify-self: start; margin-top: 4px;
+		}
+		
+		#enmaas-welcome footer {
+			margin: 66px 0 30px; padding-top: 17px; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px;
+		}
+		
+		@media (max-width: 720px) {
+			#enmaas-welcome .shell {
+				padding: 0 18px;
+			}
+			#enmaas-welcome .top .shell {
+				height: 60px;
+			}
+			#enmaas-welcome .nav {
+				gap: 12px;
+			}
+			#enmaas-welcome .hero .shell {
+				padding: 54px 18px;
+			}
+			#enmaas-welcome .grid,
+			#enmaas-welcome .about-grid {
+				grid-template-columns: 1fr;
+			}
+			#enmaas-welcome .dashboard {
+				grid-template-columns: 1fr;
+			}
+			#enmaas-welcome .pie {
+				margin: auto;
+			}
+		}
+		
+		#enmaas-welcome .setup {
+			margin: 12px 0 0; border: 1px solid var(--line); border-radius: 10px; background: #fbfdfb; overflow: hidden;
+		}
+		
+		#enmaas-welcome .setup-title {
+			display: flex; align-items: center; gap: 8px; padding: 11px 14px; cursor: pointer; list-style: none; background: var(--soft); color: var(--ink); font: 600 14px "IBM Plex Sans", sans-serif;
+		}
+		
+		#enmaas-welcome .setup .setup-body {
+			padding: 14px 16px 16px; border-top: 1px solid var(--line);
+		}
+		
+		#enmaas-welcome .setup .setup-body .setup-heading:first-child {
+			margin-top: 0;
+		}
+
+	</style>
+	<div class="hero" id="top">
+		<div class="shell">
+
+			<h1>Welcome to <span class="en">En</span><span class="maas">MaaS</span></h1>
+
+			<p>One key gives you access to a single gateway through which you can use frontier and hosted models, supporting Messages, Chat Completions, Responses, Conversations, and model discovery&mdash;with usage visibility built in.</p>
+			<div class="actions"><a class="btn" href="https://devservices.dpp.openshift.com/support/enmaas/" target="_blank" rel="noopener noreferrer">Get a key ↗ <small>(VPN required)</small></a><a class="btn alt" href="#quickstart">Try the API &darr;</a></div></div></div>
+	<div class="shell">
+		<div class="source-section" id="about">
+			<div class="head">
+
+				<h2>About EnMaaS</h2>
+
+				<p class="lede">A common, governed front door for AI across Red Hat Engineering.</p>
+			</div>
+			<div class="about-grid">
+				<div class="card">
+
+					<h3>What is EnMaaS?</h3>
+
+					<p><span class="highlight-green">EnMaaS is Red Hat&rsquo;s AI gateway for Engineering</span>, built on Red Hat AI Technologies and forward-looking components expected to become part of the Red Hat AI Portfolio. It provides a common way to access <span class="highlight-green">supported model providers</span>, including commercial and approved open-weight models, while simplifying model access and enabling a more consistent approach to <span class="highlight-green">governance, usage management, and future model enablement</span>.</p>
+				</div>
+				<div class="card">
+
+					<h3>Why should I use EnMaaS?</h3>
+
+					<p>EnMaaS gives you a <span class="highlight-blue">single API key</span> for approved AI models across multiple providers, including <span class="highlight-blue">OpenAI and Anthropic</span>, without separate credentials or onboarding for each platform. That includes models such as <span class="highlight-blue">Opus 5.5</span> and approved open-weight options like <span class="highlight-blue">GLM 5.3</span> and <span class="highlight-blue">DeepSeek V4.1 Flash</span>, available at no usage cost.</p>
+				</div></div></div>
+		<div class="source-section" id="access">
+			<div class="head">
+
+				<h2>Access is managed through Atlas.</h2>
+
+				<p class="lede">Use the Atlas onboarding flow to request, receive, and manage your EnMaaS key. The Atlas page requires the corporate VPN.</p>
+			</div>
+			<div class="grid">
+				<div class="card accent">
+
+					<h3>Get a key</h3>
+
+					<p>Atlas will handle key generation and onboarding. Please do not send key requests directly to individual operators.</p><a class="btn" href="https://devservices.dpp.openshift.com/support/enmaas/" target="_blank" rel="noopener noreferrer">Open Atlas onboarding ↗ <small>(VPN required)</small></a></div>
+				<div class="card blue">
+
+					<h3>Ask questions</h3>
+
+					<p>Feedback, questions, and onboarding support are welcome in the EnMaaS Slack channel.</p><a class="btn alt" href="https://redhat.enterprise.slack.com/archives/C0C5WRT1VJP">#forum-enmaas ↗</a></div></div></div>
+		<div class="source-section" id="quickstart">
+			<div class="head">
+
+				<h2>Let&rsquo;s test your connection.</h2>
+
+				<p class="lede">Run this curl smoke test to verify that your key reaches the live EnMaaS gateway. Keep your key in a secret manager or protected environment variable.</p>
+			</div>
+			<div class="card">
+
+				<h3>Connection smoke test</h3>
+
+				<p>This test sends one small request through the Anthropic Messages API using the hosted GLM model. For DeepSeek, use the OpenAI-compatible Chat Completions endpoint and the exact model ID <code>rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</code>.</p>
+				<div class="code"><pre>export ENMAAS_KEY=&#39;your-key&#39;
+
+curl https://api.enmaas.devshift.net/v1/messages \
+  -H &quot;x-api-key: $ENMAAS_KEY&quot; \
+  -H &quot;anthropic-version: 2023-06-01&quot; \
+  -H &quot;content-type: application/json&quot; \
+  -d &#39;{
+    &quot;model&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+    &quot;max_tokens&quot;: 128,
+    &quot;messages&quot;: [{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Reply with exactly OK.&quot;}]
+  }&#39;</pre></div></div>
+			<div class="card">
+
+				<h3>DeepSeek smoke test</h3>
+
+				<p>DeepSeek V4.1 Flash supports the Anthropic Messages and OpenAI-compatible request paths through EnMaaS. Use the exact model ID below to verify either client configuration.</p>
+				<div class="code"><pre># Anthropic Messages
+curl https://api.enmaas.devshift.net/v1/messages \
+  -H &quot;x-api-key: $ENMAAS_KEY&quot; \
+  -H &quot;anthropic-version: 2023-06-01&quot; \
+  -H &quot;content-type: application/json&quot; \
+  -d &#39;{&quot;model&quot;:&quot;rits/deepseek-ai/DeepSeek-V4.1-Flash-1017&quot;,&quot;max_tokens&quot;:128,&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Reply with exactly OK.&quot;}]}&#39;
+
+# OpenAI Chat Completions
+curl https://api.enmaas.devshift.net/v1/chat/completions \
+  -H &quot;Authorization: Bearer $ENMAAS_KEY&quot; \
+  -H &quot;content-type: application/json&quot; \
+  -d &#39;{&quot;model&quot;:&quot;rits/deepseek-ai/DeepSeek-V4.1-Flash-1017&quot;,&quot;max_tokens&quot;:128,&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Reply with exactly OK.&quot;}]}&#39;</pre></div></div></div>
+		<div class="source-section" id="model-guidance">
+			<div class="head">
+
+				<h2>Model discovery and limits</h2>
+
+				<p class="lede">The model catalog is useful, but it is not the complete source of truth for every credential type. Pin models in your client configuration when you need a model that is not listed.</p>
+			</div>
+			<div class="grid">
+				<div class="card">
+
+					<h3>Use the right authentication header</h3>
+
+					<p>Authentication belongs to the gateway key, not to the selected model. For Anthropic Messages, a native EnMaaS key uses <span class="mono">x-api-key</span> together with the required <span class="mono">anthropic-version</span> HTTP header. OpenAI-compatible clients use <span class="mono">Authorization: Bearer</span>. On <span class="mono">/v1/messages</span>, use <span class="mono">x-api-key</span>; <span class="mono">Authorization: Bearer</span> is not accepted there when <span class="mono">anthropic-version</span> is present. Never put either credential in the JSON body.</p>
+					<div class="code"><pre>curl &quot;https://api.enmaas.devshift.net/v1/models&quot; -H &quot;x-api-key: $ENMAAS_KEY&quot;; curl &quot;https://api.enmaas.devshift.net/v1/models&quot; -H &quot;Authorization: Bearer $ENMAAS_KEY&quot;</pre></div></div>
+				<div class="card">
+
+					<h3>Catalog limitations</h3>
+
+					<p>The <span class="mono">/v1/models</span> response can be credential-dependent and may omit hosted models even when inference works. Pi, OpenCode, and other clients should declare the exact hosted model ID locally when necessary:</p>
+					<div class="code"><pre>rits/zai-org/glm-5-3
+rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</pre></div>
+
+					<p class="tool-info"><strong>Hosted models support both gateway dialects where configured.</strong> DeepSeek was verified through Messages, Chat Completions, and Responses. Do not copy GLM-specific context-window, penalty, or capability settings to DeepSeek.</p>
+				</div></div>
+			<div class="warning" style="margin-top:16px;"><span class="icon">!</span>
+				<div><strong>Known hosted-model limits</strong>
+					<br><span class="mono">rits/zai-org/glm-5-3</span>: <strong>1,000,000-token context window</strong> and <strong>65,536-token maximum output</strong>. Client settings must not declare a larger context window. Hosted models are served by vLLM: Responses API custom tools with a grammar format return HTTP 400, and built-in hosted tools such as web search are not executed. GLM 5.3 is text-only, so images in the request or conversation history return HTTP 400. GLM 5.3 also does not support server-side tool execution; tool-injection requests can return HTTP 400, and Claude Code works around this with <span class="mono">web_fetch</span>. GLM streaming can also emit <span class="mono">finish_reason</span> before all content and reasoning deltas finish; strict SSE clients may truncate the turn. Some older Claude IDs (for example <span class="mono">claude-sonnet-4-5</span>, <span class="mono">claude-opus-4-5</span>, and <span class="mono">claude-opus-4-7</span>) may return 404; use the current IDs returned by <span class="mono">/v1/models</span>. Other provider models have their own limits; use the provider&rsquo;s documented model metadata when available.</div></div>
+			<div class="warning" style="margin-top:16px;"><span class="icon">!</span>
+				<div><strong>Request size limit: 10 MiB</strong>
+					<br>The gateway currently rejects request bodies larger than 10 MiB with HTTP 413. Long sessions, especially those carrying encrypted reasoning state, can reach this limit. Start a new session, switch models to drop provider-specific reasoning metadata, or compact the conversation when the client supports it. The team is working to raise the limit to 32 MiB.</div></div></div>
+		<div class="source-section" id="routing">
+			<div class="head">
+
+				<h2>Route supported models through one gateway.</h2>
+
+				<p class="lede">Configure the EnMaaS base URL and key once, then select the exact model ID supported by the gateway. The gateway routes the request to the configured provider; it does not mean every upstream model is automatically available.</p>
+			</div>
+			<div class="grid">
+				<div class="card">
+
+					<h3>Keep the gateway settings; change the model</h3>
+
+					<p>For Claude Code, Codex, OpenCode, and Pi, keep the EnMaaS URL and key unchanged when switching models. Change the client&rsquo;s model entry to an exact gateway model ID. If a model is not shown by <code>/v1/models</code>, pin it locally only after confirming that EnMaaS supports it.</p>
+					<div class="code"><pre>export ENMAAS_KEY=&#39;your-key&#39;
+# Keep this gateway base URL for every supported model
+export ENMAAS_BASE_URL=&#39;https://api.enmaas.devshift.net/v1&#39;
+# Set this per client to an exact supported model ID
+MODEL_ID=&#39;exact-model-id&#39;</pre></div></div>
+				<div class="card">
+
+					<h3>Use the model&rsquo;s API dialect</h3>
+
+					<p>Use the endpoint and provider configuration that matches the model and client: Anthropic-compatible requests use <code>/v1/messages</code>; OpenAI Responses uses <code>/v1/responses</code>; OpenAI Chat Completions uses <code>/v1/chat/completions</code>. A model name alone does not change the request dialect.</p>
+					<div class="code"><pre># Anthropic Messages
+-H &quot;x-api-key: $ENMAAS_KEY&quot; -H &quot;anthropic-version: 2023-06-01&quot;
+
+# OpenAI-compatible APIs
+-H &quot;Authorization: Bearer $ENMAAS_KEY&quot;</pre></div></div></div>
+			<div class="tool-info"><strong>Tool-specific model settings:</strong> Claude Code changes the model through <code>/model</code> or <code>modelPicker</code>; Codex changes <code>model</code> in its EnMaaS profile; OpenCode changes its pinned provider model; Pi adds the model under the matching provider entry. GLM and DeepSeek are separate hosted models: do not copy GLM-only context-window, penalty, or capability settings to DeepSeek.</div></div>
+		<div class="source-section" id="tools">
+			<div class="head">
+
+				<h2>Use the tools you already know.</h2>
+
+				<p class="lede">EnMaaS supports <a href="#tool-claude">Claude Code</a>, <a href="#tool-codex">Codex</a>, <a href="#tool-opencode">OpenCode</a>, <a href="#tool-pi">Pi</a>, and <a href="#tool-goose">Goose</a>. More tools and recipes are coming soon. Code examples are static; select and copy them manually. Keep your existing AI access available while EnMaaS is in beta.</p>
+			</div>
+			<div class="card">
+				<div class="tool" id="tool-claude">
+					<div class="tool-icon claude-logo"><span class="tool-mark">C</span></div>
+					<div>
+
+						<p class="tool-note">Save your current configuration first so you can switch back easily.</p>
+
+						<h3>Claude Code</h3>
+
+						<p>Route Claude Code through EnMaaS, then use <span class="mono">/model</span> or model discovery to choose an available model.</p>
+
+						<h4 class="setup-heading">1. Connect Claude Code to EnMaaS</h4>
+
+						<p class="setup-copy">Add or merge this into <code>~/.claude/settings.json</code>. You do not need Vertex to use Claude Code with EnMaaS.</p>
+						<div class="code"><pre>{
+  &quot;env&quot;: {
+    &quot;ANTHROPIC_BASE_URL&quot;: &quot;https://api.enmaas.devshift.net&quot;,
+    &quot;ANTHROPIC_API_KEY&quot;: &quot;your-enmaas-key&quot;,
+    &quot;CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY&quot;: &quot;1&quot;,
+    &quot;CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC&quot;: &quot;1&quot;
+  }
+}</pre></div>
+						<div class="code"><pre># Or use a shell session
+export ANTHROPIC_BASE_URL=&quot;https://api.enmaas.devshift.net&quot;
+export ANTHROPIC_API_KEY=&quot;$ENMAAS_KEY&quot;
+export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+claude</pre></div>
+						<p class="tool-info"><strong>Privacy:</strong> <code>CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1</code> disables Claude Code&rsquo;s Sentry reporting, feature flags, update checks, and usage telemetry. It does not disable side-channel model requests such as safety checks or session-title generation.</p>
+						<div class="warning"><span class="icon">!</span>
+							<div><strong>Answer yes to the key prompt.</strong>
+								<br>The first time Claude Code starts with the EnMaaS key, it asks whether to use it. Answer yes; dismissing the prompt records the key as rejected. If you later see <code>Not logged in &middot; Please run /login</code>, quit Claude Code first (it rewrites <code>~/.claude.json</code> on close), remove <code>customApiKeyResponses</code> from <code>~/.claude.json</code>, restart Claude Code, and answer yes. A rejected key looks like no key at all.</div></div>
+						<div class="warning"><span class="icon">!</span>
+							<div><strong>Disable Claude Code&rsquo;s direct Vertex mode.</strong>
+								<br>Before starting Claude Code through EnMaaS, remove every occurrence of <code>CLAUDE_CODE_USE_VERTEX</code>, <code>ANTHROPIC_VERTEX_PROJECT_ID</code>, <code>ANTHROPIC_VERTEX_REGION</code>, <code>CLOUD_ML_REGION</code>, and any <code>ANTHROPIC_DEFAULT_*</code> variable that still points at a Vertex or Google model ID. They can persist in shell startup files, the <code>env</code> block in <code>~/.claude/settings.json</code>, and the systemd user environment. A variable inherited from the shell never appears in <code>settings.json</code>. If <code>CLAUDE_CODE_USE_VERTEX=1</code> remains set, Claude Code bypasses EnMaaS and uses Vertex directly. The <code>ANTHROPIC_DEFAULT_*</code> values use Google&rsquo;s <code>name@date</code> format, which EnMaaS does not recognize, so leaving them produces model-not-found errors.</div></div>
+						<div class="code"><pre># Find every copy first
+cd ~
+grep -IslE &quot;VERTEX|CLOUD_ML|ANTHROPIC_DEF&quot; .bashrc .bash_profile .profile
+grep -IslE &quot;VERTEX|CLOUD_ML|ANTHROPIC_DEF&quot; .zshrc .zprofile .env
+grep -IslE &quot;VERTEX|CLOUD_ML|ANTHROPIC_DEF&quot; .claude/settings*.json
+grep -rIslE &quot;ANTHROPIC_VERTEX|USE_VERTEX&quot; .config --include=&quot;*.sh&quot;
+systemctl --user show-environment | grep -iE &quot;VERTEX|CLOUD_ML|ANTHROPIC_DEF&quot;
+
+# Remove from the current shell, shell files, and systemd user environment
+unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID ANTHROPIC_VERTEX_REGION CLOUD_ML_REGION
+unset ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_FABLE_MODEL
+systemctl --user unset-environment CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID ANTHROPIC_VERTEX_REGION CLOUD_ML_REGION
+systemctl --user unset-environment ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_FABLE_MODEL
+
+# Close and reopen your terminal, then confirm
+test -z &quot;$CLAUDE_CODE_USE_VERTEX&quot; &amp;&amp; echo &quot;CLEAN&quot; || echo &quot;STILL SET&quot;</pre></div>
+						<p class="tool-info"><strong>Need Vertex and EnMaaS side by side?</strong> Use a separate <code>CLAUDE_CONFIG_DIR</code> for the EnMaaS profile and keep your existing Vertex environment in your normal shell. On GNOME, opening a new terminal can reuse the existing terminal server, so log out and back in if the variable persists.</p>
+
+						<h4 class="setup-heading">Optional: use client-side auto-mode</h4>
+
+						<p class="setup-copy">If server-side auto-mode is unavailable or you prefer Claude Code to make the auto-mode decision locally, add this to the same <code>env</code> block in <code>~/.claude/settings.json</code>.</p>
+						<div class="code"><pre>&quot;CLAUDE_CODE_AUTO_MODE_SERVER&quot;: &quot;0&quot;</pre></div>
+						<div class="tool-info"><strong>Claude Code setting, not gateway routing.</strong>
+							<br>This changes where Claude Code decides auto-mode; it does not change EnMaaS model routing, authentication, or authorization. This is a user-reported fallback: verify it with your installed Claude Code version and remove it or restore your settings backup if it does not behave as expected.</div>
+
+						<h4 class="setup-heading">2. Add hosted models to the <code>/model</code> picker</h4>
+
+						<p class="setup-copy">Claude Code&rsquo;s picker filters model IDs, so discovery alone may not show hosted models. EnMaaS exposes DeepSeek through <code>/v1/models</code> for Anthropic clients when requested with <code>x-api-key</code> and <code>anthropic-version</code>, but pinning the exact model locally keeps it visible in the picker. Add or merge these entries into <code>~/.claude/settings.json</code>. This requires Claude Code 2.1.242 or newer. The top-level <code>model</code> key is required; <code>modelPicker</code> alone is not sufficient. Claude Code will use the model&rsquo;s native effort default; other harnesses should use their native defaults unless their provider configuration explicitly supports an effort setting.</p>
+						<div class="code"><pre># ~/.claude/settings.json &mdash; add
+{
+  &quot;model&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+  &quot;modelPicker&quot;: {
+    &quot;options&quot;: [
+      {
+        &quot;model&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+        &quot;label&quot;: &quot;GLM 5.3&quot;,
+        &quot;description&quot;: &quot;Hosted via EnMaaS&quot;,
+        &quot;behavesAs&quot;: &quot;claude-opus-4-8&quot;
+      },
+      {
+        &quot;model&quot;: &quot;rits/deepseek-ai/DeepSeek-V4.1-Flash-1017&quot;,
+        &quot;label&quot;: &quot;DeepSeek V4.1 Flash&quot;,
+        &quot;description&quot;: &quot;Hosted via EnMaaS&quot;,
+        &quot;behavesAs&quot;: &quot;claude-opus-4-8&quot;
+      }
+     ]
+   }
+ }</pre></div>
+						<p class="tool-info"><strong>Context window:</strong> Claude Code does not recognize hosted model IDs and may assume a 200K context window. When selecting a hosted model, append the size to the model ID, for example <code>rits/zai-org/glm-5-3[1m]</code>; Claude Code strips the suffix before sending the request, so the gateway still receives the exact model ID. If your Claude Code version supports <code>contextWindow</code> and <code>maxOutput</code> in <code>modelPicker</code>, set them to <code>1000000</code> and <code>65536</code>.</p>
+						<div class="warning"><span class="icon">!</span>
+							<div><strong>Use the exact hosted model ID and native effort default.</strong>
+								<br>Run <code>/models</code> or <code>/model</code> after saving the settings. For GLM, use <code>rits/zai-org/glm-5-3</code> exactly and do not add an <code>effortLevel</code> override unless your installed Claude Code version documents support for the specific value.</div></div>
+						<div class="tool-info"><strong>DeepSeek is available through Claude Code.</strong>
+							<br>EnMaaS exposes DeepSeek V4.1 Flash through the Anthropic Messages API as well as OpenAI-compatible Chat Completions/Responses. Use the exact model ID above; do not copy GLM-only context-window, penalty, or capability settings to DeepSeek.</div>
+						<div class="warning fallback"><span class="icon">↩</span>
+							<div><strong>Rollback if EnMaaS is unavailable</strong>
+								<br>Exit Claude Code, restore your previous <code>~/.claude/settings.json</code> backup, or remove the EnMaaS <code>env</code> block and relaunch. Keep the previous provider configuration unchanged so you can switch back immediately during this beta period.</div></div></div></div>
+				<div class="tool" id="tool-codex">
+					<div class="tool-icon codex-logo"><span class="tool-mark">C</span></div>
+					<div>
+
+						<p class="tool-note">Save your current configuration first so you can switch back easily.</p>
+
+						<h3>Codex</h3>
+
+						<p>Codex uses the OpenAI-compatible Responses API. DeepSeek Responses was verified with EnMaaS. Add EnMaaS as a provider and select it with a profile. To use DeepSeek, set the profile model to <code>rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</code> after confirming the model is available.</p>
+						<div class="code"><pre># ~/.codex/enmaas.config.toml &mdash; keep the profile self-contained
+model = &quot;rits/zai-org/glm-5-3&quot;
+# Or use: rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
+model_provider = &quot;enmaas&quot;
+
+[model_providers.enmaas]
+name = &quot;EnMaaS&quot;
+base_url = &quot;https://api.enmaas.devshift.net/v1&quot;
+env_key = &quot;ENMAAS_KEY&quot;
+wire_api = &quot;responses&quot;
+
+# Use the EnMaaS profile
+export ENMAAS_KEY=&quot;your-enmaas-key&quot;
+codex --profile enmaas</pre></div>
+
+						<p>Codex profiles are self-contained: keep the <code>[model_providers.enmaas]</code> block in the profile file itself. If the provider is defined only in <code>~/.codex/config.toml</code>, the profile may fall back to OpenAI and return 401 Unauthorized. Change the <code>model</code> line only to an exact model ID supported by the gateway; the catalog may omit hosted models, so keep the pinned model entry explicit.</p>
+						<p class="tool-info"><strong>OpenAI/GPT models:</strong> when a profile targets an OpenAI/GPT model through EnMaaS, add <code>service_tier = &quot;default&quot;</code> to the top-level <code>~/.codex/config.toml</code>, not to the profile file. It is not required for GLM or DeepSeek.</p>
+						<div class="warning"><span class="icon">!</span>
+							<div><strong>Known Codex and hosted-model limits.</strong>
+								<br>GLM 5.3 through the Responses API can return HTTP 400 for unsupported item types such as <code>additional_tools</code>, <code>compaction</code>, or image content in history. Codex may also drop the configured GLM context window to about 258K after the first prompt. Keep sessions short, avoid image or tool-injected content, or use DeepSeek for Responses; the CLI has no client-side context-window override today.</div></div>
+
+						<h4 class="setup-heading">ChatGPT desktop (macOS)</h4>
+
+						<p class="setup-copy">The desktop app is launched by macOS, so it only sees environment variables set at login. This adds the EnMaaS key at login, then gives the app a small catalog of three models.</p>
+						<div class="setup">
+							<div class="setup-title">Set up the desktop app</div>
+							<div class="setup-body">
+
+								<h4 class="setup-heading">1. Make the key available at login</h4>
+
+								<p class="setup-copy">Replace <code>YOUR_USERNAME</code> in the plist with your account name. The key stays in the private env file; the LaunchAgent only exports it.</p>
+								<div class="code"><pre>mkdir -p ~/.config/enmaas ~/.local/bin
+printf &#39;ENMAAS_KEY=&quot;%s&quot;
+&#39; &#39;your-key&#39; &gt; ~/.config/enmaas/enmaas.env
+chmod 600 ~/.config/enmaas/enmaas.env
+
+cat &gt; ~/.local/bin/set-codex-enmaas-env &lt;&lt;&#39;EOF&#39;
+#!/bin/zsh
+set -euo pipefail
+set -a; source &quot;$HOME/.config/enmaas/enmaas.env&quot;; set +a
+[[ -n &quot;${ENMAAS_KEY:-}&quot; ]] || { echo &quot;ENMAAS_KEY is empty&quot; &gt;&amp;2; exit 1; }
+/bin/launchctl setenv ENMAAS_KEY &quot;$ENMAAS_KEY&quot;
+EOF
+chmod 700 ~/.local/bin/set-codex-enmaas-env
+
+cat &gt; ~/Library/LaunchAgents/com.enmaas.codex-env.plist &lt;&lt;&#39;EOF&#39;
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
+&lt;plist version=&quot;1.0&quot;&gt;&lt;dict&gt;
+  &lt;key&gt;Label&lt;/key&gt;&lt;string&gt;com.enmaas.codex-env&lt;/string&gt;
+  &lt;key&gt;ProgramArguments&lt;/key&gt;&lt;array&gt;&lt;string&gt;/Users/YOUR_USERNAME/.local/bin/set-codex-enmaas-env&lt;/string&gt;&lt;/array&gt;
+  &lt;key&gt;RunAtLoad&lt;/key&gt;&lt;true/&gt;
+&lt;/dict&gt;&lt;/plist&gt;
+EOF
+
+launchctl bootout gui/$(id -u)/com.enmaas.codex-env 2&gt;/dev/null || true
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.enmaas.codex-env.plist
+[[ -n &quot;$(launchctl getenv ENMAAS_KEY)&quot; ]] &amp;&amp; echo &quot;key available&quot;</pre></div>
+
+								<h4 class="setup-heading">2. Add the model catalog</h4>
+
+								<p class="setup-copy">Save as <code>~/.codex/models.json</code>. DeepSeek V4.1 Flash, GLM 5.3, and GPT-5.6 Luna are enough to start; add more below.</p>
+								<div class="code"><pre>{
+  &quot;models&quot;: [
+    {
+      &quot;slug&quot;: &quot;rits/deepseek-ai/DeepSeek-V4.1-Flash-1017&quot;,
+      &quot;display_name&quot;: &quot;DeepSeek V4.1 Flash (EnMaaS)&quot;,
+      &quot;description&quot;: &quot;DeepSeek V4.1 Flash via the EnMaaS gateway.&quot;,
+      &quot;base_instructions&quot;: &quot;You are Codex, a coding agent. You and the user share one workspace. Use the available tools to complete the task.&quot;,
+      &quot;supported_reasoning_levels&quot;: [
+        {
+          &quot;effort&quot;: &quot;low&quot;,
+          &quot;description&quot;: &quot;Fast responses&quot;
+        },
+        {
+          &quot;effort&quot;: &quot;medium&quot;,
+          &quot;description&quot;: &quot;Balanced&quot;
+        },
+        {
+          &quot;effort&quot;: &quot;high&quot;,
+          &quot;description&quot;: &quot;Deeper reasoning&quot;
+        }
+      ],
+      &quot;shell_type&quot;: &quot;unified_exec&quot;,
+      &quot;visibility&quot;: &quot;list&quot;,
+      &quot;supported_in_api&quot;: true,
+      &quot;support_verbosity&quot;: true,
+      &quot;truncation_policy&quot;: {
+        &quot;mode&quot;: &quot;tokens&quot;,
+        &quot;limit&quot;: 10000
+      },
+      &quot;experimental_supported_tools&quot;: [],
+      &quot;tool_mode&quot;: &quot;direct&quot;,
+      &quot;use_responses_lite&quot;: false,
+      &quot;input_modalities&quot;: [
+        &quot;text&quot;
+      ],
+      &quot;priority&quot;: 101,
+      &quot;context_window&quot;: 1048576,
+      &quot;max_context_window&quot;: 1048576
+    },
+    {
+      &quot;slug&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+      &quot;display_name&quot;: &quot;GLM 5.3 (EnMaaS)&quot;,
+      &quot;description&quot;: &quot;GLM 5.3 via the EnMaaS gateway.&quot;,
+      &quot;base_instructions&quot;: &quot;You are Codex, a coding agent. You and the user share one workspace. Use the available tools to complete the task.&quot;,
+      &quot;supported_reasoning_levels&quot;: [
+        {
+          &quot;effort&quot;: &quot;low&quot;,
+          &quot;description&quot;: &quot;Fast responses&quot;
+        },
+        {
+          &quot;effort&quot;: &quot;medium&quot;,
+          &quot;description&quot;: &quot;Balanced&quot;
+        },
+        {
+          &quot;effort&quot;: &quot;high&quot;,
+          &quot;description&quot;: &quot;Deeper reasoning&quot;
+        }
+      ],
+      &quot;shell_type&quot;: &quot;unified_exec&quot;,
+      &quot;visibility&quot;: &quot;list&quot;,
+      &quot;supported_in_api&quot;: true,
+      &quot;support_verbosity&quot;: true,
+      &quot;truncation_policy&quot;: {
+        &quot;mode&quot;: &quot;tokens&quot;,
+        &quot;limit&quot;: 10000
+      },
+      &quot;experimental_supported_tools&quot;: [],
+      &quot;tool_mode&quot;: &quot;direct&quot;,
+      &quot;use_responses_lite&quot;: false,
+      &quot;input_modalities&quot;: [
+        &quot;text&quot;
+      ],
+      &quot;priority&quot;: 102,
+      &quot;context_window&quot;: 1000000,
+      &quot;max_context_window&quot;: 1000000
+    },
+    {
+      &quot;slug&quot;: &quot;gpt-5.6-luna&quot;,
+      &quot;display_name&quot;: &quot;GPT-5.6 Luna (EnMaaS)&quot;,
+      &quot;description&quot;: &quot;GPT-5.6 Luna via the EnMaaS gateway.&quot;,
+      &quot;base_instructions&quot;: &quot;You are Codex, a coding agent. You and the user share one workspace. Use the available tools to complete the task.&quot;,
+      &quot;supported_reasoning_levels&quot;: [
+        {
+          &quot;effort&quot;: &quot;low&quot;,
+          &quot;description&quot;: &quot;Fast responses&quot;
+        },
+        {
+          &quot;effort&quot;: &quot;medium&quot;,
+          &quot;description&quot;: &quot;Balanced&quot;
+        },
+        {
+          &quot;effort&quot;: &quot;high&quot;,
+          &quot;description&quot;: &quot;Deeper reasoning&quot;
+        }
+      ],
+      &quot;shell_type&quot;: &quot;unified_exec&quot;,
+      &quot;visibility&quot;: &quot;list&quot;,
+      &quot;supported_in_api&quot;: true,
+      &quot;support_verbosity&quot;: true,
+      &quot;truncation_policy&quot;: {
+        &quot;mode&quot;: &quot;tokens&quot;,
+        &quot;limit&quot;: 10000
+      },
+      &quot;experimental_supported_tools&quot;: [],
+      &quot;tool_mode&quot;: &quot;direct&quot;,
+      &quot;use_responses_lite&quot;: false,
+      &quot;input_modalities&quot;: [
+        &quot;text&quot;
+      ],
+      &quot;priority&quot;: 103,
+      &quot;context_window&quot;: 872000,
+      &quot;max_context_window&quot;: 872000
+    }
+  ]
+}</pre></div>
+
+								<h4 class="setup-heading">3. Point <code>config.toml</code> at EnMaaS</h4>
+
+								<p class="setup-copy">Quit the app with Cmd-Q first, then edit <code>~/.codex/config.toml</code>, or use <strong>Settings &rarr; Personal &rarr; Configuration &rarr; Open config.toml</strong>.</p>
+								<div class="code"><pre>model = &quot;rits/deepseek-ai/DeepSeek-V4.1-Flash-1017&quot;
+model_provider = &quot;enmaas&quot;
+model_catalog_json = &quot;/Users/YOUR_USERNAME/.codex/models.json&quot;
+
+[model_providers.enmaas]
+name = &quot;EnMaaS&quot;
+base_url = &quot;https://api.enmaas.devshift.net/v1&quot;
+env_key = &quot;ENMAAS_KEY&quot;
+wire_api = &quot;responses&quot;
+requires_openai_auth = false
+supports_websockets = false</pre></div>
+
+								<h4 class="setup-heading">4. Restart and test</h4>
+
+								<p class="setup-copy">Reopen the app, start a new chat, and pick <strong>DeepSeek V4.1 Flash (EnMaaS)</strong>. Ask <code>Reply OK only</code>, then ask it to run <code>pwd</code>. Keep a copy of <code>config.toml</code> before editing; restore it and delete <code>models.json</code> to roll back.</p>
+							</div></div>
+						<div class="setup">
+							<div class="setup-title">Add more models</div>
+							<div class="setup-body">
+
+								<p class="setup-copy">List the models the gateway offers:</p>
+								<div class="code"><pre>curl -s &quot;https://api.enmaas.devshift.net/v1/models&quot; \
+  -H &quot;Authorization: Bearer $ENMAAS_KEY&quot; | grep -o &#39;&quot;id&quot;:&quot;[^&quot;]*&quot;&#39;</pre></div>
+
+								<p class="setup-copy">Copy an existing entry in <code>models.json</code>, change <code>slug</code>, <code>display_name</code>, and <code>priority</code>, and set the real <code>context_window</code>. Keep <code>tool_mode</code>, <code>use_responses_lite</code>, <code>shell_type</code>, and <code>input_modalities</code>, then restart the app.</p>
+
+								<p class="setup-copy">For another model, copy the DeepSeek entry and change <code>slug</code>, <code>display_name</code>, <code>priority</code>, and the context window:</p>
+								<div class="code"><pre>{
+  &quot;slug&quot;: &quot;vendor/model-id&quot;,
+  &quot;display_name&quot;: &quot;Model Name (EnMaaS)&quot;,
+  &quot;priority&quot;: 104,
+  &quot;context_window&quot;: 1000000,
+  &quot;max_context_window&quot;: 1000000
+}</pre></div>
+
+								<p class="tool-info">Hosted models are text-only. Images in the request or history return HTTP 400.</p>
+							</div></div>
+						<div class="warning fallback"><span class="icon">↩</span>
+							<div><strong>Rollback if EnMaaS is unavailable</strong>
+								<br>Stop using the <code>enmaas</code> profile and return to your existing Codex profile, for example <code>codex --profile default</code>. Do not delete your old config; keeping both profiles makes rollback immediate while the service is being scaled and stabilized.</div></div></div></div>
+				<div class="tool" id="tool-opencode">
+					<div class="tool-icon opencode-logo"><span class="tool-mark">&lt;&gt;</span></div>
+					<div>
+
+						<p class="tool-note">Save your current configuration first so you can switch back easily.</p>
+
+						<h3>OpenCode</h3>
+
+						<p>Use an isolated OpenCode configuration so your normal sessions remain untouched. OpenCode <strong>v1</strong> and <strong>v2</strong> use different configuration schemas &mdash; open the section for the version you have installed. The <code>/models</code> command lets you inspect the available EnMaaS models.</p>
+						<div class="tabs">
+							<div class="setup">
+								<div class="setup-title">OpenCode v2 configuration</div>
+								<div class="setup-body">
+
+									<h4 class="setup-heading">1. OpenCode v2 &mdash; <code>~/.config/opencode-enmaas/opencode/opencode.json</code></h4>
+
+									<p class="setup-copy">v2 uses the <code>providers</code> key (plural) and the bundled <code>@opencode/ai/providers/openai-compatible</code> runtime, so no npm packages are needed. Each provider reads its credential from <code>ENMAAS_KEY</code> via the <code>env</code> list, and <code>&quot;update&quot;: &quot;disable&quot;</code> turns off update checks. The example keeps hosted models under the custom <code>enmaas</code> provider; if you use the built-in <code>openai</code> provider instead, add the hosted model IDs under its <code>models</code> block. The <code>--standalone</code> flag is v2-only; do not use it with v1.</p>
+									<div class="code"><pre>{
+  &quot;$schema&quot;: &quot;https://opencode.ai/config.json&quot;,
+  &quot;model&quot;: &quot;enmaas/rits/zai-org/glm-5-3&quot;,
+  // To test DeepSeek, use: enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
+  &quot;update&quot;: &quot;disable&quot;,
+  &quot;providers&quot;: {
+    &quot;enmaas&quot;: {
+      &quot;name&quot;: &quot;EnMaaS&quot;,
+      &quot;env&quot;: [&quot;ENMAAS_KEY&quot;],
+      &quot;package&quot;: &quot;@opencode/ai/providers/openai-compatible&quot;,
+      &quot;settings&quot;: {
+        &quot;baseURL&quot;: &quot;https://api.enmaas.devshift.net/v1&quot;
+      },
+      &quot;models&quot;: {
+         &quot;rits/zai-org/glm-5-3&quot;: {
+           &quot;name&quot;: &quot;GLM 5.3&quot;,
+           &quot;limit&quot;: { &quot;context&quot;: 1048576, &quot;output&quot;: 65536 }
+         },
+         &quot;rits/deepseek-ai/DeepSeek-V4.1-Flash-1017&quot;: {
+           &quot;name&quot;: &quot;DeepSeek V4.1 Flash&quot;
+         }
+      }
+    },
+    &quot;openai&quot;: {
+      &quot;env&quot;: [&quot;ENMAAS_KEY&quot;],
+      &quot;settings&quot;: { &quot;baseURL&quot;: &quot;https://api.enmaas.devshift.net/v1&quot; }
+    },
+    &quot;anthropic&quot;: {
+      &quot;env&quot;: [&quot;ENMAAS_KEY&quot;],
+      &quot;settings&quot;: { &quot;baseURL&quot;: &quot;https://api.enmaas.devshift.net/v1&quot; }
+    }
+  }
+}</pre></div>
+
+									<p class="tool-info"><strong>Claude Haiku 5.5 and Claude 5.x models:</strong> use OpenCode <strong>v2.0.25 or newer</strong> and set <code>compatibility.supportsThinkingBlockBinding</code> to <code>false</code> on the model entry. Older OpenCode versions send a beta field that the EnMaaS Vertex backend rejects with <code>thinking.adaptive.block_binding: Extra inputs are not permitted</code>. Claude Code is not affected.</p>
+									<div class="code"><pre>&quot;claude-haiku-5-5&quot;: {
+  &quot;name&quot;: &quot;Claude Haiku 5.5 (EnMaaS)&quot;,
+  &quot;compatibility&quot;: { &quot;supportsThinkingBlockBinding&quot;: false }
+}</pre></div>
+
+									<h4 class="setup-heading">2. Run v2 against EnMaaS</h4>
+
+									<p class="setup-copy">Isolate this test configuration and start v2 with <code>--standalone</code>, which runs a private server that suits an isolated setup. Then use <code>/models</code> inside OpenCode to inspect the gateway catalog.</p>
+									<div class="code"><pre># Isolate this test configuration
+export ENMAAS_KEY=&quot;your-enmaas-key&quot;
+export XDG_CONFIG_HOME=&quot;$HOME/.config/opencode-enmaas&quot;
+export XDG_DATA_HOME=&quot;$HOME/.local/share/opencode-enmaas&quot;
+opencode --standalone
+
+# Inside OpenCode
+/models</pre></div></div></div>
+							<div class="setup">
+								<div class="setup-title">OpenCode v1 configuration</div>
+								<div class="setup-body">
+
+									<h4 class="setup-heading">1. OpenCode v1 &mdash; <code>~/.config/opencode-enmaas/opencode/opencode.json</code></h4>
+
+									<p class="setup-copy">v1 uses the <code>provider</code> key (singular) and references the <code>@ai-sdk/openai-compatible</code> npm runtime, which must be installed next to the config for the custom <code>enmaas</code> provider to load. The credential is substituted inline from <code>ENMAAS_KEY</code> via <code>{env:ENMAAS_KEY}</code>.</p>
+									<div class="code"><pre>{
+  &quot;$schema&quot;: &quot;https://opencode.ai/config.json&quot;,
+  &quot;model&quot;: &quot;enmaas/rits/zai-org/glm-5-3&quot;,
+  // To test DeepSeek (including image input), use: enmaas/rits/deepseek-ai/DeepSeek-V4.1-Flash-1017
+  &quot;provider&quot;: {
+    &quot;enmaas&quot;: {
+      &quot;npm&quot;: &quot;@ai-sdk/openai-compatible&quot;,
+      &quot;name&quot;: &quot;EnMaaS&quot;,
+      &quot;options&quot;: {
+        &quot;baseURL&quot;: &quot;https://api.enmaas.devshift.net/v1&quot;,
+        &quot;apiKey&quot;: &quot;{env:ENMAAS_KEY}&quot;
+      },
+      &quot;models&quot;: {
+         &quot;rits/zai-org/glm-5-3&quot;: {
+           &quot;name&quot;: &quot;GLM 5.3&quot;,
+           &quot;limit&quot;: {
+             &quot;context&quot;: 1048576,
+             &quot;output&quot;: 65536
+           }
+         },
+         &quot;rits/deepseek-ai/DeepSeek-V4.1-Flash-1017&quot;: {
+           &quot;name&quot;: &quot;DeepSeek V4.1 Flash&quot;,
+           &quot;limit&quot;: {
+             &quot;context&quot;: 1048576,
+             &quot;output&quot;: 65536
+           },
+           &quot;modalities&quot;: {
+             &quot;input&quot;: [&quot;text&quot;, &quot;image&quot;],
+             &quot;output&quot;: [&quot;text&quot;]
+           }
+         }
+      }
+    },
+    &quot;openai&quot;: {
+      &quot;options&quot;: {
+        &quot;baseURL&quot;: &quot;https://api.enmaas.devshift.net/v1&quot;,
+        &quot;apiKey&quot;: &quot;{env:ENMAAS_KEY}&quot;
+      }
+    },
+    &quot;anthropic&quot;: {
+      &quot;options&quot;: {
+        &quot;baseURL&quot;: &quot;https://api.enmaas.devshift.net/v1&quot;,
+        &quot;apiKey&quot;: &quot;{env:ENMAAS_KEY}&quot;
+      }
+    }
+  }
+}</pre></div>
+									<div class="tool-info"><strong>DeepSeek image input.</strong>
+										<br>OpenCode v1 sends images only when the selected model declares image input. The <code>modalities</code> block in this example enables vision for DeepSeek V4.1 Flash; GLM 5.3 is text-only, so do not add it there. Switch the pinned <code>model</code> to the DeepSeek ID to use vision.</div>
+
+									<h4 class="setup-heading">2. Run v1 against EnMaaS</h4>
+
+									<p class="setup-copy">Install the provider runtime next to the config once, then isolate the configuration and start the v1 TUI. Use <code>/models</code> inside OpenCode to inspect the gateway catalog.</p>
+									<div class="code"><pre># One-time: install the provider runtime next to the config
+npm install --prefix &quot;$HOME/.config/opencode-enmaas/opencode&quot; @ai-sdk/openai-compatible
+
+# Isolate this test configuration
+export ENMAAS_KEY=&quot;your-enmaas-key&quot;
+export XDG_CONFIG_HOME=&quot;$HOME/.config/opencode-enmaas&quot;
+export XDG_DATA_HOME=&quot;$HOME/.local/share/opencode-enmaas&quot;
+opencode
+
+# Inside OpenCode
+/models</pre></div></div></div></div>
+
+						<p>Use the provider matching the model&#39;s API dialect: Anthropic-compatible models use <code>/v1/messages</code>; OpenAI-compatible models use <code>/v1/responses</code> or <code>/v1/chat/completions</code>. The catalog is advisory and can omit models for some credential types; the local provider model entries and the pinned model are the source of truth for what this client can select.</p>
+
+						<p class="tool-info"><strong>OpenCode does not need a separate model-picker block. For DeepSeek, add <code>rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</code> to the pinned OpenAI-compatible provider model list.</strong> Its <code>/models</code> command may read the gateway catalog, but the catalog is not authoritative for every credential type. Pin the default model locally and use an exact supported model ID even when it is absent from the catalog.</p>
+						<div class="warning fallback"><span class="icon">↩</span>
+							<div><strong>Rollback if EnMaaS is unavailable</strong>
+								<br>Close the standalone EnMaaS process and run your normal <code>opencode</code> command without the EnMaaS environment variables. Your normal <code>XDG_CONFIG_HOME</code> and <code>XDG_DATA_HOME</code> remain separate, so existing sessions and providers are preserved.</div></div></div></div>
+				<div class="tool" id="tool-pi">
+					<div class="tool-icon">&pi;</div>
+					<div>
+
+						<p class="tool-note">Save your current configuration first so you can switch back easily.</p>
+
+						<h3>Pi</h3>
+
+						<p>Route all of Pi&rsquo;s model families through EnMaaS with one key: OpenAI, Anthropic, and the hosted GLM and DeepSeek models. Merge the entries below into the <code>providers</code> object of your existing <code>~/.pi/agent/models.json</code>.</p>
+
+						<h4 class="setup-heading">1. Route Pi&rsquo;s providers through EnMaaS</h4>
+
+						<p class="setup-copy">The <code>openai</code> and <code>anthropic</code> entries override Pi&rsquo;s built-in providers without a <code>models</code> list, so their full catalogues (<span class="mono">gpt-*</span>, <span class="mono">claude-*</span>) stay available while routing through the gateway. The base URLs match Pi&rsquo;s built-in defaults: <code>openai</code> keeps the <code>/v1</code> suffix, <code>anthropic</code> stays bare because Pi appends <code>/v1/messages</code> itself. The <code>enmaas-glm-5-3</code> entry pins both hosted OpenAI-compatible models: GLM 5.3 and DeepSeek V4.1 Flash.</p>
+						<div class="code"><pre>{
+  &quot;providers&quot;: {
+    &quot;openai&quot;: {
+      &quot;baseUrl&quot;: &quot;https://api.enmaas.devshift.net/v1&quot;
+    },
+    &quot;anthropic&quot;: {
+      &quot;baseUrl&quot;: &quot;https://api.enmaas.devshift.net&quot;,
+      &quot;compat&quot;: {&quot;supportsMidConvoEffort&quot;: false},
+      &quot;modelOverrides&quot;: {
+        &quot;claude-opus-5-5&quot;: {&quot;compat&quot;: {&quot;supportsStrictTools&quot;: false}},
+        &quot;claude-haiku-5-5&quot;: {&quot;compat&quot;: {&quot;supportsStrictTools&quot;: false}}
+      }
+    },
+    &quot;enmaas-glm-5-3&quot;: {
+      &quot;baseUrl&quot;: &quot;https://api.enmaas.devshift.net/v1&quot;,
+      &quot;api&quot;: &quot;openai-completions&quot;,
+      &quot;models&quot;: [{
+        &quot;id&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+        &quot;name&quot;: &quot;GLM 5.3 (EnMaaS)&quot;,
+        &quot;reasoning&quot;: true,
+        &quot;input&quot;: [&quot;text&quot;],
+         &quot;contextWindow&quot;: 1048576,
+        &quot;maxTokens&quot;: 65536,
+        &quot;cost&quot;: {&quot;input&quot;: 0, &quot;output&quot;: 0, &quot;cacheRead&quot;: 0, &quot;cacheWrite&quot;: 0},
+        &quot;compat&quot;: {&quot;supportsDeveloperRole&quot;: false},
+         &quot;samplingParams&quot;: {&quot;frequency_penalty&quot;: 0, &quot;presence_penalty&quot;: 0}
+       },
+       {
+         &quot;id&quot;: &quot;rits/deepseek-ai/DeepSeek-V4.1-Flash-1017&quot;,
+         &quot;name&quot;: &quot;DeepSeek V4.1 Flash (EnMaaS)&quot;,
+         &quot;input&quot;: [&quot;text&quot;],
+         &quot;cost&quot;: {&quot;input&quot;: 0, &quot;output&quot;: 0, &quot;cacheRead&quot;: 0, &quot;cacheWrite&quot;: 0},
+         &quot;compat&quot;: {&quot;supportsDeveloperRole&quot;: false}
+       }]
+    }
+  }
+}</pre></div>
+						<p class="tool-info"><strong>Claude 5.x models:</strong> the provider-level <code>supportsMidConvoEffort: false</code> prevents <code>output_config</code> validation errors. Opus 5.5 and Haiku 5.5 also need <code>supportsStrictTools: false</code> until the GCP organization policy allows structured outputs for those models. Remove the overrides once the policy is updated.</p>
+
+						<h4 class="setup-heading">2. Store the key and smoke test</h4>
+
+						<p class="setup-copy">Add an entry for each provider to <code>~/.pi/agent/auth.json</code> so every model family authenticates with the same EnMaaS key. Keep the file private.</p>
+						<div class="code"><pre># ~/.pi/agent/auth.json &mdash; chmod 0600
+{
+  &quot;openai&quot;: {
+    &quot;type&quot;: &quot;api_key&quot;,
+    &quot;key&quot;: &quot;your-enmaas-key&quot;
+  },
+  &quot;anthropic&quot;: {
+    &quot;type&quot;: &quot;api_key&quot;,
+    &quot;key&quot;: &quot;your-enmaas-key&quot;
+  },
+  &quot;enmaas-glm-5-3&quot;: {
+    &quot;type&quot;: &quot;api_key&quot;,
+    &quot;key&quot;: &quot;your-enmaas-key&quot;
+  }
+}
+
+# Smoke test
+pi --provider enmaas-glm-5-3 --model &quot;rits/zai-org/glm-5-3&quot; -p &quot;Reply with exactly: OK&quot;
+# DeepSeek uses the same OpenAI-compatible pinned provider
+pi --provider enmaas-glm-5-3 --model &quot;rits/deepseek-ai/DeepSeek-V4.1-Flash-1017&quot; -p &quot;Reply with exactly: OK&quot;</pre></div>
+
+						<p>Frontier models appear in <code>/model</code> with their usual Pi catalogue entries; select any of them and the request routes through EnMaaS. Use the provider matching the model family &mdash; <code>openai/*</code> and <code>enmaas-glm-5-3/*</code> speak OpenAI dialects, <code>anthropic/*</code> uses Messages.</p>
+						<div class="warning"><span class="icon">!</span>
+							<div><strong>Pin hosted models directly.</strong>
+								<br>The <code>/v1/models</code> response is not authoritative for every credential type, so GLM or DeepSeek may not appear in Pi&rsquo;s model search even when inference works. The pinned entries above keep them available in <code>/model</code>. Keep the GLM <code>samplingParams</code> penalties at <code>0</code>; those penalties can make GLM drift into Chinese.</div></div>
+						<div class="warning fallback"><span class="icon">↩</span>
+							<div><strong>Rollback if EnMaaS is unavailable</strong>
+								<br>Restore your backed-up <code>~/.pi/agent/models.json</code>, or remove the EnMaaS entries so <code>openai</code> and <code>anthropic</code> return to their built-in endpoints, and relaunch Pi. Keeping the backup makes rollback immediate while the service is being scaled and stabilized.</div></div></div></div>
+				<div class="tool" id="tool-goose">
+					<div class="tool-icon goose-logo">G</div>
+					<div>
+
+						<p class="tool-note">Save your current configuration first so you can switch back easily.</p>
+
+						<h3>Goose</h3>
+
+						<p>Goose is an open-source, extensible AI agent available as an RPM in Fedora and RHEL. Add EnMaaS as a custom provider, then configure its API key from Goose.</p>
+
+						<h4 class="setup-heading">1. Add the EnMaaS custom provider</h4>
+
+						<p class="setup-copy">Create <code>~/.config/goose/custom_providers/custom_enmaas.json</code>. Create the directory first if it does not exist.</p>
+						<div class="code"><pre>mkdir -p ~/.config/goose/custom_providers</pre></div>
+						<div class="code"><pre>{
+  &quot;name&quot;: &quot;custom_enmaas&quot;,
+  &quot;engine&quot;: &quot;openai&quot;,
+  &quot;display_name&quot;: &quot;enmaas&quot;,
+  &quot;description&quot;: &quot;Custom enmaas provider&quot;,
+  &quot;api_key_env&quot;: &quot;CUSTOM_ENMAAS_API_KEY&quot;,
+  &quot;base_url&quot;: &quot;https://api.enmaas.devshift.net/v1&quot;,
+  &quot;models&quot;: [
+    {
+      &quot;name&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+       &quot;context_limit&quot;: 1048576,
+      &quot;input_token_cost&quot;: null,
+      &quot;output_token_cost&quot;: null,
+      &quot;currency&quot;: null,
+      &quot;supports_cache_control&quot;: null,
+      &quot;reasoning&quot;: false
+    },
+    {
+      &quot;name&quot;: &quot;rits/deepseek-ai/DeepSeek-V4.1-Flash-1017&quot;,
+      &quot;input_token_cost&quot;: null,
+      &quot;output_token_cost&quot;: null,
+      &quot;currency&quot;: null,
+      &quot;supports_cache_control&quot;: null,
+      &quot;reasoning&quot;: false
+    }
+  ],
+  &quot;headers&quot;: null,
+  &quot;timeout_seconds&quot;: null,
+  &quot;supports_streaming&quot;: true,
+  &quot;requires_auth&quot;: true,
+  &quot;catalog_provider_id&quot;: null,
+  &quot;base_path&quot;: &quot;v1/chat/completions&quot;,
+  &quot;env_vars&quot;: null,
+  &quot;dynamic_models&quot;: null,
+  &quot;skip_canonical_filtering&quot;: false,
+  &quot;model_doc_link&quot;: null,
+  &quot;setup_steps&quot;: [],
+  &quot;fast_model&quot;: null,
+  &quot;preserves_thinking&quot;: true
+}</pre></div>
+
+						<h4 class="setup-heading">2. Configure the API key in Goose</h4>
+
+						<p class="setup-copy">Run Goose, select <strong>Configure Providers</strong>, search for <code>enmaas</code>, and configure the API key when prompted. Goose uses the <code>CUSTOM_ENMAAS_API_KEY</code> variable declared in the provider file.</p>
+						<div class="code"><pre>goose configure</pre></div>
+						<div class="tool-info"><strong>The provider file contains no secret.</strong>
+							<br>Keep the API key private and use the exact model ID <code>rits/zai-org/glm-5-3</code> or <code>rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</code>.</div></div></div>
+				<div class="soon"><span>＋</span><span><strong>More tools coming soon.</strong> Tell us what you want supported in <a href="https://redhat.enterprise.slack.com/archives/C0C5WRT1VJP">#forum-enmaas</a>.</span></div></div></div>
+		<div class="source-section" id="models">
+			<div class="head">
+
+				<h2>Hosted models, now including DeepSeek.</h2>
+
+				<p class="lede">EnMaaS currently provides approved hosted open-weight models for engineering use, including GLM 5.3 and DeepSeek V4.1 Flash.</p>
+			</div>
+			<div class="card accent">
+				<div class="model-line"><span class="model-id">rits/zai-org/glm-5-3</span><span class="model-note">GLM 5.3 &middot; hosted</span></div>
+				<div class="grid" style="margin-top:14px;">
+
+					<p><strong>1M</strong>
+						<br><span class="mono">context window</span></p>
+
+					<p><strong>Text-first</strong>
+						<br><span class="mono">best for engineering work</span></p>
+				</div>
+				<div class="model-line" style="margin-top:18px;"><span class="model-id">rits/deepseek-ai/DeepSeek-V4.1-Flash-1017</span><span class="model-note">DeepSeek V4.1 Flash &middot; hosted</span></div>
+
+				<p style="margin-top:10px;">Use this exact model ID through an OpenAI-compatible Chat Completions client.</p>
+			</div>
+			<div class="card" id="hosted-only" style="margin-top:16px;">
+
+				<h3>When only hosted models are available</h3>
+
+				<p>After your monthly budget is reached, the gateway can still allow GLM 5.3 while other models are denied. Claude Code auto-mode and Codex auto-review send their safety checks to a Sonnet or OpenAI review model by default, so point those at the hosted GLM 5.3 model too. These recipes use GLM 5.3 as the review model; DeepSeek V4.1 Flash is not covered here. Remove these settings once your other models are available again.</p>
+
+				<h4 class="setup-heading">Claude Code auto-mode</h4>
+
+				<p class="setup-copy">The auto-mode classifier uses the Sonnet model tier, and subagents and background tasks use other tiers. Point every tier at the hosted model in the <code>env</code> block of <code>~/.claude/settings.json</code> from the <a href="#tool-claude">Claude Code setup</a>.</p>
+				<div class="code"><pre>&quot;ANTHROPIC_MODEL&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+&quot;ANTHROPIC_DEFAULT_OPUS_MODEL&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+&quot;ANTHROPIC_DEFAULT_SONNET_MODEL&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+&quot;ANTHROPIC_DEFAULT_HAIKU_MODEL&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+&quot;ANTHROPIC_DEFAULT_FABLE_MODEL&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+&quot;CLAUDE_CODE_SUBAGENT_MODEL&quot;: &quot;rits/zai-org/glm-5-3&quot;,
+&quot;CLAUDE_CODE_SUBAGENT_MODEL_FORCE&quot;: &quot;1&quot;,
+&quot;CLAUDE_CODE_AUTO_MODE_SERVER&quot;: &quot;0&quot;</pre></div>
+				<div class="tool-info"><strong>Known limitation: classifier timeouts with GLM.</strong>
+					<br>GLM reasons by default when a request does not set <code>thinking</code>. The auto-mode classifier sends large prompts without a <code>thinking</code> setting, so GLM can spend long on reasoning before it answers. Claude Code 2.1.300 allows 60 seconds per attempt for the first classifier stage (up to 300 seconds with retries) and 120 seconds for the second stage, and these limits are not configurable. When a check exceeds them, Claude Code reports the classifier as temporarily unavailable (timed out) and denies that action. Whether Claude Code sends <code>thinking</code> as disabled, null, or not at all differs between versions, so the symptom can vary. Retry the action, or use a non-auto permission mode for long sessions. Fixes for this class of problem are in progress in vLLM itself (for example <a href="https://github.com/vllm-project/vllm/pull/58613" target="_blank" rel="noopener noreferrer">vllm#58613</a>, <a href="https://github.com/vllm-project/vllm/pull/58786" target="_blank" rel="noopener noreferrer">vllm#58786</a>, and <a href="https://github.com/vllm-project/vllm/pull/61094" target="_blank" rel="noopener noreferrer">vllm#61094</a>), so these workarounds should become unnecessary once they ship.</div>
+
+				<h4 class="setup-heading">Codex auto-review</h4>
+
+				<p class="setup-copy">With auto-review (<code>approvals_reviewer = &quot;auto_review&quot;</code>), Codex sends approval checks to the review model named in its model catalog, which is an OpenAI model by default. Generate a catalog entry that reviews with GLM 5.3 and only uses tools that hosted models accept, then add it to the <code>enmaas</code> profile from the <a href="#tool-codex">Codex setup</a>.</p>
+				<div class="code"><pre># Generate a GLM catalog entry from the catalog bundled with Codex
+codex debug models --bundled | jq &#39;[.models[] | select(.slug == &quot;gpt-5.5&quot;)
+  | .slug = &quot;rits/zai-org/glm-5-3&quot; | .display_name = &quot;GLM 5.3 (EnMaaS)&quot;
+  | .auto_review_model_override = &quot;rits/zai-org/glm-5-3&quot;
+  | .apply_patch_tool_type = null | .tool_mode = &quot;direct&quot;
+  | .supports_search_tool = false | .input_modalities = [&quot;text&quot;]]
+  | if length == 0 then error(&quot;bundled catalog has no gpt-5.5 entry&quot;)
+    else {models: .} end&#39; \
+  &gt; ~/.codex/enmaas-glm-models.json.tmp \
+  &amp;&amp; mv ~/.codex/enmaas-glm-models.json.tmp ~/.codex/enmaas-glm-models.json
+
+# ~/.codex/enmaas.config.toml &mdash; add
+model_catalog_json = &quot;~/.codex/enmaas-glm-models.json&quot;
+web_search = &quot;disabled&quot;</pre></div>
+				<div class="tool-info"><strong>Why these fields.</strong>
+					<br>Hosted models are served by vLLM, which rejects Responses API custom tools that carry a grammar format (HTTP 400). The bundled Codex catalog entry for <code>gpt-5.5</code> declares <code>apply_patch</code> as a freeform (grammar) tool, so this entry removes it and sets <code>tool_mode</code> to <code>direct</code> to avoid other grammar-based tools, and Codex edits files with shell commands instead. The vLLM fixes linked above are the intended long-term fix; the gateway does not rewrite client requests. Built-in web search is not executed for hosted models, and GLM 5.3 is text-only. Tested with Codex 0.162.1, and catalog generation re-checked with Codex 0.163.0. The command leaves an existing catalog untouched if the bundled catalog no longer has a <code>gpt-5.5</code> entry; in that case select another bundled model.</div></div></div>
+		<div class="source-section" id="spend">
+			<div class="head">
+
+				<h2>Your dashboard is coming soon.</h2>
+
+				<p class="lede">The EnMaaS dashboard is being prepared. Until it is available, use the existing AI Budget Help tool to view your spend until the new EnMaaS dashboard is ready.</p>
+			</div>
+			<div class="card blue dashboard-card">
+				<div class="preview-tag">Illustrative preview &middot; not live data</div>
+				<div class="dashboard">
+					<div class="pie-grid">
+						<div class="mini-pie-card">
+							<div class="mini-pie pie-hosted">
+								<div class="mini-pie-label">hosted
+									<br>68%</div></div><span>Hosted vs frontier</span></div>
+						<div class="mini-pie-card">
+							<div class="mini-pie pie-models">
+								<div class="mini-pie-label">model
+									<br>spend</div></div><span>Model mix</span></div>
+						<div class="mini-pie-card">
+							<div class="mini-pie pie-tokens">
+								<div class="mini-pie-label">token
+									<br>mix</div></div><span>Token types</span></div></div>
+					<div class="bars">
+						<div class="bar-row"><span class="bar-name">Claude Sonnet &mdash; output</span>
+							<div class="bar-track">
+								<div class="bar-fill" style="width:84%;">
+									<br>
+								</div></div><span class="bar-amount">$42.80</span></div>
+						<div class="bar-row"><span class="bar-name">GPT-5.6 &mdash; output</span>
+							<div class="bar-track">
+								<div class="bar-fill blue" style="width:62%;">
+									<br>
+								</div></div><span class="bar-amount">$31.40</span></div>
+						<div class="bar-row"><span class="bar-name">GLM 5.3 / DeepSeek &mdash; output</span>
+							<div class="bar-track">
+								<div class="bar-fill amber" style="width:37%;">
+									<br>
+								</div></div><span class="bar-amount">$18.60</span></div></div></div></div>
+			<div class="temporary-note"><strong>Temporary spend access while the dashboard is being built</strong><span>The EnMaaS dashboard is not live yet. Until it launches, use the existing AI Budget Help tool to view your spend.</span><a class="btn" href="https://source.redhat.com/departments/products_and_global_engineering/pge_cloud_ops/wiki~2/onboarding_checklist_for_openshift_engineering__qe/ai_budget_help" target="_blank" rel="noopener noreferrer">Open AI Budget Help for now ↗</a></div></div>
+		<div class="source-section" id="availability">
+			<div class="head">
+
+				<h2>Know what to expect.</h2>
+
+				<p class="lede">EnMaaS is being scaled out and tuned. We want you to know how to keep working while it evolves.</p>
+			</div>
+			<div class="warning"><span class="icon">!</span>
+				<div><strong>Availability and model stability</strong>
+					<br>Models, capacity, and routing are still being expanded. Short service interruptions or model availability changes may occur during updates and scaling.</div></div>
+			<div class="warning fallback"><span class="icon">↩</span>
+				<div><strong>Keep a fallback ready</strong>
+					<br>For important work, retain your previous provider configuration and workflow. If EnMaaS is temporarily unavailable, switch back to that workflow and retry later.</div></div>
+			<div class="warning"><span class="icon">↩</span>
+				<div><strong>Clean up stale provider settings</strong>
+					<br>Before you rely on EnMaaS, remove old direct-provider settings from shell startup files, the systemd user environment, and client config files. Keep a backup so you can switch back. The Claude Code section above includes the full Vertex cleanup commands.</div></div></div>
+		<div style="height:20px;">
+			<br>
+		</div></div></div>
