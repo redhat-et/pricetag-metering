@@ -169,10 +169,12 @@ Day-to-day ops: [docs/db-backup.md](docs/db-backup.md).
 
 `scripts/sync-ldap-cost-centers.sh` is a read-only LDAP directory sync for
 `partner_users`. It matches by the stable `rhatUUID` and keeps cost center,
-cost-center description, organization, job/geo/office fields, profile fields,
-and manager links (`tags.manager_uuid` + `manager_user_id`) current. Empty LDAP
-values are skipped, unrelated tags are preserved, only changed rows are
-written, and `updated_at` is never touched. It supports local `psql`, Docker,
+cost-center description, organization, job/geo/office fields, profile display
+fields, and manager links (`tags.manager_uuid` + `manager_user_id`) current.
+`email`/`kerberos_id` are opt-in because direct tag writes bypass
+`partner_user_logins` reconciliation. Empty LDAP values are skipped, unrelated
+tags are preserved, only changed rows are written, and `updated_at` is never
+touched. It supports local `psql`, Docker,
 and an OpenShift Postgres pod (including reading the DSN from a Secret), always
 refuses an empty apply unless explicitly allowed, and writes an apply snapshot
 plus a generated rollback SQL file. Sensitive LDIF/CSV/SQL output is written

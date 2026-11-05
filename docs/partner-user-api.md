@@ -60,13 +60,17 @@ whether the email changed.
 
 The scheduled LDAP sync is a direct, scoped `partner_users` correction job, not
 an API caller. It matches on `user_id` (`rhatUUID`) and merges only fields that
-have a non-empty LDAP value. It keeps `email`, `first_name`, `last_name`,
-`country`, `kerberos_id`, `cost_center`, `cost_center_description`,
-`organization`, `job_title`, `job_code`, `geo`, `office_location`, `worker_id`,
-`supervisor_worker_id`, `employee_subtype`, `person_type`, `hire_date`,
-`term_date`, and `deactivated` current. An LDAP `manager` DN is resolved to the
-manager's `rhatUUID` and written to `tags.manager_uuid`; when that manager is a
-partner user, the self-referencing `manager_user_id` column is updated too.
-Unresolved manager DNs leave the existing manager untouched. The job never
-changes `updated_at`, never provisions users, and writes a rollback artifact
-before every apply. See [deploy/ldap-sync/README.md](../deploy/ldap-sync/README.md).
+have a non-empty LDAP value. Its default `directory` field set keeps
+`first_name`, `last_name`, `country`, `cost_center`,
+`cost_center_description`, `organization`, `job_title`, `job_code`, `geo`,
+`office_location`, `worker_id`, `supervisor_worker_id`, `employee_subtype`,
+`person_type`, `hire_date`, `term_date`, and `deactivated` current. `email` and
+`kerberos_id` are opt-in: a direct `tags.email` write does not update
+`partner_user_logins`, so email changes should go through the partner API (or a
+future SQL path that reconciles logins in the same transaction). An LDAP
+`manager` DN is resolved to the manager's `rhatUUID` and written to
+`tags.manager_uuid`; when that manager is a partner user, the self-referencing
+`manager_user_id` column is updated too. Unresolved manager DNs leave the
+existing manager untouched. The job never changes `updated_at`, never
+provisions users, and writes a rollback artifact before every apply. See
+[deploy/ldap-sync/README.md](../deploy/ldap-sync/README.md).

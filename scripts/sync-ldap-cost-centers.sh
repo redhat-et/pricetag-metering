@@ -72,12 +72,15 @@
 #   --ldap-server URL          Repeatable; defaults to the prod IPA failover list.
 #   --ldap-base DN             Default: cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com
 #   --ldap-filter FILTER       Default: (&(objectClass=posixAccount)(rhatUUID=*))
-#   --fields LIST              Comma list, or "all" (default). Supported:
-#                              email,first_name,last_name,country,kerberos_id,
-#                              cost_center,cost_center_description,organization,
-#                              job_title,job_code,geo,office_location,worker_id,
-#                              supervisor_worker_id,employee_subtype,person_type,
-#                              hire_date,term_date,deactivated,manager
+#   --fields LIST              Comma list, "directory" (default), or "all".
+#                              Supported: email,first_name,last_name,country,
+#                              kerberos_id,cost_center,cost_center_description,
+#                              organization,job_title,job_code,geo,
+#                              office_location,worker_id,supervisor_worker_id,
+#                              employee_subtype,person_type,hire_date,term_date,
+#                              deactivated,manager. "email" is opt-in because
+#                              a direct tag write does not update
+#                              partner_user_logins; use the API for email changes.
 #   --min-matched N            Abort apply if fewer than N LDAP rows match a
 #                              partner user. Default: 0.
 #   --allow-empty              Permit apply when LDAP returned zero usable rows.
@@ -102,7 +105,7 @@ LDAP_USER_BASE="${LDAP_USER_BASE:-cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com}"
 LDAP_PASSWORD_FILE="${LDAP_PASSWORD_FILE:-$HOME/.ldap_key}"
 LDAP_CA_CERT="${LDAP_CA_CERT:-$HOME/enmaas-ldap/2022-IT-Root-CA.pem}"
 LDAP_FILTER="${LDAP_FILTER:-(&(objectClass=posixAccount)(rhatUUID=*))}"
-LDAP_FIELDS="${LDAP_FIELDS:-all}"
+LDAP_FIELDS="${LDAP_FIELDS:-directory}"
 MIN_MATCHED="${LDAP_SYNC_MIN_MATCHED:-0}"
 ALLOW_EMPTY=0
 LDIF_INPUT=""
@@ -317,6 +320,10 @@ FIELD_ATTRS = {
     "manager": "manager",
 }
 TEXT_FIELDS = [f for f in FIELD_ATTRS if f != "manager"]
+DIRECTORY_FIELDS = [
+    f for f in FIELD_ATTRS
+    if f not in {"email", "kerberos_id"}
+]
 
 
 def parse_ldif(path):
@@ -390,6 +397,8 @@ def q(value):
 selected = [f.strip() for f in fields_arg.split(",") if f.strip()]
 if selected == ["all"]:
     selected = list(FIELD_ATTRS)
+elif selected == ["directory"]:
+    selected = list(DIRECTORY_FIELDS)
 unknown = sorted(set(selected) - set(FIELD_ATTRS))
 if unknown:
     raise SystemExit(f"unknown --fields value(s): {', '.join(unknown)}")

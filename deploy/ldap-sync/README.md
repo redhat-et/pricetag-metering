@@ -22,10 +22,10 @@ generated rollback SQL file under the output directory.
 | LDAP attribute | PriceTag field |
 |---|---|
 | `rhatUUID` | `user_id` (match key) |
-| `mail` | `tags.email` (unique-email conflicts are skipped) |
+| `mail` | `tags.email` (opt-in; unique-email conflicts are skipped) |
 | `givenName` / `sn` | `tags.first_name` / `tags.last_name` |
 | `co` or `c` | `tags.country` |
-| `uid` | `tags.kerberos_id` |
+| `uid` | `tags.kerberos_id` (opt-in) |
 | `rhatCostCenter` | `tags.cost_center` |
 | `rhatCostCenterDesc` | `tags.cost_center_description` |
 | `rhatOrganization` | `tags.organization` |
@@ -40,6 +40,12 @@ generated rollback SQL file under the output directory.
 | `rhatHireDate` / `rhatTermDate` | `tags.hire_date` / `tags.term_date` |
 | `rhatDeactivated` | `tags.deactivated` (`true`/`false`) |
 | `manager` DN | `tags.manager_uuid` + `manager_user_id` |
+
+The default service field set is `directory` (everything above except `mail`
+and `uid`). `email`/`kerberos_id` are opt-in via `--fields all` or an explicit
+list. This is deliberate: a direct `partner_users.tags.email` write does not
+reconcile `partner_user_logins`, so use the partner API for email changes
+unless you have extended the SQL to update logins in the same transaction.
 
 Empty LDAP values are skipped, so a missing attribute never erases a value
 that PriceTag already has. A `manager` DN is resolved through the same LDAP
@@ -132,7 +138,7 @@ Always dry-run before the first service start:
   --password-file ~/.ldap_key \
   --ca-file ~/enmaas-ldap/2022-IT-Root-CA.pem \
   --database-url-file ~/.config/pricetag/database-url \
-  --fields all \
+  --fields directory \
   --dry-run
 ```
 
