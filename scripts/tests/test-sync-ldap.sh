@@ -126,4 +126,48 @@ rollback_sql="$(find "$tmp/out-apply" -name '*.rollback.sql' | head -1)"
 [[ "$(file_mode "$rollback_sql")" == "600" ]] || fail "rollback SQL is not mode 600"
 grep -q 'UPDATE partner_users' "$rollback_sql" || fail "rollback SQL does not restore partner_users"
 
+# --- kube mode still reads the DSN from the configured Secret ---------------
+cat > "$tmp/bin/kubectl" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${KUBECTL_LOG:?}"
+if [[ " $* " == *" get secret "* ]]; then
+  printf '%s' 'cG9zdGdyZXM6Ly91c2VyOnMzY3IzdEBkYi5leGFtcGxlLmNvbTo1NDMyL3ByaWNldGFn'
+  exit 0
+fi
+if [[ " $* " == *" mktemp "* ]]; then
+  echo /tmp/fake-ldap-remote
+  exit 0
+fi
+if [[ " $* " == *" psql "* ]]; then
+  file=""
+  prev=""
+  for arg in "$@"; do
+    if [[ "$prev" == "-f" ]]; then file="$arg"; fi
+    prev="$arg"
+  done
+  if [[ "$file" == *backup.sql ]]; then
+    echo 'user_id,tags,manager_user_id'
+  else
+    echo 'updated_partner_users=1'
+  fi
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$tmp/bin/kubectl"
+
+PATH="$tmp/bin:$PATH" \
+KUBECTL_LOG="$tmp/kubectl.log" \
+DATABASE_URL='' \
+DATABASE_URL_FILE='' \
+  "$SCRIPT" --ldif "$tmp/sample.ldif" --output-dir "$tmp/out-kube" --apply \
+    --kubectl "$tmp/bin/kubectl" --kube-context ctx --namespace ns \
+    --pg-pod pod --pg-secret sec --pg-secret-key key > "$tmp/kube.log" 2>&1 \
+  || fail "kube apply failed: $(cat "$tmp/kube.log")"
+grep -q 'get secret sec' "$tmp/kubectl.log" || fail "kube mode did not read the DSN Secret"
+if grep -Eq 's3cr3t|postgres://' "$tmp/kubectl.log"; then
+  fail "DSN leaked into kubectl argv"
+fi
+grep -q 'updated_partner_users=1' "$tmp/kube.log" || fail "kube apply did not run the SQL"
+
 echo "ok: LDAP sync shell tests"
