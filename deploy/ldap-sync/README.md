@@ -4,7 +4,8 @@ Runs the PriceTag LDAP directory sync from a VPN-connected host. The
 OpenShift cluster cannot resolve or reach Red Hat IPA, so this cannot be a
 Kubernetes CronJob in the EnMaaS cluster. The service runs once on start and
 then every `LDAP_SYNC_INTERVAL_SECONDS` (default **86400**, once per 24 hours).
-A failed run is logged and retried on the next interval.
+A failed run is logged and retried after `LDAP_SYNC_RETRY_SECONDS`
+(default **900**); successful runs wait the configured interval.
 
 The underlying script is `scripts/sync-ldap-cost-centers.sh`. It is
 read-only against LDAP and writes only:
@@ -178,7 +179,9 @@ touch `updated_at` because the sync never changed it.
 ## Scheduling notes
 
 - Default cadence: 86400 seconds (24 hours). The loop is the scheduler; there
-  is no cron/timer dependency.
+  is no cron/timer dependency. A failed run retries after
+  `LDAP_SYNC_RETRY_SECONDS` (default 900) so a transient VPN/DB blip does not
+  skip a full day.
 - `LDAP_SYNC_RUN_ON_START=1` makes a restarted host reconcile immediately
   instead of waiting up to 24 hours.
 - Set `LDAP_SYNC_APPLY=0` to run the service in dry-run mode while validating

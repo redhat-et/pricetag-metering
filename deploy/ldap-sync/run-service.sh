@@ -9,6 +9,7 @@
 set -euo pipefail
 
 INTERVAL="${LDAP_SYNC_INTERVAL_SECONDS:-86400}"
+RETRY="${LDAP_SYNC_RETRY_SECONDS:-900}"
 RUN_ON_START="${LDAP_SYNC_RUN_ON_START:-1}"
 APPLY="${LDAP_SYNC_APPLY:-1}"
 FIELDS="${LDAP_SYNC_FIELDS:-directory}"
@@ -17,6 +18,10 @@ OUTPUT_DIR="${LDAP_SYNC_OUTPUT_DIR:-/var/lib/ldap-sync}"
 
 if [[ ! "$INTERVAL" =~ ^[0-9]+$ ]] || [[ "$INTERVAL" -lt 60 ]]; then
   echo "ERROR: LDAP_SYNC_INTERVAL_SECONDS must be an integer >= 60 (got $INTERVAL)" >&2
+  exit 1
+fi
+if [[ ! "$RETRY" =~ ^[0-9]+$ ]] || [[ "$RETRY" -lt 60 ]]; then
+  echo "ERROR: LDAP_SYNC_RETRY_SECONDS must be an integer >= 60 (got $RETRY)" >&2
   exit 1
 fi
 
@@ -56,19 +61,24 @@ log "LDAP sync service starting (interval=${INTERVAL}s, apply=${APPLY}, fields=$
 if [[ "$RUN_ON_START" == "1" ]]; then
   if run_once; then
     log "sync run completed"
+    delay="$INTERVAL"
   else
-    log "sync run failed; will retry after ${INTERVAL}s"
+    log "sync run failed; will retry after ${RETRY}s"
+    delay="$RETRY"
   fi
 else
   log "run-on-start disabled; first run after ${INTERVAL}s"
+  delay="$INTERVAL"
 fi
 
 while true; do
-  sleep "$INTERVAL" &
+  sleep "$delay" &
   wait $! || true
   if run_once; then
     log "sync run completed"
+    delay="$INTERVAL"
   else
-    log "sync run failed; will retry after ${INTERVAL}s"
+    log "sync run failed; will retry after ${RETRY}s"
+    delay="$RETRY"
   fi
 done
