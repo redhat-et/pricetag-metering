@@ -605,8 +605,13 @@ if [[ -n "${DATABASE_URL:-}" ]]; then
 elif [[ -n "$DATABASE_URL_FILE" ]]; then
   [[ -r "$DATABASE_URL_FILE" ]] || die "database URL file is missing or unreadable: $DATABASE_URL_FILE"
   dburl="$(tr -d '\r\n' < "$DATABASE_URL_FILE")"
+elif [[ "$DB_MODE" == "kube" ]]; then
+  secret_b64="$("$KUBECTL" --context "$KUBE_CONTEXT" -n "$KUBE_NAMESPACE" \
+    get secret "$PG_SECRET" -o "jsonpath={.data.${PG_SECRET_KEY}}")"
+  [[ -n "$secret_b64" ]] || die "secret $PG_SECRET has no key $PG_SECRET_KEY"
+  dburl="$(printf '%s' "$secret_b64" | base64 -d)"
 fi
-[[ -n "$dburl" ]] || die "DATABASE_URL or --database-url-file is required for apply"
+[[ -n "$dburl" ]] || die "DATABASE_URL/--database-url-file is required, or use kube mode with --pg-secret"
 
 # Translate the URL into private libpq service/password files. Neither the URL
 # nor the password is passed as a psql argument or exported in a process argv.
