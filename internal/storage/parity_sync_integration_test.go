@@ -121,6 +121,7 @@ func TestParitySyncMissingMetaKeepsConfirmedRollupsServingIntegration(t *testing
 		}
 	})
 
+	store.useRollups.Store(true)
 	store.rollupsReadyNow.Store(true)
 	store.parityHealthy.Store(true)
 	store.parityConfirmed.Store(true)
