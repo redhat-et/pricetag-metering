@@ -133,6 +133,21 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now pricetag-ldap-sync.service
 ```
 
+The environment file contains paths, not the secrets themselves. The LDAP
+password, CA certificate, and database URL file must be readable by the
+`pricetag-ldap-sync` account. Keep them under `/etc/pricetag-ldap-sync/` and
+chown/chmod them for that account:
+
+```bash
+sudo install -d -m 700 -o pricetag-ldap-sync -g pricetag-ldap-sync /etc/pricetag-ldap-sync
+sudo install -m 600 -o pricetag-ldap-sync -g pricetag-ldap-sync /dev/null /etc/pricetag-ldap-sync/ldap_key
+sudo install -m 600 -o pricetag-ldap-sync -g pricetag-ldap-sync /dev/null /etc/pricetag-ldap-sync/database-url
+sudo install -m 644 -o pricetag-ldap-sync -g pricetag-ldap-sync <ca.pem> /etc/pricetag-ldap-sync/ca.pem
+```
+
+A mode-600 file owned by another user passes the script's mode check but still
+fails its readability check.
+
 The service loop reads `LDAP_SYNC_INTERVAL_SECONDS` from the environment file,
 so the 24-hour cadence is configuration, not a hard-coded timer.
 
