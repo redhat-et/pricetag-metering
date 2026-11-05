@@ -180,9 +180,9 @@ refuses an empty apply unless explicitly allowed, and writes an apply snapshot
 plus a generated rollback SQL file. Sensitive LDIF/CSV/SQL output is written
 under `~/enmaas-oidc-local` with mode 600.
 
-Production runs this from a VPN-connected host because IPA is not reachable
-from the OpenShift cluster. The 24-hour service deployment, configuration, and
-rollback instructions are in
+The production deployment target is a VPN-connected host because IPA is not
+reachable from the OpenShift cluster. The 24-hour service deployment,
+configuration, and rollback instructions are in
 [deploy/ldap-sync/README.md](deploy/ldap-sync/README.md). See `--help` for the
 one-off inventory and dogfood examples.
 
