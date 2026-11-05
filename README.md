@@ -165,15 +165,24 @@ and the full 2026-09-16 cutover record (including what went wrong and
 how it was verified clean): **[docs/db-design.md](docs/db-design.md)**.
 Day-to-day ops: [docs/db-backup.md](docs/db-backup.md).
 
-### LDAP cost-center sync
+### LDAP directory sync
 
-`scripts/sync-ldap-cost-centers.sh` is a read-only LDAP correction job for
-`partner_users.tags.cost_center` and `cost_center_description`. It matches by
-the stable `rhatUUID`, preserves unrelated tags, and only writes when
-`--apply` is passed. It supports local `psql`, Docker, and an OpenShift
-Postgres pod (including reading the DSN from a Secret). Sensitive LDIF/CSV/SQL
-output is written under `~/enmaas-oidc-local` with mode 600. See
-`--help` for the production inventory and dogfood examples.
+`scripts/sync-ldap-cost-centers.sh` is a read-only LDAP directory sync for
+`partner_users`. It matches by the stable `rhatUUID` and keeps cost center,
+cost-center description, organization, job/geo/office fields, profile fields,
+and manager links (`tags.manager_uuid` + `manager_user_id`) current. Empty LDAP
+values are skipped, unrelated tags are preserved, only changed rows are
+written, and `updated_at` is never touched. It supports local `psql`, Docker,
+and an OpenShift Postgres pod (including reading the DSN from a Secret), always
+refuses an empty apply unless explicitly allowed, and writes an apply snapshot
+plus a generated rollback SQL file. Sensitive LDIF/CSV/SQL output is written
+under `~/enmaas-oidc-local` with mode 600.
+
+Production runs this from a VPN-connected host because IPA is not reachable
+from the OpenShift cluster. The 24-hour service deployment, configuration, and
+rollback instructions are in
+[deploy/ldap-sync/README.md](deploy/ldap-sync/README.md). See `--help` for the
+one-off inventory and dogfood examples.
 
 ## Related
 
