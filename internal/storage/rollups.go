@@ -396,11 +396,12 @@ func (s *Store) syncParityFromMeta(ctx context.Context, maxAge time.Duration) {
 		s.rollupsLive()
 		return
 	}
-	// Latch the last green verdict even after maxAge: once rollups have been
-	// verified, a stalled worker is an alert (and the stale-serving trade-off
-	// documented in the audit), not a reason for every API pod to start raw
-	// scans. Reject a future timestamp as a clock error.
-	if healthyRaw == "true" && !checkedAt.After(time.Now().Add(5*time.Minute)) {
+	// Latch only a verdict that is still fresh. Once a pod has confirmed
+	// parity it keeps serving the continuously rebuilt rollups under the
+	// documented serve-stale policy, but a pod booting after a long outage
+	// must not treat an ancient green as confirmation and skip the raw
+	// reads. parityStateFromMeta already rejects a future timestamp.
+	if healthy {
 		s.parityConfirmed.Store(true)
 	}
 	prev := s.parityHealthy.Swap(healthy)

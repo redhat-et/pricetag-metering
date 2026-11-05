@@ -577,7 +577,9 @@ func main() {
 }
 
 // paritySyncMaxAge is how stale the shared rollup_meta verdict may be before
-// API-mode pods stop trusting it and fall back to raw dashboard reads.
+// API-mode pods stop trusting it. A stale verdict clears local health and does
+// not latch parityConfirmed on boot; a pod that already confirmed parity keeps
+// serving rollups under the documented serve-stale policy.
 func paritySyncMaxAge(refreshSeconds int) time.Duration {
 	maxAge := 2 * time.Duration(refreshSeconds) * time.Second
 	if maxAge < 15*time.Minute {
