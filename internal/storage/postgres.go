@@ -1568,19 +1568,39 @@ func (s *Store) GetUserProfile(ctx context.Context, username string) (UserProfil
 // with a duplicate-key error inside Postgres.
 const migrationLockKey = 0x7072696365746167 // "pricetag"
 
-// usageGroupActivityIndex backs filtered /recent lookups (group scope). It is
-// built outside the startup migration path: CREATE INDEX CONCURRENTLY on a
-// large ledger can outlast the fixed migration timeout, and a cancelled
-// concurrent build can leave an invalid index that IF NOT EXISTS would then
-// skip forever. EnsureUsageGroupIndex handles both cases and retries.
+// usageGroupActivityIndex backs filtered /recent lookups (group scope). The
+// expression matches GetRecentEvents exactly: it normalizes NULL/empty group
+// names to 'unknown', so the planner can use the leading column and the
+// timestamp DESC ordering instead of walking the timestamp index. It is built
+// outside the startup migration path: CREATE INDEX CONCURRENTLY on a large
+// ledger can outlast the fixed migration timeout, and a cancelled concurrent
+// build can leave an invalid index that IF NOT EXISTS would then skip forever.
+// EnsureUsageGroupIndex handles both cases and retries.
 const usageGroupActivityIndex = "idx_usage_events_group_ts"
 
-const usageGroupActivityIndexDDL = `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_group_ts ON usage_events (group_name, timestamp DESC)`
+const usageGroupActivityIndexDDL = `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_group_ts ON usage_events ((COALESCE(NULLIF(group_name, ''), 'unknown')), timestamp DESC)`
+
+// usageUserActivityIndex backs the user-filtered /recent path. The existing
+// username index cannot provide the ORDER BY timestamp DESC tail, so a user
+// with no recent traffic still walks the table backwards.
+const usageUserActivityIndex = "idx_usage_events_user_ts"
+
+const usageUserActivityIndexDDL = `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_user_ts ON usage_events (username, timestamp DESC)`
 
 // usageIndexLockKey serialises the concurrent index build across replicas
 // that start together. It is deliberately distinct from migrationLockKey:
 // waiting for a large index build must not delay another pod's migrations.
 const usageIndexLockKey = 0x7573616765696478 // "usageidx"
+
+type usageActivityIndexSpec struct {
+	name string
+	ddl  string
+}
+
+var usageActivityIndexes = []usageActivityIndexSpec{
+	{name: usageGroupActivityIndex, ddl: usageGroupActivityIndexDDL},
+	{name: usageUserActivityIndex, ddl: usageUserActivityIndexDDL},
+}
 
 // ensureUsageGroupIndexWithLock serialises builders across replicas, then
 // runs ensureUsageGroupIndex. The session-level lock is held on a dedicated
@@ -1601,29 +1621,52 @@ func (s *Store) ensureUsageGroupIndexWithLock(ctx context.Context) error {
 	return s.ensureUsageGroupIndex(ctx)
 }
 
-// ensureUsageGroupIndex returns immediately when a valid index exists,
-// drops an invalid/not-ready leftover from an interrupted build, then builds
-// the index concurrently. Concurrent builds do not block ingestion writes.
+// ensureUsageGroupIndex returns immediately when valid indexes exist, drops an
+// invalid/not-ready leftover from an interrupted build, then builds each index
+// concurrently. Concurrent builds do not block ingestion writes.
 func (s *Store) ensureUsageGroupIndex(ctx context.Context) error {
+	for _, spec := range usageActivityIndexes {
+		if err := s.ensureUsageActivityIndex(ctx, spec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) ensureUsageActivityIndex(ctx context.Context, spec usageActivityIndexSpec) error {
 	var valid bool
 	err := s.db.QueryRowContext(ctx, `
 		SELECT i.indisvalid AND i.indisready
 		FROM pg_index i
 		JOIN pg_class c ON c.oid = i.indexrelid
-		WHERE c.relname = $1`, usageGroupActivityIndex).Scan(&valid)
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relname = $1 AND n.nspname = current_schema()`, spec.name).Scan(&valid)
 	switch {
 	case err == nil && valid:
 		return nil
 	case err == nil && !valid:
-		slog.Warn("dropping interrupted usage_events index before rebuild", "index", usageGroupActivityIndex)
-		if _, derr := s.db.ExecContext(ctx, `DROP INDEX CONCURRENTLY IF EXISTS `+usageGroupActivityIndex); derr != nil {
-			return fmt.Errorf("drop invalid index: %w", derr)
+		slog.Warn("dropping interrupted usage_events index before rebuild", "index", spec.name)
+		if _, derr := s.db.ExecContext(ctx, `DROP INDEX CONCURRENTLY IF EXISTS `+spec.name); derr != nil {
+			return fmt.Errorf("drop invalid index %s: %w", spec.name, derr)
 		}
 	case !errors.Is(err, sql.ErrNoRows):
-		return fmt.Errorf("inspect usage index: %w", err)
+		return fmt.Errorf("inspect usage index %s: %w", spec.name, err)
 	}
-	if _, err := s.db.ExecContext(ctx, usageGroupActivityIndexDDL); err != nil {
-		return fmt.Errorf("create usage index: %w", err)
+	if _, err := s.db.ExecContext(ctx, spec.ddl); err != nil {
+		return fmt.Errorf("create usage index %s: %w", spec.name, err)
+	}
+	// CREATE INDEX CONCURRENTLY can fail after leaving a catalog entry. Do not
+	// let the next replica's IF NOT EXISTS silently accept an invalid index.
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT i.indisvalid AND i.indisready
+		FROM pg_index i
+		JOIN pg_class c ON c.oid = i.indexrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relname = $1 AND n.nspname = current_schema()`, spec.name).Scan(&valid); err != nil {
+		return fmt.Errorf("verify usage index %s: %w", spec.name, err)
+	}
+	if !valid {
+		return fmt.Errorf("usage index %s is not valid after create", spec.name)
 	}
 	return nil
 }
@@ -1642,11 +1685,12 @@ func (s *Store) EnsureUsageGroupIndex(ctx context.Context, retry time.Duration) 
 		err := s.ensureUsageGroupIndexWithLock(buildCtx)
 		cancel()
 		if err == nil {
-			slog.Info("usage_events filtered-recent index ready", "index", usageGroupActivityIndex)
+			slog.Info("usage_events activity indexes ready",
+				"indexes", []string{usageGroupActivityIndex, usageUserActivityIndex})
 			return
 		}
-		slog.Error("usage_events filtered-recent index unavailable — filtered /recent stays bounded in SQL but slower; retrying",
-			"index", usageGroupActivityIndex, "error", err, "retry", retry)
+		slog.Error("usage_events activity indexes unavailable — filtered /recent stays bounded in SQL but slower; retrying",
+			"indexes", []string{usageGroupActivityIndex, usageUserActivityIndex}, "error", err, "retry", retry)
 		select {
 		case <-ctx.Done():
 			return

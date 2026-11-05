@@ -75,10 +75,12 @@ func TestParitySyncLatchIntegration(t *testing.T) {
 	}
 }
 
-// TestParitySyncClearsLocalStateOnMissingMetaIntegration covers the review
-// follow-up: a pod that was serving rollups must fall back to raw when the
-// shared parity verdict disappears instead of keeping its last green state.
-func TestParitySyncClearsLocalStateOnMissingMetaIntegration(t *testing.T) {
+// TestParitySyncMissingMetaKeepsConfirmedRollupsServingIntegration pins the
+// serve-stale decision for the missing-meta case too: health becomes unknown,
+// but a deployment that already confirmed parity keeps reading the continuously
+// rebuilt rollups. Only the explicit DASHBOARD_USE_ROLLUPS=false switch is a
+// read-gate fallback.
+func TestParitySyncMissingMetaKeepsConfirmedRollupsServingIntegration(t *testing.T) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		t.Skip("DATABASE_URL not set — parity state sync needs PostgreSQL")
@@ -121,6 +123,7 @@ func TestParitySyncClearsLocalStateOnMissingMetaIntegration(t *testing.T) {
 
 	store.rollupsReadyNow.Store(true)
 	store.parityHealthy.Store(true)
+	store.parityConfirmed.Store(true)
 	store.servingRollups.Store(true)
 	if _, err := store.db.ExecContext(ctx,
 		`DELETE FROM rollup_meta WHERE key IN ($1, $2)`, metaParityHealthy, metaParityCheckedAt); err != nil {
@@ -130,9 +133,9 @@ func TestParitySyncClearsLocalStateOnMissingMetaIntegration(t *testing.T) {
 	store.syncParityFromMeta(ctx, 15*time.Minute)
 
 	if store.parityHealthy.Load() {
-		t.Fatal("missing parity meta must clear the local green gate")
+		t.Fatal("missing parity meta must clear the local green health flag")
 	}
-	if store.servingRollups.Load() {
-		t.Fatal("missing parity meta must clear the serving flag")
+	if !store.servingRollups.Load() {
+		t.Fatal("a confirmed deployment must keep serving rollups under serve-stale when meta disappears")
 	}
 }

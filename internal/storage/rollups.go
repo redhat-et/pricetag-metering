@@ -373,26 +373,27 @@ func (s *Store) syncParityFromMeta(ctx context.Context, maxAge time.Duration) {
 	healthyRaw, checkedRaw, ok, err := s.metaLookupParity(ctx)
 	if err != nil {
 		slog.Warn("read rollup parity state failed", "error", err)
-		// An unreadable verdict is not a green one: clear the local gate so
-		// this pod falls back to raw instead of trusting an older state.
+		// An unreadable verdict is not a green one. Mark local health unknown;
+		// if this deployment was already confirmed, rollupsLive keeps serving
+		// under the documented serve-stale policy instead of stampeding raw.
 		s.parityHealthy.Store(false)
-		s.servingRollups.Store(false)
+		s.rollupsLive()
 		return
 	}
 	if !ok {
 		if s.parityMetaMissing.CompareAndSwap(false, true) {
-			slog.Warn("rollup parity checked_at missing — dashboard rollups stay off until the worker reports")
+			slog.Warn("rollup parity checked_at missing — health is unknown; a confirmed deployment keeps serving under serve-stale until the worker reports")
 		}
 		s.parityHealthy.Store(false)
-		s.servingRollups.Store(false)
+		s.rollupsLive()
 		return
 	}
 	s.parityMetaMissing.Store(false)
 	healthy, checkedAt, parsed := parityStateFromMeta(healthyRaw, checkedRaw, time.Now().UTC(), maxAge)
 	if !parsed {
-		slog.Warn("rollup parity checked_at is unparsable — staying on raw reads", "value", checkedRaw)
+		slog.Warn("rollup parity checked_at is unparsable — health is unknown", "value", checkedRaw)
 		s.parityHealthy.Store(false)
-		s.servingRollups.Store(false)
+		s.rollupsLive()
 		return
 	}
 	// Latch the last green verdict even after maxAge: once rollups have been
@@ -747,9 +748,11 @@ func (s *Store) UseRollups(on bool) {
 // the (bounded-staleness) rollups and let the alert/status/metric drive the
 // operator response. Turning the flag off is still the explicit rollback.
 //
-// parityConfirmed is hydrated from rollup_meta on boot: a restart after a
-// known-green deployment resumes rollup reads immediately instead of scanning
-// raw until the first check finishes.
+// parityConfirmed is hydrated from rollup_meta on boot only while the verdict
+// is still fresh (parityMaxAge). A restart after a known-green deployment
+// resumes rollup reads immediately instead of scanning raw until the first
+// check finishes; an ancient green from a stalled worker does not permanently
+// enable rollups after a restart.
 func (s *Store) rollupsLive() bool {
 	flag := s.useRollups.Load()
 	ready := s.rollupsReadyNow.Load()
@@ -780,16 +783,23 @@ func (s *Store) RollupFlag() bool    { return s.useRollups.Load() }
 // loud alert, not an automatic fallback to raw: the rollup table is still
 // rebuilt every tick, so a transient mismatch must not turn dashboard traffic
 // into full-ledger scans. The first pass runs immediately; deep (7d) parity
-// runs hourly.
-func (s *Store) RunRollupMaintenance(ctx context.Context, interval time.Duration) {
+// runs hourly. parityMaxAge bounds the boot-time latch so a worker that
+// restarted after a long outage cannot trust an ancient green verdict.
+func (s *Store) RunRollupMaintenance(ctx context.Context, interval, parityMaxAge time.Duration) {
 	if interval < time.Minute {
 		interval = time.Minute
 	}
+	if parityMaxAge <= 0 {
+		parityMaxAge = 30 * time.Minute
+	}
 	// Resume the last-known-good verdict so a restart does not fall back to
-	// raw scans while the first parity check is still running.
-	if v, ok := s.metaGet(ctx, metaParityHealthy); ok && v == "true" {
-		s.parityHealthy.Store(true)
-		s.parityConfirmed.Store(true)
+	// raw scans while the first parity check is still running. The age bound
+	// is the same one API pods use for the shared verdict.
+	if healthyRaw, checkedRaw, ok, err := s.metaLookupParity(ctx); err == nil && ok {
+		if healthy, _, parsed := parityStateFromMeta(healthyRaw, checkedRaw, time.Now().UTC(), parityMaxAge); parsed && healthy {
+			s.parityHealthy.Store(true)
+			s.parityConfirmed.Store(true)
+		}
 	}
 	deepTicks := int(time.Hour / interval)
 	if deepTicks < 1 {
@@ -817,12 +827,13 @@ func (s *Store) maintainOnce(ctx context.Context, deep bool) {
 	}
 	if err := s.refreshRecentHours(ctx); err != nil {
 		slog.Error("rollup refresh failed", "error", err)
-		// A failed pass must not look like a healthy one: clear the local
-		// read gate and publish a red verdict with a fresh checked_at so
-		// api pods fall back to raw instead of trusting the last green for
-		// the full staleness window.
+		// A failed pass must not look healthy: clear the local health flag and
+		// publish a red verdict with a fresh checked_at. If parity was
+		// confirmed before, rollupsLive keeps serving the continuously rebuilt
+		// table under the documented serve-stale policy; this pod does not
+		// silently flip every read to raw.
 		s.parityHealthy.Store(false)
-		s.servingRollups.Store(false)
+		s.rollupsLive()
 		if _, writeErr := s.metaSetParity(ctx, false, time.Now().UTC(), start); writeErr != nil {
 			slog.Warn("failed to publish red parity after refresh failure", "error", writeErr)
 		}
@@ -841,7 +852,7 @@ func (s *Store) maintainOnce(ctx context.Context, deep bool) {
 	if err != nil {
 		slog.Error("rollup parity check failed", "window", window, "error", err)
 		s.parityHealthy.Store(false)
-		s.servingRollups.Store(false)
+		s.rollupsLive()
 		if _, writeErr := s.metaSetParity(ctx, false, time.Now().UTC(), start); writeErr != nil {
 			slog.Warn("failed to publish red parity after parity check failure", "error", writeErr)
 		}
@@ -870,15 +881,16 @@ func (s *Store) maintainOnce(ctx context.Context, deep bool) {
 	switch {
 	case writeErr != nil:
 		slog.Warn("failed to publish rollup parity verdict", "error", writeErr)
-		// The shared verdict was not updated; keep this pod on raw rather
-		// than claiming a local green the other processes cannot see.
+		// The shared verdict was not updated. Mark local health unknown, but
+		// do not claim a local green the other processes cannot see; a
+		// previously confirmed deployment still serves under serve-stale.
 		s.parityHealthy.Store(false)
-		s.servingRollups.Store(false)
+		s.rollupsLive()
 		metrics.RollupParityGreen.Set(math.NaN())
 	case !wrote:
 		slog.Info("parity verdict skipped — a newer invalidation landed during the check", "window", window)
 		s.parityHealthy.Store(false)
-		s.servingRollups.Store(false)
+		s.rollupsLive()
 		metrics.RollupParityGreen.Set(math.NaN())
 	default:
 		if !red {

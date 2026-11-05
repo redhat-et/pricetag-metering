@@ -11,7 +11,14 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/redhat-et/pricetag-metering/internal/config"
+	"github.com/redhat-et/pricetag-metering/internal/metrics"
 )
+
+// orgCacheMaxBodyBytes bounds one cached manager response. /org/usage can be
+// org-wide and is the largest manager payload; 2 MiB leaves ample headroom
+// while preventing 256 unbounded bodies from pinning memory. Larger responses
+// still stream to the caller, they are just not stored.
+const orgCacheMaxBodyBytes = 2 << 20
 
 // Manager-page response cache.
 //
@@ -76,33 +83,37 @@ func (c *orgResponseCache) wrap(next http.HandlerFunc, resolve func(http.Respons
 		}
 		// Hand the verified root to the handler so it does not repeat the
 		// directory/subtree checks on the computation path.
-		r = r.WithContext(context.WithValue(context.WithoutCancel(r.Context()), orgScopeContextKey{}, root))
 		if bypassDashboardCache(r) {
-			next(w, r)
+			metrics.OrgCacheSkipsTotal.Inc()
+			next(w, r.WithContext(context.WithValue(r.Context(), orgScopeContextKey{}, root)))
 			return
 		}
 		identity := caller(r, c.cfg)
 		if identity == "" {
 			// scopeRoot rejects this too, but keep the guard: never build a
 			// shared key from an empty identity.
-			next(w, r)
+			next(w, r.WithContext(context.WithValue(r.Context(), orgScopeContextKey{}, root)))
 			return
 		}
 		key := orgCacheKey(identity, root, r)
 		if entry, found := c.entries.Get(key); found {
+			metrics.OrgCacheHitsTotal.Inc()
 			writeCached(w, entry)
 			return
 		}
 		v, _, _ := c.flights.Do(key, func() (any, error) {
 			if entry, found := c.entries.Get(key); found {
+				metrics.OrgCacheHitsTotal.Inc()
 				return entry, nil
 			}
+			metrics.OrgCacheMissesTotal.Inc()
 			inner := &capture{header: make(http.Header)}
 			// Do not let the first caller's disconnect cancel a computation
 			// other waiters are riding. The verified root is already in the
 			// context and survives WithoutCancel.
-			next.ServeHTTP(inner, r)
-			if inner.status == http.StatusOK {
+			ctx := context.WithValue(context.WithoutCancel(r.Context()), orgScopeContextKey{}, root)
+			next.ServeHTTP(inner, r.WithContext(ctx))
+			if inner.status == http.StatusOK && inner.body.Len() <= orgCacheMaxBodyBytes {
 				entry := cachedResponse{
 					status:      inner.status,
 					contentType: inner.header.Get("Content-Type"),
@@ -110,6 +121,9 @@ func (c *orgResponseCache) wrap(next http.HandlerFunc, resolve func(http.Respons
 				}
 				c.entries.Add(key, entry)
 				return entry, nil
+			}
+			if inner.status == http.StatusOK {
+				metrics.OrgCacheSkipsTotal.Inc()
 			}
 			return responseOnly{rec: inner}, nil
 		})

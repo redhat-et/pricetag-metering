@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/redhat-et/pricetag-metering/internal/config"
@@ -85,6 +86,22 @@ func TestOrgCacheSeparatesCallersScopesAndHonoursBypass(t *testing.T) {
 	}
 	if calls != 4 {
 		t.Fatalf("revoked caller reached the handler: calls = %d", calls)
+	}
+}
+
+func TestOrgCacheDoesNotStoreOversizeResponses(t *testing.T) {
+	c := newOrgResponseCache(testOrgCacheConfig())
+	calls := 0
+	h := c.wrap(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(strings.Repeat("x", orgCacheMaxBodyBytes+1)))
+	}, func(http.ResponseWriter, *http.Request) (string, bool) { return "root-a", true })
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/org/usage?range=7d", nil)
+	req.Header.Set("X-Forwarded-User", "alice")
+	h(httptest.NewRecorder(), req)
+	h(httptest.NewRecorder(), req)
+	if calls != 2 {
+		t.Fatalf("oversize responses must not be cached: calls = %d", calls)
 	}
 }
 

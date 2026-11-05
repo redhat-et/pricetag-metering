@@ -174,7 +174,9 @@ func main() {
 	// parity-green all hold; see /api/v1/admin/rollups for state.
 	store.UseRollups(cfg.DashboardUseRollups)
 	if meteringMode.RunsMaintenance() {
-		go store.RunRollupMaintenance(context.Background(), time.Duration(cfg.RollupRefreshSeconds)*time.Second)
+		go store.RunRollupMaintenance(context.Background(),
+			time.Duration(cfg.RollupRefreshSeconds)*time.Second,
+			paritySyncMaxAge(cfg.RollupRefreshSeconds))
 	} else {
 		slog.Info("rollup maintenance disabled in this mode — parity state syncs from rollup_meta")
 	}
@@ -510,8 +512,12 @@ func main() {
 		managerAuth := func(next http.HandlerFunc) http.HandlerFunc { return auth(next) }
 		mux.HandleFunc("/manager", managerAuth(orgHandler.ServeManager))
 		mux.HandleFunc("/api/v1/org/scope", managerAuth(orgHandler.HandleScope))
-		mux.HandleFunc("/api/v1/org/usage", managerAuth(orgHandler.HandleOrgUsage))
-		mux.HandleFunc("/api/v1/org/charts", managerAuth(orgHandler.HandleOrgCharts))
+		// Cache only after managerAuth. Cached runs scopeRoot itself before
+		// every lookup, so a hit still re-checks the caller's current subtree
+		// and role. Keep this wrapping in main: it was silently dropped in a
+		// rebase once, and a handler-level test cannot catch that.
+		mux.HandleFunc("/api/v1/org/usage", managerAuth(orgHandler.Cached(orgHandler.HandleOrgUsage)))
+		mux.HandleFunc("/api/v1/org/charts", managerAuth(orgHandler.Cached(orgHandler.HandleOrgCharts)))
 		mux.HandleFunc("/api/v1/org/person", managerAuth(orgHandler.HandleOrgPerson))
 	} else {
 		mux.HandleFunc("/health", healthHandler)

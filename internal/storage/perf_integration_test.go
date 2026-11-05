@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -15,21 +16,68 @@ func TestEnsureUsageGroupIndexIntegration(t *testing.T) {
 	if err := s.ensureUsageGroupIndexWithLock(ctx); err != nil {
 		t.Fatalf("ensure usage group index: %v", err)
 	}
-	var valid bool
-	err := s.db.QueryRowContext(ctx, `
-		SELECT i.indisvalid AND i.indisready
-		FROM pg_index i
-		JOIN pg_class c ON c.oid = i.indexrelid
-		WHERE c.relname = $1`, usageGroupActivityIndex).Scan(&valid)
-	if err != nil {
-		t.Fatalf("inspect index: %v", err)
+	for _, index := range []string{usageGroupActivityIndex, usageUserActivityIndex} {
+		var valid bool
+		err := s.db.QueryRowContext(ctx, `
+			SELECT i.indisvalid AND i.indisready
+			FROM pg_index i
+			JOIN pg_class c ON c.oid = i.indexrelid
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE c.relname = $1 AND n.nspname = current_schema()`, index).Scan(&valid)
+		if err != nil {
+			t.Fatalf("inspect index %s: %v", index, err)
+		}
+		if !valid {
+			t.Fatalf("%s is not valid/ready", index)
+		}
 	}
-	if !valid {
-		t.Fatalf("%s is not valid/ready", usageGroupActivityIndex)
-	}
-	// A second pass must be a no-op (and must not drop the valid index).
+	// A second pass must be a no-op (and must not drop the valid indexes).
 	if err := s.ensureUsageGroupIndexWithLock(ctx); err != nil {
 		t.Fatalf("second ensure: %v", err)
+	}
+}
+
+// TestRecentIndexPlansIntegration pins the exact predicate/ordering shape the
+// /recent queries use. A future edit to either the index expression or the SQL
+// fails here even when the small integration table would normally seq-scan.
+func TestRecentIndexPlansIntegration(t *testing.T) {
+	s, ctx := openTestStore(t)
+	if err := s.ensureUsageGroupIndexWithLock(ctx); err != nil {
+		t.Fatalf("ensure activity indexes: %v", err)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `SET LOCAL enable_seqscan = off`); err != nil {
+		t.Fatalf("disable seqscan: %v", err)
+	}
+	explain := func(query string, args ...any) string {
+		t.Helper()
+		var plan string
+		if err := tx.QueryRowContext(ctx, `EXPLAIN (FORMAT JSON) `+query, args...).Scan(&plan); err != nil {
+			t.Fatalf("explain: %v", err)
+		}
+		return plan
+	}
+	groupPlan := explain(`
+		SELECT e.timestamp, e.username
+		FROM usage_events e
+		WHERE ($1 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $1)
+		ORDER BY e.timestamp DESC
+		LIMIT 20`, "perf-plan-group")
+	if !strings.Contains(groupPlan, usageGroupActivityIndex) {
+		t.Fatalf("group /recent plan does not use %s: %s", usageGroupActivityIndex, groupPlan)
+	}
+	userPlan := explain(`
+		SELECT e.timestamp, e.username
+		FROM usage_events e
+		WHERE e.username = $1
+		ORDER BY e.timestamp DESC
+		LIMIT 20`, "perf-plan-user@example.com")
+	if !strings.Contains(userPlan, usageUserActivityIndex) {
+		t.Fatalf("user /recent plan does not use %s: %s", usageUserActivityIndex, userPlan)
 	}
 }
 

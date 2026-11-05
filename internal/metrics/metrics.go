@@ -156,6 +156,23 @@ var (
 		Buckets: prometheus.DefBuckets,
 	})
 
+	// OrgCacheHitsTotal, OrgCacheMissesTotal, and OrgCacheSkipsTotal describe
+	// the manager-page response cache. Skips are responses too large to store
+	// or bypassed by Cache-Control; they are intentionally not counted as
+	// misses because no lookup was attempted.
+	OrgCacheHitsTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "metering_org_cache_hits_total",
+		Help: "Manager-page responses served from the process-local cache.",
+	})
+	OrgCacheMissesTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "metering_org_cache_misses_total",
+		Help: "Manager-page cache lookups that required a handler computation.",
+	})
+	OrgCacheSkipsTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "metering_org_cache_skips_total",
+		Help: "Manager-page responses not stored because they were too large.",
+	})
+
 	// RollupRefreshDurationSeconds observes one rollup maintenance pass.
 	RollupRefreshDurationSeconds = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "metering_rollup_refresh_duration_seconds",
@@ -207,6 +224,9 @@ var (
 		QosCacheMissesTotal,
 		KeysMintedTotal,
 		UsageReportDurationSeconds,
+		OrgCacheHitsTotal,
+		OrgCacheMissesTotal,
+		OrgCacheSkipsTotal,
 		RollupRefreshDurationSeconds,
 		RollupParityGreen,
 		RollupParityCheckedAtSeconds,

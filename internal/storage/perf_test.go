@@ -3,6 +3,7 @@ package storage
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // Manager drill-downs are read-only surfaces; they must use the hourly
@@ -35,10 +36,25 @@ func TestFilteredRecentHasBoundedWindow(t *testing.T) {
 	}
 }
 
-func TestUsageGroupIndexRunsOutsideStartupMigrations(t *testing.T) {
-	want := "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_group_ts ON usage_events (group_name, timestamp DESC)"
-	if usageGroupActivityIndexDDL != want {
-		t.Fatalf("index DDL drifted: %s", usageGroupActivityIndexDDL)
+func TestCeilToHourExcludesPartialBoundaryBucket(t *testing.T) {
+	aligned := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	if got := ceilToHour(aligned); !got.Equal(aligned) {
+		t.Fatalf("aligned hour moved: got %s want %s", got, aligned)
+	}
+	partial := aligned.Add(37 * time.Minute)
+	if got := ceilToHour(partial); !got.Equal(aligned.Add(time.Hour)) {
+		t.Fatalf("partial hour = %s, want %s", got, aligned.Add(time.Hour))
+	}
+}
+
+func TestUsageActivityIndexesRunOutsideStartupMigrations(t *testing.T) {
+	for _, want := range []string{
+		"CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_group_ts ON usage_events ((COALESCE(NULLIF(group_name, ''), 'unknown')), timestamp DESC)",
+		"CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_user_ts ON usage_events (username, timestamp DESC)",
+	} {
+		if !strings.Contains(usageGroupActivityIndexDDL, want) && !strings.Contains(usageUserActivityIndexDDL, want) {
+			t.Fatalf("index DDL drifted or missing: %s", want)
+		}
 	}
 	all := strings.Join(migrations, "\n")
 	if strings.Contains(all, "CONCURRENTLY") {

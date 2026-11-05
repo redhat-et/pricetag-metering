@@ -254,6 +254,15 @@ func TestRollupsLiveRequiresFlagReadyAndConfirmedParity(t *testing.T) {
 
 // A transient parity red after a confirmed deployment is an alert, not a
 // reason to scan the raw ledger on every dashboard refresh.
+func TestRollupMaintenanceHydrationIsBounded(t *testing.T) {
+	body := funcBody(t, "rollups.go", "func (s *Store) RunRollupMaintenance")
+	for _, want := range []string{"parityMaxAge", "metaLookupParity", "parityStateFromMeta"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("RunRollupMaintenance boot hydration lost %q — an ancient green can permanently enable rollups", want)
+		}
+	}
+}
+
 func TestParityRedDoesNotFallReadsBackToRaw(t *testing.T) {
 	var s Store
 	s.useRollups.Store(true)

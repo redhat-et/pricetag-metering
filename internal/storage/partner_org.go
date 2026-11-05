@@ -38,6 +38,19 @@ type OrgUsageRow struct {
 	OverLimit     bool    `json:"over_limit"`
 }
 
+// ceilToHour moves a non-hour-aligned timestamp forward to the next hour.
+// Hourly rollups cannot represent a partial boundary bucket: using
+// `hour >= since` would include up to 59 minutes of pre-window data. The
+// rollup path starts at the next complete hour; the raw path keeps the exact
+// requested window.
+func ceilToHour(t time.Time) time.Time {
+	truncated := t.Truncate(time.Hour)
+	if truncated.Equal(t) {
+		return t
+	}
+	return truncated.Add(time.Hour)
+}
+
 // GetPartnerOrgUsage rolls usage up per partner user for the subtree under
 // rootUserID over a window. An empty rootUserID means the whole organisation
 // (every active partner user). It reuses costUSDExpr — one cost model shared
@@ -48,7 +61,9 @@ type OrgUsageRow struct {
 // window is ~1.3M raw rows and takes seconds on the shared primary, while the
 // same window is ~25K hourly rows and answers in tens of milliseconds. The
 // hourly path reports LastUsed at hour granularity (the rollup's finest
-// resolution); the raw path is kept only for the parity-fallback case.
+// resolution) and starts at the next full hour so it never counts the whole
+// boundary hour before `since`; the raw path is kept only for the
+// parity-fallback case.
 func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since, until time.Time) ([]OrgUsageRow, error) {
 	from := `partner_user_logins l ON l.user_id = st.user_id
 			JOIN usage_events e ON e.username = l.username
@@ -58,6 +73,7 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 	cost := fmt.Sprintf(`COALESCE(ROUND(SUM(%s)::numeric,2),0)`, costUSDExpr)
 	lastUsed := `MAX(e.timestamp)`
 	if s.rollupsLive() {
+		since = ceilToHour(since)
 		from = `partner_user_logins l ON l.user_id = st.user_id
 			JOIN usage_hourly e ON e.username = l.username`
 		window = `e.hour >= $2 AND e.hour < $3`
@@ -253,6 +269,7 @@ func (s *Store) GetPersonModelUsage(ctx context.Context, usernames []string, sin
 	requests := `COUNT(*)`
 	lastUsed := `MAX(e.timestamp)`
 	if s.rollupsLive() {
+		since = ceilToHour(since)
 		from = `usage_hourly e LEFT JOIN model_pricing p ON e.model = p.model`
 		when = `e.hour >= $1 AND e.hour < $2`
 		cost = `e.cost_usd`
