@@ -70,10 +70,15 @@ have a non-empty LDAP value. Its default `directory` field set keeps
 future SQL path that reconciles logins in the same transaction). An LDAP
 `manager` DN is resolved to the manager's `rhatUUID` and written to
 `tags.manager_uuid`; the self-referencing `manager_user_id` column is updated
-too. If that manager is not a partner user yet (for example, they have never
-signed in), the sync creates a minimal `partner_users` row for them from the
-same LDAP result set, so the manager link and org-chart containment are
-preserved. Unresolved manager DNs leave the existing manager untouched. The
-job never changes `updated_at`, only provisions rows for resolved managers,
-and writes a rollback artifact before every apply. See
-[deploy/ldap-sync/README.md](../deploy/ldap-sync/README.md).
+when that manager exists and is active. If the manager is missing or inactive,
+the existing link is preserved. If the manager is active but not a partner user
+yet (for example, they have never signed in), the sync can create a minimal
+placeholder `partner_users` row from the same LDAP result set, but only when
+the manager belongs to a partner user matched in this run and the `email` field
+is explicitly selected; the row must satisfy the same email + first_name +
+last_name contract as this API. The placeholder has no login mapping; its first
+SSO login creates one from the merged email, which is why login can claim an
+existing row without provisioning a new user. Unresolved manager DNs leave the
+existing manager untouched. The job never changes `updated_at`, only creates
+these scoped manager placeholders, and writes a rollback artifact before every
+apply. See [deploy/ldap-sync/README.md](../deploy/ldap-sync/README.md).

@@ -74,6 +74,23 @@ func TestOIDCProfileTagsPersistAllDirectoryClaims(t *testing.T) {
 	}
 }
 
+func TestOIDCProfileTagsUsePreferredUsernameAsEmailFallback(t *testing.T) {
+	tags := oidcProfileTags(oidcClaims{Username: "boss@example.com"})
+	if tags["email"] != "boss@example.com" {
+		t.Fatalf("preferred_username email fallback = %v; want boss@example.com", tags["email"])
+	}
+
+	tags = oidcProfileTags(oidcClaims{Username: "boss"})
+	if _, ok := tags["email"]; ok {
+		t.Fatalf("non-address preferred_username must not become tags.email: %#v", tags)
+	}
+
+	tags = oidcProfileTags(oidcClaims{Username: "alias@example.com", Email: "real@example.com"})
+	if tags["email"] != "real@example.com" {
+		t.Fatalf("explicit email claim lost to preferred_username fallback: %#v", tags)
+	}
+}
+
 // newTestOIDCHandler starts a minimal discovery document so InitOIDC succeeds.
 // The token and JWKS endpoints are never called by these tests.
 func newTestOIDCHandler(t *testing.T, testLogin bool) *AuthHandler {

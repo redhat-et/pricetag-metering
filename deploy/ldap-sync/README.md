@@ -10,13 +10,15 @@ A failed run is logged and retried after `LDAP_SYNC_RETRY_SECONDS`
 The underlying script is `scripts/sync-ldap-cost-centers.sh`. It is
 read-only against LDAP and writes only:
 
-- selected keys in `partner_users.tags`, and
-- `partner_users.manager_user_id` when the LDAP `manager` DN resolves to a
-  partner user.
+- selected keys in `partner_users.tags`,
+- `partner_users.manager_user_id` when the LDAP `manager` DN resolves to an
+  existing active partner user, and
+- a minimal manager placeholder row for a manager referenced by a partner user
+  this run actually matched (see below).
 
-It never provisions users, never writes `updated_at`, and never changes a row
-whose values already match. Every apply writes a pre-apply CSV snapshot and a
-generated rollback SQL file under the output directory.
+It never provisions a user from LDAP alone, never writes `updated_at`, and
+never changes a row whose values already match. Every apply writes a pre-apply
+CSV snapshot and a generated rollback SQL file under the output directory.
 
 ## Fields kept current
 
@@ -51,12 +53,25 @@ unless you have extended the SQL to update logins in the same transaction.
 Empty LDAP values are skipped, so a missing attribute never erases a value
 that PriceTag already has. A `manager` DN is resolved through the same LDAP
 result set; unresolved manager DNs are counted in the run summary and leave
-the existing manager untouched. When a manager UUID resolves but that manager
-is not a partner user yet, the sync creates a minimal `partner_users` row for
-them (directory name, optional email, `created_by`/`updated_by = ldap-sync`)
-before setting `manager_user_id`, so the report stays under the new manager in
-the org chart. Rollback removes those rows again unless SSO has since claimed
-them.
+the existing manager untouched. An inactive resolved manager is handled the
+same way rather than being written as the new manager.
+
+When a manager UUID resolves to a manager who is not a partner user yet, the
+sync can create a minimal placeholder `partner_users` row (names and email,
+`created_by`/`updated_by = ldap-sync`) before setting `manager_user_id`, so the
+report stays under that manager in the org chart. Placeholders are deliberately
+narrow:
+
+- only for a manager referenced by a partner user matched in this run;
+- only when the manager is active and has valid `givenName`, `sn`, and `mail`;
+- only when `email` is in the selected field set, because the partner-user
+  contract requires email + first_name + last_name. The default `directory`
+  set excludes email, so it links existing managers but creates no new rows;
+  use `--fields all` (or add `email`) to allow placeholders.
+
+A placeholder has no `partner_user_logins` row. Its first SSO login claims the
+row by creating the missing login from the merged email; rollback removes only
+placeholders that are still unclaimed.
 
 Use `--fields` to narrow the sync for a one-off run, for example:
 
@@ -68,9 +83,10 @@ Use `--fields` to narrow the sync for a one-off run, for example:
 ## Safety properties
 
 - LDAP is read-only; no LDAP writes, provisioning, or password changes.
-- The only `partner_users` rows created are minimal manager stubs for a
-  resolved manager DN that is not a partner user yet. They are recorded in the
-  backup file and deleted by rollback (unless SSO has since claimed them).
+- The only `partner_users` rows created are minimal manager placeholders for
+  an active manager of a matched partner user, and only with the `email` field
+  opted in. They are recorded in the backup file and deleted by rollback
+  unless SSO has since claimed them.
 - `--apply` is required. Dry run is the default.
 - The DB URL is translated to a temporary libpq service file and `PGPASSFILE`;
   the URL/password never appears in a `psql` argv or process command line.
@@ -171,10 +187,14 @@ Review the printed aggregate counts and the SQL file. Then apply once:
 ```
 
 The apply prints `matched_partner_users`, `partner_users_without_ldap_match`,
-`email_conflicts`, `updated_partner_users`, `manager_stub_candidates`, and
-`manager_stubs_created`. A healthy production run currently matches about
-3,348 users; the six unmatched rows are expected (active users without an LDAP
-record plus inactive load-test rows).
+`email_conflicts`, `updated_partner_users`, `manager_stub_candidates`,
+`manager_stub_skipped`, and `manager_stubs_created`.
+`ldap_manager_stub_candidates` counts valid manager profiles from the LDIF;
+`manager_stub_candidates_matched` counts those referenced by a partner user
+matched in this run. `manager_stubs_disabled=email_not_selected` means the run
+links managers that already exist but creates no placeholders. A healthy
+production run currently matches about 3,348 users; the six unmatched rows are
+expected (active users without an LDAP record plus inactive load-test rows).
 
 Post-apply checks:
 

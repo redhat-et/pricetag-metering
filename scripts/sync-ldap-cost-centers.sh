@@ -3,12 +3,15 @@
 # Sync Red Hat IPA directory fields into PriceTag partner_users.
 #
 # Read-only against LDAP. The only writes are:
-#   - selected keys in partner_users.tags (default: all supported fields), and
-#   - partner_users.manager_user_id when a manager DN resolves to a partner user.
+#   - selected keys in partner_users.tags,
+#   - partner_users.manager_user_id when a manager DN resolves to an existing
+#     active partner user, and
+#   - a minimal placeholder partner_users row for a manager of a partner user
+#     this run matched (see below).
 #
-# It never changes LDAP, never provisions users, and never touches a database
-# unless --apply is passed. Every apply first writes a snapshot and a rollback
-# SQL file under --output-dir.
+# It never changes LDAP, never provisions a user from LDAP alone, and never
+# touches a database unless --apply is passed. Every apply first writes a
+# snapshot and a rollback SQL file under --output-dir.
 #
 # Mapping (empty LDAP values are skipped, so a missing attribute cannot erase
 # a value already present in PriceTag):
@@ -33,9 +36,12 @@
 #   LDAP rhatTermDate          -> tags.term_date
 #   LDAP rhatDeactivated       -> tags.deactivated
 #   LDAP manager DN            -> tags.manager_uuid and manager_user_id
-#                                (a minimal partner_users row is created for a
-#                                resolved manager who is not a partner user yet,
-#                                so the org chart keeps the manager link)
+#                                (a minimal placeholder partner_users row is
+#                                created for a resolved manager who is not a
+#                                partner user yet, but only when the manager is
+#                                referenced by a partner user matched in this
+#                                run and the email field is selected, so the
+#                                row satisfies the API's required tags)
 #
 # Requirements:
 #   - Red Hat VPN for production IPA.
@@ -101,7 +107,9 @@
 #                              employee_subtype,person_type,hire_date,term_date,
 #                              deactivated,manager. "email" is opt-in because
 #                              a direct tag write does not update
-#                              partner_user_logins; use the API for email changes.
+#                              partner_user_logins; use the API for email
+#                              changes. New manager placeholder rows also
+#                              require "email" so they satisfy the API contract.
 #   --min-matched N            Abort apply if fewer than N LDAP rows match a
 #                              partner user. Default: 0.
 #   --allow-empty              Permit apply when LDAP returned zero usable rows.
@@ -313,6 +321,7 @@ import csv
 import json
 import re
 import sys
+import unicodedata
 import uuid
 
 ldif_path, csv_path, sql_path, backup_sql_path, fields_arg, min_matched_arg = sys.argv[1:7]
@@ -491,30 +500,51 @@ for uid, record in records:
 # A resolved manager may not be a partner user yet (for example, a manager who
 # has never signed in to PriceTag). manager_user_id is a self-referencing
 # foreign key, so the row must exist before it can be referenced. Build a
-# minimal profile for each referenced manager from this same LDAP dump; the
-# generated SQL creates only the rows that are still missing.
+# minimal, valid profile for each referenced manager from this same LDAP dump;
+# the generated SQL creates only the rows that are still missing, and only when
+# the manager belongs to a partner user this run actually matched.
+#
+# The row must satisfy the same required-tag contract as the partner API
+# (email + first_name + last_name), which is why stubs require the explicit
+# `email` field opt-in. Without it we leave manager_user_id untouched rather
+# than write a row the API would later reject.
 STUB_NAME_FIELDS = ("first_name", "last_name")
+STUB_TAG_MAX_BYTES = 2048
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def valid_stub_tag(value):
+    if len(value.encode("utf-8")) > STUB_TAG_MAX_BYTES:
+        return False
+    return not any(unicodedata.category(ch) == "Cc" for ch in value)
+
+
 manager_ids = sorted({v["manager_uuid"] for v in rows.values() if v.get("manager_uuid")})
 manager_profiles = {}
-for uid, record in records:
-    if uid not in manager_ids or uid in manager_profiles:
-        continue
-    profile = {}
-    for field in STUB_NAME_FIELDS:
-        value = clean(first(record, FIELD_ATTRS[field]))
-        if value:
-            profile[field] = value
-    if not profile:
-        common_name = clean(first(record, "cn"))
-        if common_name:
-            profile["first_name"] = common_name
-    if not profile:
-        profile["ldap_sync_stub"] = "true"
-    manager_profiles[uid] = {
-        "tags": profile,
-        "email": clean(first(record, "mail")),
-        "active": clean(first(record, "rhatDeactivated")).lower() not in ("true", "1", "yes"),
-    }
+manager_stub_skipped = 0
+stubs_enabled = "email" in selected
+if stubs_enabled:
+    for uid, record in records:
+        if uid not in manager_ids or uid in manager_profiles:
+            continue
+        profile = {}
+        for field in STUB_NAME_FIELDS:
+            value = clean(first(record, FIELD_ATTRS[field]))
+            if value and valid_stub_tag(value):
+                profile[field] = value
+        email = clean(first(record, "mail"))
+        if not EMAIL_RE.match(email) or not valid_stub_tag(email):
+            email = ""
+        else:
+            profile["email"] = email
+        if len(profile) != 3:
+            manager_stub_skipped += 1
+            continue
+        manager_profiles[uid] = {
+            "tags": profile,
+            "email": email,
+            "active": clean(first(record, "rhatDeactivated")).lower() not in ("true", "1", "yes"),
+        }
 
 csv_fields = ["user_id"] + [f for f in selected if f != "manager"]
 if "manager" in selected:
@@ -562,35 +592,44 @@ def write_update_sql(fh):
 
     if "manager" in selected and manager_profiles:
         fh.write("CREATE TEMP TABLE _ldap_manager_stubs (\n")
-        fh.write("  user_id uuid PRIMARY KEY,\n  tags jsonb NOT NULL,\n  email text,\n  active boolean NOT NULL\n) ON COMMIT DROP;\n")
-        fh.write("INSERT INTO _ldap_manager_stubs (user_id, tags, email, active) VALUES\n")
+        fh.write("  user_id uuid PRIMARY KEY,\n  tags jsonb NOT NULL,\n  email text NOT NULL,\n  active boolean NOT NULL\n) ON COMMIT DROP;\n")
+        # Scope candidates to managers of partner users this run actually
+        # matched. Without this filter a first apply could provision a row for
+        # every manager in the LDAP dump, not just PriceTag users. The email
+        # predicate keeps the candidate valid against the unique tag index.
+        fh.write("INSERT INTO _ldap_manager_stubs (user_id, tags, email, active)\n")
+        fh.write("SELECT s.user_id, s.tags, s.email, s.active FROM (VALUES\n")
         stub_items = sorted(manager_profiles.items())
         for index, (uid, profile) in enumerate(stub_items):
-            suffix = ",\n" if index + 1 < len(stub_items) else ";\n"
+            suffix = ",\n" if index + 1 < len(stub_items) else "\n"
             tags_json = json.dumps(profile["tags"], separators=(",", ":"), ensure_ascii=False)
             cells = [
-                q(uid),
+                q(uid) + "::uuid",
                 q(tags_json) + "::jsonb",
                 q(profile["email"]),
                 "TRUE" if profile["active"] else "FALSE",
             ]
             fh.write("  (" + ", ".join(cells) + ")" + suffix)
+        fh.write(") AS s(user_id, tags, email, active)\n")
+        fh.write("WHERE s.active\n")
+        fh.write("  AND EXISTS (\n")
+        fh.write("    SELECT 1 FROM _ldap_sync u JOIN partner_users pu USING (user_id)\n")
+        fh.write("    WHERE u.manager_uuid = s.user_id\n")
+        fh.write("  )\n")
+        fh.write("  AND NOT EXISTS (\n")
+        fh.write("    SELECT 1 FROM partner_users x WHERE lower(x.tags->>'email') = lower(s.email)\n")
+        fh.write("  );\n")
         fh.write("CREATE TEMP TABLE _ldap_created_stubs (user_id uuid PRIMARY KEY) ON COMMIT DROP;\n")
         fh.write("WITH created AS (\n")
         fh.write("  INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)\n")
-        fh.write("  SELECT s.user_id,\n")
-        fh.write("         CASE WHEN s.email IS NOT NULL AND NOT EXISTS (\n")
-        fh.write("             SELECT 1 FROM partner_users x WHERE lower(x.tags->>'email') = lower(s.email)\n")
-        fh.write("           ) THEN s.tags || jsonb_build_object('email', s.email)\n")
-        fh.write("         ELSE s.tags END,\n")
-        fh.write("         'user', s.active, 'ldap-sync', 'ldap-sync'\n")
+        fh.write("  SELECT s.user_id, s.tags, 'user', s.active, 'ldap-sync', 'ldap-sync'\n")
         fh.write("  FROM _ldap_manager_stubs s\n")
         fh.write("  WHERE NOT EXISTS (SELECT 1 FROM partner_users p WHERE p.user_id = s.user_id)\n")
         fh.write("  ON CONFLICT DO NOTHING\n")
         fh.write("  RETURNING user_id\n")
         fh.write(")\n")
         fh.write("INSERT INTO _ldap_created_stubs (user_id) SELECT user_id FROM created;\n")
-        fh.write("SELECT 'manager_stub_candidates=' || count(*) FROM _ldap_manager_stubs;\n")
+        fh.write("SELECT 'manager_stub_candidates_matched=' || count(*) FROM _ldap_manager_stubs;\n")
         fh.write("SELECT 'manager_stubs_created=' || count(*) FROM _ldap_created_stubs;\n")
 
     if rows:
@@ -614,8 +653,11 @@ def write_update_sql(fh):
         fh.write(",\n".join(object_items) + "\n")
         fh.write("         )) AS new_tags")
         if "manager" in selected:
+            # Preserve the existing link when the directory manager is absent
+            # or inactive (and therefore cannot be used as a valid manager).
+            # A null directory manager still clears the link explicitly.
             fh.write(",\n         CASE WHEN u.manager_uuid IS NULL THEN pu.manager_user_id\n")
-            fh.write("              ELSE (SELECT m.user_id FROM partner_users m WHERE m.user_id = u.manager_uuid) END AS new_manager_user_id")
+            fh.write("              ELSE COALESCE((SELECT m.user_id FROM partner_users m WHERE m.user_id = u.manager_uuid AND m.active), pu.manager_user_id) END AS new_manager_user_id")
         fh.write("\n  FROM _ldap_sync u\n  JOIN partner_users pu USING (user_id)\n")
         fh.write("), updated AS (\n")
         fh.write("  UPDATE partner_users pu\n  SET tags = n.new_tags")
@@ -672,6 +714,10 @@ print(f"ldap_records_without_selected_data={no_data}")
 print(f"ldap_records_invalid_uuid={invalid_uuid}")
 print(f"ldap_records_duplicate_uuid_skipped={duplicates}")
 print(f"ldap_manager_unresolved={manager_unresolved}")
+print(f"ldap_manager_stub_candidates={len(manager_profiles)}")
+print(f"ldap_manager_stub_skipped={manager_stub_skipped}")
+if "manager" in selected and not stubs_enabled:
+    print("ldap_manager_stubs_disabled=email_not_selected")
 PY
 
 row_count="$(python3 - "$csv" <<'PY'

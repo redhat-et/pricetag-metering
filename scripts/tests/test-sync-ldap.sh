@@ -3,9 +3,9 @@
 # Hermetic shell tests for scripts/sync-ldap-cost-centers.sh.
 #
 # No LDAP and no PostgreSQL are contacted. The tests cover the review blockers:
-# LDIF unfolding before base64 decode, manager DN resolution, zero-row SQL,
-# changed-only updates, backup/rollback artifacts, and the local psql path that
-# must not put the DSN/password in argv.
+# LDIF unfolding before base64 decode, manager DN resolution, scoped and valid
+# manager stubs, zero-row SQL, changed-only updates, backup/rollback artifacts,
+# and the local psql path that must not put the DSN/password in argv.
 #
 set -euo pipefail
 
@@ -55,14 +55,30 @@ uid: bob
 mail: bob@example.com
 givenName: Bob
 sn: Boss
+
+dn: uid=carol,cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com
+rhatUUID: 33333333-3333-3333-3333-333333333333
+uid: carol
+mail: carol@example.com
+givenName: Carol
+sn: Example
+manager: uid=dave,cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com
+
+dn: uid=dave,cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com
+rhatUUID: 44444444-4444-4444-4444-444444444444
+uid: dave
+givenName: Dave
+sn: NoMail
 EOF
 
 # --- dry run: folded base64, manager resolution, all fields -----------------
-"$SCRIPT" --ldif "$tmp/sample.ldif" --output-dir "$tmp/out" --dry-run > "$tmp/dry.log" 2>&1 \
+"$SCRIPT" --ldif "$tmp/sample.ldif" --fields all --output-dir "$tmp/out" --dry-run > "$tmp/dry.log" 2>&1 \
   || fail "dry run failed: $(cat "$tmp/dry.log")"
-grep -q 'ldap_records=2' "$tmp/dry.log" || fail "wrong LDAP record count"
-grep -q 'ldap_records_with_selected_data=2' "$tmp/dry.log" || fail "wrong usable row count"
+grep -q 'ldap_records=4' "$tmp/dry.log" || fail "wrong LDAP record count"
+grep -q 'ldap_records_with_selected_data=4' "$tmp/dry.log" || fail "wrong usable row count"
 grep -q 'ldap_manager_unresolved=0' "$tmp/dry.log" || fail "manager DN did not resolve"
+grep -q 'ldap_manager_stub_candidates=1' "$tmp/dry.log" || fail "manager stub candidate count is wrong"
+grep -q 'ldap_manager_stub_skipped=1' "$tmp/dry.log" || fail "manager stub without email was not skipped"
 
 csv="$(find "$tmp/out" -name '*.csv' | head -1)"
 main_sql="$(find "$tmp/out" -name '*.sql' ! -name '*.backup.sql' | head -1)"
@@ -73,10 +89,21 @@ grep -Fq 'Platform Engineering' "$csv" || fail "organization missing from CSV"
 grep -Fq '22222222-2222-2222-2222-222222222222' "$csv" || fail "manager UUID missing from CSV"
 grep -q 'manager_user_id' "$main_sql" || fail "manager_user_id is not updated"
 grep -q '_ldap_manager_stubs' "$main_sql" || fail "missing manager stub provisioning"
+grep -q 'u.manager_uuid = s.user_id' "$main_sql" || fail "manager stubs are not scoped to matched users"
+grep -q "lower(x.tags->>'email') = lower(s.email)" "$main_sql" || fail "stub email uniqueness guard missing"
+grep -q 'COALESCE((SELECT m.user_id FROM partner_users m WHERE m.user_id = u.manager_uuid AND m.active)' "$main_sql" || fail "inactive/missing manager would overwrite the existing link"
 grep -q 'manager_stubs_created' "$main_sql" || fail "missing manager stub count"
 grep -q 'IS DISTINCT FROM' "$main_sql" || fail "changed-only guard missing"
 if grep -q 'updated_at' "$main_sql"; then fail "sync must not touch updated_at"; fi
 grep -q 'SET LOCAL lock_timeout' "$main_sql" || fail "lock_timeout missing"
+
+# --- default directory run: no email opt-in, so no stub rows ----------------
+"$SCRIPT" --ldif "$tmp/sample.ldif" --output-dir "$tmp/out-directory" --dry-run > "$tmp/directory.log" 2>&1 \
+  || fail "directory dry run failed: $(cat "$tmp/directory.log")"
+grep -q 'ldap_manager_stubs_disabled=email_not_selected' "$tmp/directory.log" || fail "directory run did not report disabled stubs"
+directory_sql="$(find "$tmp/out-directory" -name '*.sql' ! -name '*.backup.sql' | head -1)"
+if grep -q '_ldap_manager_stubs' "$directory_sql"; then fail "directory run emitted manager stubs without email opt-in"; fi
+grep -q 'manager_user_id' "$directory_sql" || fail "directory run stopped linking existing manager rows"
 
 # --- zero usable rows: valid SQL, no dangling VALUES ------------------------
 : > "$tmp/empty.ldif"
