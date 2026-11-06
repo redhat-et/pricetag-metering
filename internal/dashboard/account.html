@@ -57,6 +57,10 @@
   .banner{display:flex;gap:12px;align-items:flex-start;background:rgba(77,160,248,.08);border:1px solid rgba(77,160,248,.3);
           border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:12.5px}
   .banner b{color:var(--blu)}
+  .scope-note{display:flex;gap:10px;align-items:flex-start;background:rgba(235,168,48,.08);border:1px solid rgba(235,168,48,.34);
+              border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:12.5px;line-height:1.5}
+  .scope-note .ico{color:var(--org);font-size:14px;line-height:1.35;flex:0 0 auto}
+  .scope-note b{color:var(--org)}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
   .kpi{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px}
   .kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--t2);font-weight:700}
@@ -183,6 +187,11 @@
 </header>
 
 <main class="pg">
+  <div class="scope-note" role="note">
+    <span class="ico" aria-hidden="true">ⓘ</span>
+    <div><b>EnMaaS traffic only.</b> This page shows usage that went through the EnMaaS gateway. If you use other tools or platforms to access AI, check those tools for their usage and cost.</div>
+  </div>
+
   <div class="banner hidden" id="first-banner">
     <div>🎉</div>
     <div><b>Welcome to EnMaaS.</b> Your account is ready. New users should follow the EnMaaS onboarding process to get started; once it is complete, keys you create here are shown only once, so store them in your password manager or approved secret store.</div>
