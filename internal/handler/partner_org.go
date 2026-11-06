@@ -15,10 +15,27 @@ import (
 type PartnerOrgHandler struct {
 	store *storage.Store
 	cfg   config.Config
+	cache *orgResponseCache
 }
 
 func NewPartnerOrgHandler(store *storage.Store, cfg config.Config) *PartnerOrgHandler {
-	return &PartnerOrgHandler{store: store, cfg: cfg}
+	return &PartnerOrgHandler{store: store, cfg: cfg, cache: newOrgResponseCache(cfg)}
+}
+
+// Cached wraps a manager read in the short-lived, per-caller response cache.
+// The wrapper resolves scopeRoot (the actual authorization gate) before every
+// lookup, so a hit never outlives a revoked role or subtree.
+func (h *PartnerOrgHandler) Cached(next http.HandlerFunc) http.HandlerFunc {
+	return h.cache.wrap(next, h.scopeRoot)
+}
+
+// resolvedScope reuses the cache wrapper's authorization result when present,
+// otherwise performs the normal check (cache disabled or uncached route).
+func (h *PartnerOrgHandler) resolvedScope(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if root, ok := orgScopeFromRequest(r); ok {
+		return root, true
+	}
+	return h.scopeRoot(w, r)
 }
 
 // ServeManager serves the manager.html page from the embedded dashboard FS.
@@ -145,7 +162,7 @@ func (h *PartnerOrgHandler) scopeRoot(w http.ResponseWriter, r *http.Request) (s
 // HandleOrgUsage returns per-person usage rollups for the manager table.
 // GET /api/v1/org/usage?range=&root=
 func (h *PartnerOrgHandler) HandleOrgUsage(w http.ResponseWriter, r *http.Request) {
-	root, ok := h.scopeRoot(w, r)
+	root, ok := h.resolvedScope(w, r)
 	if !ok {
 		return
 	}
@@ -195,7 +212,7 @@ func emptyOrgChartsResponse() orgChartsResponse {
 // HandleOrgCharts returns the analytics bundle for the manager page charts.
 // GET /api/v1/org/charts?range=&root=&ref=
 func (h *PartnerOrgHandler) HandleOrgCharts(w http.ResponseWriter, r *http.Request) {
-	root, ok := h.scopeRoot(w, r)
+	root, ok := h.resolvedScope(w, r)
 	if !ok {
 		return
 	}
@@ -288,7 +305,7 @@ func (h *PartnerOrgHandler) HandleOrgPerson(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Authorize: the caller must be able to see this person.
-	root, ok := h.scopeRoot(w, r)
+	root, ok := h.resolvedScope(w, r)
 	if !ok {
 		return
 	}

@@ -119,10 +119,11 @@ type Store struct {
 	// RunRollupMaintenance, servingRollups the last decision made — used
 	// only to log transitions once. Enforcement and the Recent feed never
 	// consult these; they stay on raw for freshness and detail.
-	useRollups     atomic.Bool
-	liveRollups    atomic.Bool
-	parityHealthy  atomic.Bool
-	servingRollups atomic.Bool
+	useRollups      atomic.Bool
+	liveRollups     atomic.Bool
+	parityHealthy   atomic.Bool
+	parityConfirmed atomic.Bool
+	servingRollups  atomic.Bool
 	// parityMetaMissing suppresses the "worker has not reported yet" warning
 	// after the first occurrence; it resets once a verdict appears.
 	parityMetaMissing atomic.Bool
@@ -698,10 +699,12 @@ type GeoSummary struct {
 	CostUSD     float64 `json:"cost_usd"`
 }
 
-// CostCenterSummary is one cost-center bucket. CostCenterDescription is the
-// human label from the directory (cost_center_description) and falls back to
-// the raw cost_center code, then "Unknown".
+// CostCenterSummary is one cost-center bucket. CostCenter is the directory
+// cost-center code (tags.cost_center); CostCenterDescription is its human
+// label (tags.cost_center_description), falling back to the code and then
+// "Unknown".
 type CostCenterSummary struct {
+	CostCenter            string  `json:"cost_center,omitempty"`
 	CostCenterDescription string  `json:"cost_center_description"`
 	Requests              int     `json:"requests"`
 	TotalTokens           int64   `json:"total_tokens"`
@@ -1333,7 +1336,8 @@ func (s *Store) GetDashboardGeo(ctx context.Context, since, until time.Time, gro
 // description, using the same rollup/raw gate as the other dashboard charts.
 func (s *Store) GetDashboardCostCenters(ctx context.Context, since, until time.Time, group, user, model string) ([]CostCenterSummary, error) {
 	rollup := s.rollupsLive()
-	centerExpr := `COALESCE(NULLIF(BTRIM(pu.tags->>'cost_center_description'), ''),
+	centerExpr := `COALESCE(NULLIF(BTRIM(pu.tags->>'cost_center'), ''), '')`
+	descriptionExpr := `COALESCE(NULLIF(BTRIM(pu.tags->>'cost_center_description'), ''),
 		NULLIF(BTRIM(pu.tags->>'cost_center'), ''), 'Unknown')`
 	from := `usage_events e
 		LEFT JOIN model_pricing p ON e.model = p.model
@@ -1349,14 +1353,14 @@ func (s *Store) GetDashboardCostCenters(ctx context.Context, since, until time.T
 		requests, cost = `COALESCE(SUM(e.requests), 0)`, `COALESCE(ROUND(SUM(e.cost_usd)::numeric, 2), 0)`
 	}
 	query := fmt.Sprintf(`
-		SELECT %s AS cost_center, %s,
+		SELECT %s AS cost_center, %s AS cost_center_description, %s,
 			COALESCE(SUM(e.total_tokens), 0), COUNT(DISTINCT e.username), %s
 		FROM %s
 		WHERE %s AND ($3 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $3)
 			AND ($4 = '' OR e.username = ANY(string_to_array($4, ',')))
 			AND ($5 = '' OR e.model = $5)
-		GROUP BY cost_center
-		ORDER BY %s DESC`, centerExpr, requests, cost, from, window, cost)
+		GROUP BY cost_center, cost_center_description
+		ORDER BY %s DESC`, centerExpr, descriptionExpr, requests, cost, from, window, cost)
 	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model)
 	if err != nil {
 		return nil, err
@@ -1365,7 +1369,7 @@ func (s *Store) GetDashboardCostCenters(ctx context.Context, since, until time.T
 	var result []CostCenterSummary
 	for rows.Next() {
 		var item CostCenterSummary
-		if err := rows.Scan(&item.CostCenterDescription, &item.Requests, &item.TotalTokens, &item.UserCount, &item.CostUSD); err != nil {
+		if err := rows.Scan(&item.CostCenter, &item.CostCenterDescription, &item.Requests, &item.TotalTokens, &item.UserCount, &item.CostUSD); err != nil {
 			return nil, err
 		}
 		result = append(result, item)
@@ -1473,9 +1477,23 @@ type RecentEvent struct {
 	StatusCode *int `json:"status_code"`
 }
 
+// recentActivityWindow caps the walk-back for FILTERED recent-activity
+// lookups. Without it, a group/user/model with no recent traffic makes the
+// timestamp index scan backwards until it finds LIMIT matches, which grows
+// with the age of the ledger. "Recent" beyond a month is not a useful answer
+// on these surfaces, and the unfiltered feed keeps its pure LIMIT behaviour.
+const recentActivityWindow = 30 * 24 * time.Hour
+
 func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, model string) ([]RecentEvent, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
+	}
+	filtered := group != "" || user != "" || model != ""
+	recentClause := ""
+	args := []any{limit, group, user, model}
+	if filtered {
+		recentClause = " AND e.timestamp >= $5"
+		args = append(args, time.Now().UTC().Add(-recentActivityWindow))
 	}
 	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
 		SELECT e.timestamp, e.username, %s, COALESCE(pu.tags->>'country',''), COALESCE(pu.tags->>'state',''), COALESCE(pu.tags->>'cost_center_description',''), COALESCE(NULLIF(e.group_name, ''), 'unknown'), e.model, COALESCE(e.provider,''),
@@ -1489,9 +1507,9 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 		LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
 		LEFT JOIN partner_user_logins pul ON pul.username = e.username AND pul.is_current
 		LEFT JOIN partner_users pu ON pu.user_id = pul.user_id
-		WHERE ($2 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $2) AND ($3 = '' OR e.username = ANY(string_to_array($3, ','))) AND ($4 = '' OR e.model = $4)
+		WHERE ($2 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $2) AND ($3 = '' OR e.username = ANY(string_to_array($3, ','))) AND ($4 = '' OR e.model = $4)`+recentClause+`
 		ORDER BY e.timestamp DESC
-		LIMIT $1`, displayNameExpr, costUSDExpr), limit, group, user, model)
+		LIMIT $1`, displayNameExpr, costUSDExpr), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1552,6 +1570,137 @@ func (s *Store) GetUserProfile(ctx context.Context, username string) (UserProfil
 // concurrent CREATE ... IF NOT EXISTS on the same catalog entry can still fail
 // with a duplicate-key error inside Postgres.
 const migrationLockKey = 0x7072696365746167 // "pricetag"
+
+// usageGroupActivityIndex backs filtered /recent lookups (group scope). The
+// expression matches GetRecentEvents exactly: it normalizes NULL/empty group
+// names to 'unknown', so the planner can use the leading column and the
+// timestamp DESC ordering instead of walking the timestamp index. It is built
+// outside the startup migration path: CREATE INDEX CONCURRENTLY on a large
+// ledger can outlast the fixed migration timeout, and a cancelled concurrent
+// build can leave an invalid index that IF NOT EXISTS would then skip forever.
+// EnsureUsageGroupIndex handles both cases and retries.
+const usageGroupActivityIndex = "idx_usage_events_group_ts"
+
+const usageGroupActivityIndexDDL = `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_group_ts ON usage_events ((COALESCE(NULLIF(group_name, ''), 'unknown')), timestamp DESC)`
+
+// usageUserActivityIndex backs the user-filtered /recent path. The existing
+// username index cannot provide the ORDER BY timestamp DESC tail, so a user
+// with no recent traffic still walks the table backwards.
+const usageUserActivityIndex = "idx_usage_events_user_ts"
+
+const usageUserActivityIndexDDL = `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_events_user_ts ON usage_events (username, timestamp DESC)`
+
+// usageIndexLockKey serialises the concurrent index build across replicas
+// that start together. It is deliberately distinct from migrationLockKey:
+// waiting for a large index build must not delay another pod's migrations.
+const usageIndexLockKey = 0x7573616765696478 // "usageidx"
+
+type usageActivityIndexSpec struct {
+	name string
+	ddl  string
+}
+
+var usageActivityIndexes = []usageActivityIndexSpec{
+	{name: usageGroupActivityIndex, ddl: usageGroupActivityIndexDDL},
+	{name: usageUserActivityIndex, ddl: usageUserActivityIndexDDL},
+}
+
+// ensureUsageGroupIndexWithLock serialises builders across replicas, then
+// runs ensureUsageGroupIndex. The session-level lock is held on a dedicated
+// connection because CREATE INDEX CONCURRENTLY cannot run inside a
+// transaction.
+func (s *Store) ensureUsageGroupIndexWithLock(ctx context.Context) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("index lock connection: %w", err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, usageIndexLockKey); err != nil {
+		return fmt.Errorf("acquire index lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, usageIndexLockKey)
+	}()
+	return s.ensureUsageGroupIndex(ctx)
+}
+
+// ensureUsageGroupIndex returns immediately when valid indexes exist, drops an
+// invalid/not-ready leftover from an interrupted build, then builds each index
+// concurrently. Concurrent builds do not block ingestion writes.
+func (s *Store) ensureUsageGroupIndex(ctx context.Context) error {
+	for _, spec := range usageActivityIndexes {
+		if err := s.ensureUsageActivityIndex(ctx, spec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) ensureUsageActivityIndex(ctx context.Context, spec usageActivityIndexSpec) error {
+	var valid bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT i.indisvalid AND i.indisready
+		FROM pg_index i
+		JOIN pg_class c ON c.oid = i.indexrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relname = $1 AND n.nspname = current_schema()`, spec.name).Scan(&valid)
+	switch {
+	case err == nil && valid:
+		return nil
+	case err == nil && !valid:
+		slog.Warn("dropping interrupted usage_events index before rebuild", "index", spec.name)
+		if _, derr := s.db.ExecContext(ctx, `DROP INDEX CONCURRENTLY IF EXISTS `+spec.name); derr != nil {
+			return fmt.Errorf("drop invalid index %s: %w", spec.name, derr)
+		}
+	case !errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("inspect usage index %s: %w", spec.name, err)
+	}
+	if _, err := s.db.ExecContext(ctx, spec.ddl); err != nil {
+		return fmt.Errorf("create usage index %s: %w", spec.name, err)
+	}
+	// CREATE INDEX CONCURRENTLY can fail after leaving a catalog entry. Do not
+	// let the next replica's IF NOT EXISTS silently accept an invalid index.
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT i.indisvalid AND i.indisready
+		FROM pg_index i
+		JOIN pg_class c ON c.oid = i.indexrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relname = $1 AND n.nspname = current_schema()`, spec.name).Scan(&valid); err != nil {
+		return fmt.Errorf("verify usage index %s: %w", spec.name, err)
+	}
+	if !valid {
+		return fmt.Errorf("usage index %s is not valid after create", spec.name)
+	}
+	return nil
+}
+
+// EnsureUsageGroupIndex builds the filtered-/recent index in the background.
+// It never fails service startup: a missing index only makes filtered recent
+// lookups slower, so failures are logged, surfaced, and retried. Each attempt
+// gets its own timeout so a cancelled build is retried (and its invalid
+// leftover dropped) on the next pass.
+func (s *Store) EnsureUsageGroupIndex(ctx context.Context, retry time.Duration) {
+	if retry <= 0 {
+		retry = 5 * time.Minute
+	}
+	for {
+		buildCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+		err := s.ensureUsageGroupIndexWithLock(buildCtx)
+		cancel()
+		if err == nil {
+			slog.Info("usage_events activity indexes ready",
+				"indexes", []string{usageGroupActivityIndex, usageUserActivityIndex})
+			return
+		}
+		slog.Error("usage_events activity indexes unavailable — filtered /recent stays bounded in SQL but slower; retrying",
+			"indexes", []string{usageGroupActivityIndex, usageUserActivityIndex}, "error", err, "retry", retry)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(retry):
+		}
+	}
+}
 
 func (s *Store) migrate(ctx context.Context) error {
 	slog.Info("running database migrations")

@@ -178,3 +178,39 @@ func TestCreatePartnerUserReconcilesReportsWhenManagerArrivesLater(t *testing.T)
 		t.Fatalf("report manager_user_id = %v, want %s", repaired.ManagerUserID, managerID)
 	}
 }
+
+// TestPatchPartnerUserClaimsRowWithoutLogin pins the manager-placeholder
+// claim path: LDAP creates the directory row before the manager ever signs in,
+// so there is no partner_user_logins row. The first verified profile patch
+// (the OIDC callback) must create the login from the merged email instead of
+// failing with sql.ErrNoRows.
+func TestPatchPartnerUserClaimsRowWithoutLogin(t *testing.T) {
+	s, ctx := openTestStore(t)
+	const id = "123e4567-e89b-12d3-a456-426614174050"
+
+	// Simulate the placeholder: names only, no email tag and no login row.
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO partner_users (user_id,tags,role,active,created_by,updated_by)
+		VALUES ($1,'{"first_name":"Boss","last_name":"Person"}','user',TRUE,'ldap-sync','ldap-sync')`, id); err != nil {
+		t.Fatalf("insert manager placeholder: %v", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM partner_user_logins WHERE user_id=$1`, id); err != nil {
+		t.Fatalf("clear placeholder logins: %v", err)
+	}
+
+	patched, err := s.PatchPartnerUser(ctx, "oidc", id, map[string]any{"email": "boss@example.com"})
+	if err != nil {
+		t.Fatalf("PatchPartnerUser claim = %#v, err %v", patched, err)
+	}
+	if patched.Tags["email"] != "boss@example.com" || patched.Tags["first_name"] != "Boss" || patched.Tags["last_name"] != "Person" {
+		t.Fatalf("claim did not merge tags: %#v", patched.Tags)
+	}
+	current, err := s.CurrentPartnerUserLogin(ctx, id)
+	if err != nil || current != "boss@example.com" {
+		t.Fatalf("CurrentPartnerUserLogin = %q, err %v; want the merged email", current, err)
+	}
+	logins, err := s.ListPartnerUsernames(ctx, id)
+	if err != nil || len(logins) != 1 {
+		t.Fatalf("login history = %v, err %v; want exactly the claimed login", logins, err)
+	}
+}

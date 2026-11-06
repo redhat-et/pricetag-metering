@@ -229,26 +229,54 @@ func TestFreshnessReadsNeverSwitch(t *testing.T) {
 	}
 }
 
-func TestRollupsLiveRequiresAllThreeConditions(t *testing.T) {
+func TestRollupsLiveRequiresFlagReadyAndConfirmedParity(t *testing.T) {
 	var s Store
 	if s.rollupsLive() {
 		t.Fatal("zero-value store must not serve rollups")
 	}
 	s.useRollups.Store(true)
 	if s.rollupsLive() {
-		t.Fatal("flag alone must not serve rollups (no backfill, no parity)")
+		t.Fatal("flag alone must not serve rollups (no backfill, no confirmed parity)")
 	}
 	s.rollupsReadyNow.Store(true)
 	if s.rollupsLive() {
-		t.Fatal("flag+ready must not serve rollups before the first parity check goes green")
+		t.Fatal("flag+ready must not serve rollups before parity is confirmed once")
 	}
-	s.parityHealthy.Store(true)
+	s.parityConfirmed.Store(true)
 	if !s.rollupsLive() {
-		t.Fatal("flag+ready+parity must serve rollups")
+		t.Fatal("flag+ready+confirmed parity must serve rollups")
 	}
 	s.useRollups.Store(false)
 	if s.rollupsLive() {
 		t.Fatal("the flag must remain the kill switch")
+	}
+}
+
+// A transient parity red after a confirmed deployment is an alert, not a
+// reason to scan the raw ledger on every dashboard refresh.
+func TestRollupMaintenanceHydrationIsBounded(t *testing.T) {
+	body := funcBody(t, "rollups.go", "func (s *Store) RunRollupMaintenance")
+	for _, want := range []string{"parityMaxAge", "metaLookupParity", "parityStateFromMeta"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("RunRollupMaintenance boot hydration lost %q — an ancient green can permanently enable rollups", want)
+		}
+	}
+}
+
+func TestParityRedDoesNotFallReadsBackToRaw(t *testing.T) {
+	var s Store
+	s.useRollups.Store(true)
+	s.rollupsReadyNow.Store(true)
+	s.parityConfirmed.Store(true)
+	s.parityHealthy.Store(false)
+	if !s.rollupsLive() {
+		t.Fatal("confirmed rollups must keep serving when parity goes red")
+	}
+	var fresh Store
+	fresh.useRollups.Store(true)
+	fresh.rollupsReadyNow.Store(true)
+	if fresh.rollupsLive() {
+		t.Fatal("rollups that were never confirmed must not serve on a red/unknown parity")
 	}
 }
 

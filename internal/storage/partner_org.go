@@ -38,6 +38,19 @@ type OrgUsageRow struct {
 	OverLimit     bool    `json:"over_limit"`
 }
 
+// ceilToHour moves a non-hour-aligned timestamp forward to the next hour.
+// Hourly rollups cannot represent a partial boundary bucket: using
+// `hour >= since` would include up to 59 minutes of pre-window data. The
+// rollup path starts at the next complete hour; the raw path keeps the exact
+// requested window.
+func ceilToHour(t time.Time) time.Time {
+	truncated := t.Truncate(time.Hour)
+	if truncated.Equal(t) {
+		return t
+	}
+	return truncated.Add(time.Hour)
+}
+
 // GetPartnerOrgUsage rolls usage up per partner user for the subtree under
 // rootUserID over a window. An empty rootUserID means the whole organisation
 // (every active partner user). It reuses costUSDExpr — one cost model shared
@@ -48,7 +61,9 @@ type OrgUsageRow struct {
 // window is ~1.3M raw rows and takes seconds on the shared primary, while the
 // same window is ~25K hourly rows and answers in tens of milliseconds. The
 // hourly path reports LastUsed at hour granularity (the rollup's finest
-// resolution); the raw path is kept only for the parity-fallback case.
+// resolution) and starts at the next full hour so it never counts the whole
+// boundary hour before `since`; the raw path is kept only for the
+// parity-fallback case.
 func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since, until time.Time) ([]OrgUsageRow, error) {
 	from := `partner_user_logins l ON l.user_id = st.user_id
 			JOIN usage_events e ON e.username = l.username
@@ -58,6 +73,7 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 	cost := fmt.Sprintf(`COALESCE(ROUND(SUM(%s)::numeric,2),0)`, costUSDExpr)
 	lastUsed := `MAX(e.timestamp)`
 	if s.rollupsLive() {
+		since = ceilToHour(since)
 		from = `partner_user_logins l ON l.user_id = st.user_id
 			JOIN usage_hourly e ON e.username = l.username`
 		window = `e.hour >= $2 AND e.hour < $3`
@@ -245,19 +261,36 @@ func (s *Store) GetPersonModelUsage(ctx context.Context, usernames []string, sin
 		refModel = "claude-opus-4-8"
 	}
 	userList := strings.Join(usernames, ",")
+	from := `usage_events e LEFT JOIN model_pricing p ON e.model = p.model`
+	when := `e.timestamp >= $1 AND e.timestamp < $2`
+	cost := costUSDExpr
+	positive := fmt.Sprintf(`(%s) > 0`, cost)
+	mcFrom := `usage_events e`
+	requests := `COUNT(*)`
+	lastUsed := `MAX(e.timestamp)`
+	if s.rollupsLive() {
+		since = ceilToHour(since)
+		from = `usage_hourly e LEFT JOIN model_pricing p ON e.model = p.model`
+		when = `e.hour >= $1 AND e.hour < $2`
+		cost = `e.cost_usd`
+		positive = `(e.cost_usd) > 0`
+		mcFrom = `usage_hourly e`
+		requests = `COALESCE(SUM(e.requests),0)`
+		lastUsed = `MAX(e.hour)`
+	}
 	query := fmt.Sprintf(`
 		WITH r_ref AS (
 			SELECT COALESCE(SUM(e.cached_input_tokens)::float / NULLIF(SUM(e.prompt_tokens), 0), 0) as r
-			FROM usage_events e LEFT JOIN model_pricing p ON e.model = p.model
-			WHERE e.timestamp >= $1 AND e.timestamp < $2 AND e.model = $4
-			  AND e.username = ANY(string_to_array($3, ',')) AND (%s) > 0
+			FROM %s
+			WHERE %s AND e.model = $4
+			  AND e.username = ANY(string_to_array($3, ',')) AND %s
 			  AND NOT (`+hostedProviderCond+`)
 		),
 		r_all AS (
 			SELECT COALESCE(SUM(e.cached_input_tokens)::float / NULLIF(SUM(e.prompt_tokens), 0), 0) as r
-			FROM usage_events e LEFT JOIN model_pricing p ON e.model = p.model
-			WHERE e.timestamp >= $1 AND e.timestamp < $2
-			  AND e.username = ANY(string_to_array($3, ',')) AND (%s) > 0
+			FROM %s
+			WHERE %s
+			  AND e.username = ANY(string_to_array($3, ',')) AND %s
 			  AND NOT (`+hostedProviderCond+`)
 		),
 		rat AS (
@@ -274,23 +307,23 @@ func (s *Store) GetPersonModelUsage(ctx context.Context, usernames []string, sin
 			SELECT e.model,
 			       (SUM(COALESCE(e.cached_input_tokens, 0) + COALESCE(e.cache_creation_tokens, 0))::float
 			         / NULLIF(SUM(e.prompt_tokens), 0)) > 0.01 AS has_cache
-			FROM usage_events e
-			WHERE e.timestamp >= $1 AND e.timestamp < $2
+			FROM %s
+			WHERE %s
 			GROUP BY e.model
 		),
 		fm AS (
 			SELECT e.model,
 				MAX(COALESCE(e.provider, '')) as provider,
-				COUNT(*) as reqs,
+				%s as reqs,
 				SUM(e.prompt_tokens) as prompt, SUM(e.completion_tokens) as completion,
 				SUM(COALESCE(e.cached_input_tokens, 0)) as cached, SUM(COALESCE(e.cache_creation_tokens, 0)) as cwrite,
 				SUM(e.total_tokens) as tot, SUM(%s) as cost,
 				bool_or(`+hostedProviderCond+`) as hosted,
 				BOOL_OR(COALESCE(mc.has_cache, false)) as model_has_cache,
-				MAX(e.timestamp) as last_used
-			FROM usage_events e LEFT JOIN model_pricing p ON e.model = p.model
+				%s as last_used
+			FROM %s
 			LEFT JOIN model_cache mc ON mc.model = e.model
-			WHERE e.timestamp >= $1 AND e.timestamp < $2 AND e.username = ANY(string_to_array($3, ','))
+			WHERE %s AND e.username = ANY(string_to_array($3, ','))
 			GROUP BY e.model
 		)
 		SELECT fm.model, fm.provider, fm.hosted, fm.reqs,
@@ -310,9 +343,9 @@ func (s *Store) GetPersonModelUsage(ctx context.Context, usernames []string, sin
 				ELSE 0 END,
 			to_char(fm.last_used, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		FROM fm CROSS JOIN pr CROSS JOIN rat
-		ORDER BY fm.cost DESC, fm.tot DESC`, costUSDExpr, costUSDExpr, costUSDExpr)
+		ORDER BY fm.cost DESC, fm.tot DESC`, from, when, positive, from, when, positive, mcFrom, when, requests, cost, lastUsed, from, when)
 
-	rows, err := s.db.QueryContext(ctx, query, since, until, userList, refModel)
+	rows, err := s.reader().QueryContext(ctx, query, since, until, userList, refModel)
 	if err != nil {
 		return nil, err
 	}

@@ -90,7 +90,10 @@ func (s *Store) GetPartnerUsersUsageReport(ctx context.Context, userIDs []string
 		return report, nil
 	}
 
-	usageRows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
+	// This report predates usage_hourly and exposes reasoning_tokens, which the
+	// rollup does not carry. Keep the raw aggregate (one grouped scan) but run
+	// it on the read replica so partner reporting cannot load the primary.
+	usageRows, err := s.reader().QueryContext(ctx, fmt.Sprintf(`
 		SELECT l.user_id::text, COALESCE(e.provider,''), COALESCE(e.model,''),
 			COUNT(e.id)::bigint,
 			COALESCE(SUM(e.prompt_tokens),0)::bigint,

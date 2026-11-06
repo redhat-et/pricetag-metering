@@ -395,8 +395,10 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	// source for profile attributes. Persist every returned claim as a merged
 	// tag so group membership, state, cost center and the rest are available
 	// to the dashboard without waiting for the next LDAP sync. Omitted claims
-	// leave the existing tag untouched; login still never provisions or
-	// elevates a user from claims alone.
+	// leave the existing tag untouched. Login still never provisions a partner
+	// user or elevates one from claims alone; it may claim an existing active
+	// directory row (for example an LDAP manager placeholder) by creating its
+	// missing partner_user_logins mapping from the merged email.
 	if err := h.persistOIDCProfile(r.Context(), user.UserID, claims); err != nil {
 		slog.Error("persist OIDC profile failed", "username", username, "user_id", user.UserID, "error", err)
 		http.Error(w, "SSO profile could not be saved", http.StatusInternalServerError)
@@ -455,7 +457,15 @@ func oidcProfileTags(claims oidcClaims) map[string]any {
 			tags[key] = value
 		}
 	}
-	add("email", claims.Email)
+	// A manager placeholder created by the LDAP sync has no email tag until
+	// its first SSO login (email is opt-in for direct directory writes). Some
+	// providers put the address only in preferred_username; accept it when it
+	// is a bare address so the merged row can satisfy the directory contract.
+	email := claims.Email
+	if strings.TrimSpace(email) == "" && strings.Contains(claims.Username, "@") {
+		email = claims.Username
+	}
+	add("email", email)
 	add("first_name", claims.GivenName)
 	add("last_name", claims.FamilyName)
 	add("preferred_username", claims.Username)

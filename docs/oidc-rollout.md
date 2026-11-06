@@ -68,7 +68,11 @@ alive.
 The user must already exist as an active partner user. The partner user's
 stable UUID must equal the OIDC `rhatUUID`; login does not auto-provision or
 elevate accounts. LDAP synchronization remains responsible for creating and
-updating the partner directory, including manager links.
+updating the partner directory, including manager links. One deliberate
+exception: an existing directory row may have no login mapping yet (the LDAP
+sync creates manager placeholders that way). The first successful SSO login
+creates that missing `partner_user_logins` row from the merged email; it never
+creates the `partner_users` row itself.
 
 ### Session groups are bounded by the session lifetime
 
@@ -190,8 +194,9 @@ oidc_active, groups
 
 `groups` is stored as a string array (the directory also permits `*_groups`
 arrays for the local dev personas). Values omitted by the IdP leave the
-existing tag untouched, and login still never provisions, elevates, or
-authorizes a user from claims alone.
+existing tag untouched. Login never provisions or elevates a partner user from
+claims alone, and never authorizes one from claims alone; it may only claim an
+existing active directory row by creating its missing login mapping.
 
 For a controlled Stage/dogfood test, `OIDC_CLAIMS_DEBUG=true` renders a
 diagnostic page at the callback containing the decoded claim values and no raw

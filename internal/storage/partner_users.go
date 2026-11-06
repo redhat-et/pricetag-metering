@@ -969,8 +969,14 @@ func (s *Store) updatePartnerUser(ctx context.Context, actor, userID string, tag
 	if err != nil {
 		return PartnerUser{}, err
 	}
+	// A directory row can exist without a login mapping: LDAP manager
+	// placeholders are created before the manager ever signs in. Treat that as
+	// "no current login" so the first verified SSO update claims the row by
+	// creating its login from the merged email. A conflicting username still
+	// fails the unique constraint below instead of stealing another user's
+	// login.
 	var currentEmail string
-	if err := tx.QueryRowContext(ctx, `SELECT username FROM partner_user_logins WHERE user_id=$1 AND is_current`, id).Scan(&currentEmail); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT username FROM partner_user_logins WHERE user_id=$1 AND is_current`, id).Scan(&currentEmail); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return PartnerUser{}, err
 	}
 	if email != currentEmail {

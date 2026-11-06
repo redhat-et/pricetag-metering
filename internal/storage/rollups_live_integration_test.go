@@ -38,6 +38,7 @@ func TestLiveRollupConfigurationMatrixIntegration(t *testing.T) {
 	// completed its asynchronous backfill.
 	store.rollupsReadyNow.Store(true)
 	store.parityHealthy.Store(true)
+	store.parityConfirmed.Store(true)
 
 	cases := []struct {
 		name       string

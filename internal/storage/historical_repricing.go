@@ -300,10 +300,13 @@ func (s *Store) RepriceHistorical(ctx context.Context, actor string, req Histori
 	result.OperationID, result.Status, result.CompletedChunks, result.TotalChunks = op.ID, "completed", op.TotalChunks, op.TotalChunks
 	s.parityHealthy.Store(false)
 	s.servingRollups.Store(false)
-	// Share the invalidation with the other processes: API pods sync their
-	// parity state from rollup_meta, and the worker's next pass restores green.
-	// Use a detached context: the HTTP request may be cancelled after a long
-	// repricing run, and losing this signal would leave other pods on rollups.
+	// Publish the invalidation so the worker's next parity pass rechecks and
+	// the parity metric turns red. This is not a read-gate switch: a deployment
+	// that already confirmed parity keeps serving the continuously rebuilt
+	// rollups under the documented serve-stale policy (parityConfirmed is
+	// deliberately not cleared here). Use a detached context: the HTTP request
+	// may be cancelled after a long repricing run, and losing this signal would
+	// leave the metric green until the next scheduled pass.
 	metaCtx, cancelMeta := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelMeta()
 	if _, err := s.metaSetParity(metaCtx, false, time.Now().UTC(), time.Time{}); err != nil {
