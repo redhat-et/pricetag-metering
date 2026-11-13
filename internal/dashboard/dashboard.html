@@ -410,7 +410,7 @@ tr.clickable{cursor:pointer}
     </button>
     <div id="user-filter-panel" style="display:none;position:absolute;top:100%;left:36px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;width:230px;z-index:50;margin-top:2px;box-shadow:0 6px 20px rgba(0,0,0,.5)">
       <div style="padding:6px;border-bottom:1px solid var(--border)">
-        <input type="text" id="user-filter-search" placeholder="Filter users..." autocomplete="off" oninput="renderUserChecklist()"
+        <input type="text" id="user-filter-search" placeholder="Filter users..." autocomplete="off" oninput="onUserSearchInput()"
           style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 6px;border-radius:4px;font-size:11px">
       </div>
       <div style="padding:5px 10px;display:flex;justify-content:space-between;font-size:10px;border-bottom:1px solid var(--border)">
@@ -1056,6 +1056,10 @@ function populateFilterDropdowns(models, users){
 // userFilter holds the selected usernames; the API sends them comma-joined and
 // the backend matches any of them (string_to_array). Empty selection = all.
 var allUsers=[];
+var userSearchResults=[];   // server-side results for the current query
+var userSearchTimer=null;
+var userSearchSeq=0;
+var userSearchLoading=false;
 
 function toggleUserPanel(e){
   if(e)e.stopPropagation();
@@ -1066,12 +1070,55 @@ function toggleUserPanel(e){
   if(show){
     var s=document.getElementById('user-filter-search');
     if(s){s.value='';s.focus();}
+    userSearchResults=[];
+    userSearchLoading=false;
+    userSearchSeq++;
+    renderUserChecklist();
+  }
+}
+
+// The roster fetch is capped (top 200 by usage). Search the API when the
+// local list misses, so low-volume users remain findable.
+function onUserSearchInput(){
+  var s=document.getElementById('user-filter-search');
+  var q=(s?s.value:'').trim();
+  if(userSearchTimer)clearTimeout(userSearchTimer);
+  if(q.length<2){
+    userSearchSeq++;
+    userSearchResults=[];
+    userSearchLoading=false;
+    renderUserChecklist();
+    return;
+  }
+  userSearchResults=[];
+  userSearchLoading=true;
+  renderUserChecklist();
+  userSearchTimer=setTimeout(function(){fetchUserSearch(q);},250);
+}
+
+async function fetchUserSearch(q){
+  var seq=++userSearchSeq;
+  var r=range;
+  if(r==='custom'&&customFrom&&customTo)r='custom&from='+customFrom+'&to='+customTo;
+  try{
+    var rows=await api('/api/v1/dashboard/users?range='+r+'&search='+encodeURIComponent(q)+'&limit=50&savings=false',false);
+    if(seq!==userSearchSeq)return;
+    var s=document.getElementById('user-filter-search');
+    if(!s||(s.value||'').trim()!==q)return;
+    userSearchResults=Array.isArray(rows)?rows:[];
+    userSearchLoading=false;
+    renderUserChecklist();
+  }catch(e){
+    if(seq!==userSearchSeq)return;
+    userSearchResults=[];
+    userSearchLoading=false;
     renderUserChecklist();
   }
 }
 
 function userRosterNames(){
   var names=allUsers.map(function(u){return u.username}).filter(Boolean);
+  userSearchResults.forEach(function(u){if(u.username&&names.indexOf(u.username)<0)names.push(u.username);});
   // keep any selected user that isn't in the current roster page visible/checked
   userFilter.forEach(function(u){if(names.indexOf(u)<0)names.push(u);});
   return [...new Set(names)].sort(function(a,b){return a.localeCompare(b)});
@@ -1081,6 +1128,7 @@ function userMatchesSearch(username,q){
   if(!q)return true;
   if(username.toLowerCase().indexOf(q)>=0)return true;
   var user=allUsers.find(function(u){return u.username===username;});
+  if(!user)user=userSearchResults.find(function(u){return u.username===username;});
   return !!(user&&user.display_name&&user.display_name.toLowerCase().indexOf(q)>=0);
 }
 
@@ -1090,9 +1138,16 @@ function renderUserChecklist(){
   var s=document.getElementById('user-filter-search');
   var q=(s?s.value:'').toLowerCase();
   var shown=userRosterNames().filter(function(n){return userMatchesSearch(n,q);});
-  if(!shown.length){list.innerHTML='<div style="padding:8px 10px;font-size:11px;color:var(--text2)">No users</div>';return;}
+  if(!shown.length){
+    var msg='No users';
+    if(q&&userSearchLoading)msg='Searching…';
+    else if(q&&q.length<2)msg='Type at least 2 characters to search all users';
+    list.innerHTML='<div style="padding:8px 10px;font-size:11px;color:var(--text2)">'+msg+'</div>';
+    return;
+  }
   var nameByUser={};
   allUsers.forEach(function(u){if(u.display_name)nameByUser[u.username]=u.display_name;});
+  userSearchResults.forEach(function(u){if(u.display_name)nameByUser[u.username]=u.display_name;});
   list.innerHTML=shown.map(function(n){
     var checked=userFilter.indexOf(n)>=0?' checked':'';
     var safe=n.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
