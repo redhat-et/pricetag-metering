@@ -3,6 +3,7 @@ name: Publish
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions: {}
 
@@ -16,12 +17,29 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
       # Interim namespace: personal (quay.io/modden) with a repo-scoped
       # builder robot. Ownership, rotation, and the Konflux exit are documented
       # in docs/operations/image-publishing.md. Migration to an org-owned repo
       # is a one-line change here plus the cluster pull secret.
       IMAGE: quay.io/modden/enmaas-metering-service
+      # The storage/handler integration tests create throwaway databases and
+      # skip unless this is set. The publish gate must run them.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
