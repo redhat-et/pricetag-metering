@@ -839,12 +839,22 @@
       'Charm-Crush':'#f778ba','OpenAI':'#39d2c0','Gemini CLI':'#79c0ff','Aider':'#7ee787',
       'omp':'#ffa657','curl':'#8090a8'}[name]||'#38d4c2';
   }
+  var PROVIDER_COLORS={
+    'anthropic':'#d97757','openai':'#3fb950','azure':'#79c0ff',
+    'vertex':'#58a6ff','google':'#f2cc60','gemini':'#f2cc60','bedrock':'#7ee787',
+    'cb-glm':'#bc8cff','glm':'#bc8cff','zai':'#a371f7',
+    'cb-litellm':'#f778ba','litellm':'#f778ba',
+    'qwen':'#39d2c0','vllm':'#e3b341','ollama':'#ffa657','gateway':'#8b949e'
+  };
+  var PROVIDER_PALETTE=['#58a6ff','#3fb950','#d29922','#bc8cff','#39d2c0','#f85149','#f778ba','#79c0ff','#7ee787','#ffa657','#a5d6ff','#ff7b72','#d97757','#e3b341'];
   function providerColor(name){
     var p=String(name||'').toLowerCase();
-    if(p==='anthropic') return '#eba830';
-    if(p==='openai') return '#3dcc6e';
-    if(p==='vertex'||p==='google') return '#4da0f8';
-    return '#38d4c2';
+    if(PROVIDER_COLORS[p]) return PROVIDER_COLORS[p];
+    // Unknown provider: stable colour from the name so it never changes
+    // between page loads and stays distinct from the curated mappings.
+    var h=0;
+    for(var i=0;i<p.length;i++) h=(h*31+p.charCodeAt(i))>>>0;
+    return PROVIDER_PALETTE[h%PROVIDER_PALETTE.length];
   }
   function statusMeta(code){
     if(code===null||code===undefined) return {text:'—',cls:'',title:'unknown (recorded before status tracking)'};
@@ -873,7 +883,7 @@
         '<td style="color:var(--t2)">'+when(e.timestamp)+'</td>'+
         '<td>'+modelChip(e.model)+'</td>'+
         '<td class="client-chip" style="color:'+cCol+'" title="'+esc(e.user_agent||clientLabel)+'">'+esc(clientLabel)+'</td>'+
-        '<td style="color:'+pCol+'">'+esc(e.provider||'—')+'</td>'+
+        '<td style="color:'+pCol+';font-weight:600">'+esc(e.provider||'—')+'</td>'+
         '<td class="'+st.cls+'" title="'+esc(st.title)+'">'+st.text+'</td>'+
         '<td class="num tok-in" title="'+exact(input)+' input tokens">'+compact(input)+'</td>'+
         '<td class="num tok-out" title="'+exact(output)+' output tokens">'+compact(output)+'</td>'+
