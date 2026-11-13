@@ -454,7 +454,14 @@
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function money(v){ var n=Number(v||0); return '$'+(n>=1000?n.toLocaleString(undefined,{maximumFractionDigits:0}):n.toFixed(2)); }
-  function wholeMoney(v){ return '$'+Math.round(Number(v||0)).toLocaleString(); }
+  // Sub-cent spend is common for single requests against cheap models. Keep
+  // two decimals for normal amounts, but never render a real cost as "$0.00".
+  function preciseMoney(v){
+    var n=Number(v||0), a=Math.abs(n);
+    if(a>0&&a<0.01) return '$'+n.toFixed(4);
+    if(a>0&&a<1) return '$'+n.toFixed(3);
+    return money(n);
+  }
   function compact(v){ var n=Number(v||0); if(n>=1e9)return (n/1e9).toFixed(1)+'B'; if(n>=1e6)return (n/1e6).toFixed(1)+'M'; if(n>=1e3)return (n/1e3).toFixed(1)+'K'; return String(Math.round(n)); }
   function when(iso){ if(!iso)return '—'; var d=new Date(iso); if(isNaN(d))return '—';
     var diff=(Date.now()-d.getTime())/1000;
@@ -572,7 +579,7 @@
       state.overview = d.overview || {};
       var q = d.quota || state.quota;
       var o = state.overview;
-      $('kpi-spend').textContent = money(o.total_cost_usd);
+      $('kpi-spend').textContent = preciseMoney(o.total_cost_usd);
       $('kpi-requests').textContent = compact(o.total_requests);
       $('kpi-tokens').textContent = compact(o.total_tokens);
       if(q && typeof q.limit_usd === 'number' && q.limit_usd>0){
@@ -651,7 +658,7 @@
   function renderModels(changed){
     var metric=state.modelMetric;
     function value(r){ return metric==='tokens' ? (r.total_tokens||0) : metric==='requests' ? (r.requests||0) : (r.cost_usd||0); }
-    function display(v){ return metric==='cost' ? wholeMoney(v) : compact(v); }
+    function display(v){ return metric==='cost' ? preciseMoney(v) : compact(v); }
     var rows = state.models.slice().sort(function(a,b){ return value(b)-value(a); });
     var total = rows.reduce(function(s,r){ return s+value(r); },0);
     if(changed !== 'split'){
@@ -685,7 +692,7 @@
     // Hosted vs frontier donut
     var splitMetric=state.splitMetric;
     function splitValue(r){ return splitMetric==='tokens' ? (r.total_tokens||0) : splitMetric==='requests' ? (r.requests||0) : (r.cost_usd||0); }
-    function splitDisplay(v){ return splitMetric==='cost' ? money(v) : compact(v); }
+    function splitDisplay(v){ return splitMetric==='cost' ? preciseMoney(v) : compact(v); }
     var splitTotal = rows.reduce(function(s,r){ return s+splitValue(r); },0);
     var hosted = rows.filter(function(r){ return r.hosted; }).reduce(function(s,r){return s+splitValue(r);},0);
     var frontier = Math.max(splitTotal-hosted,0);
@@ -729,7 +736,7 @@
         '<td><span class="pill '+(r.hosted?'hosted':'frontier')+'">'+(r.hosted?'Hosted':'Frontier')+'</span></td>'+
         '<td class="num">'+compact(r.requests)+'</td>'+ 
         '<td class="num">'+compact(r.total_tokens)+'</td>'+ 
-        '<td class="num">'+money(r.cost_usd)+'</td>'+ 
+        '<td class="num">'+preciseMoney(r.cost_usd)+'</td>'+ 
         '<td class="num">'+share+'%</td></tr>';
     }).join('');
   }
@@ -898,7 +905,7 @@
         '<td class="num tok-cached" title="'+exact(e.cached_input_tokens)+' cached input tokens">'+compact(e.cached_input_tokens||0)+'</td>'+
         '<td class="num tok-cache-write" title="'+exact(e.cache_creation_tokens)+' cache write tokens">'+compact(e.cache_creation_tokens||0)+'</td>'+
         '<td class="num tok-total" title="'+exact(total)+' total tokens">'+compact(total)+'</td>'+
-        '<td class="num" style="color:var(--org);font-weight:600" title="'+esc('$'+Number(e.cost_usd||0).toFixed(4))+'">'+money(e.cost_usd)+'</td></tr>';
+        '<td class="num" style="color:var(--org);font-weight:600" title="'+esc('$'+Number(e.cost_usd||0).toFixed(6))+'">'+preciseMoney(e.cost_usd)+'</td></tr>';
     }).join('');
   }
 
