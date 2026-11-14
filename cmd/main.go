@@ -386,6 +386,17 @@ func main() {
 		historicalRepricingHandler := handler.NewHistoricalRepricingHandler(store)
 		modelPolicyAdminHandler := handler.NewModelPolicyAdminHandler(store)
 		auth := authHandler.RequireAuth
+		// The management endpoints and the login flow apply their own
+		// same-origin (RequireBrowserOrigin) checks; the general session
+		// wrapper must stay unchanged so ordinary dashboard routes keep
+		// their legacy behavior.
+		mux.HandleFunc("/api/v1/management/key-revocations", handler.RequireManagement(cfg, store, auth, handler.NewManagementKeyRevocationsHandler(store, cfg, maasClient)))
+		mux.HandleFunc("/api/v1/management/keys", handler.RequireManagement(cfg, store, auth, handler.NewManagementKeysHandler(store, cfg, maasClient)))
+		mux.HandleFunc("/api/v1/management/", handler.RequireManagement(cfg, store, auth, handler.NewManagementHandler(store, cfg)))
+		// Existing standalone bookmarks now use the upstream account page.
+		mux.HandleFunc("/management", auth(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/account?tab=keys", http.StatusFound)
+		}))
 
 		// Machine-to-machine APIs — no session required
 		m2mAuth := func(next http.HandlerFunc) http.HandlerFunc { return handler.RequireM2MAuth(cfg, next) }

@@ -8,6 +8,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -74,6 +75,11 @@ func parseMeteringModeOrRaw(raw string) MeteringMode {
 
 // Config is the resolved runtime configuration.
 type Config struct {
+	// Standalone management is opt-in and uses a dedicated operator credential.
+	ManagementAPISecret    string
+	ManagementPublicOrigin string
+	GatewayModelsFile      string
+
 	// DatabaseURL is the PostgreSQL connection string. Required.
 	DatabaseURL string
 
@@ -428,6 +434,9 @@ func Load() Config {
 		QuotaEnforcementEnabled:  envBool("QUOTA_ENFORCEMENT_ENABLED", true),
 		ModelAccessEnforcement:   envDefault("MODEL_ACCESS_ENFORCEMENT", "off"),
 		DBMaxOpenConns:           envInt("DB_MAX_OPEN_CONNS", 50),
+		ManagementAPISecret:      os.Getenv("MANAGEMENT_API_SECRET"),
+		ManagementPublicOrigin:   normalizePublicOrigin(os.Getenv("MANAGEMENT_PUBLIC_ORIGIN")),
+		GatewayModelsFile:        os.Getenv("GATEWAY_MODELS_FILE"),
 		DBMaxIdleConns:           envInt("DB_MAX_IDLE_CONNS", 10),
 		DBConnMaxLifetimeSeconds: envInt("DB_CONN_MAX_LIFETIME_SECONDS", 14400),
 		EventSource:              envDefault("EVENT_SOURCE", "ai-gateway"),
@@ -547,7 +556,36 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("MODEL_ACCESS_ENFORCEMENT must be off, observe, or enforce, got %q", c.ModelAccessEnforcement)
 	}
+	// The management credential turns on same-origin enforcement for the
+	// login and management endpoints, which compares browser Origin headers
+	// against this value; require a bare absolute http(s) origin so a value
+	// that no browser would ever send fails at startup instead of rejecting
+	// every login at runtime.
+	if c.ManagementAPISecret != "" {
+		origin, err := url.Parse(c.ManagementPublicOrigin)
+		if err != nil || (origin.Scheme != "http" && origin.Scheme != "https") ||
+			origin.Host == "" || origin.User != nil ||
+			origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
+			return fmt.Errorf("MANAGEMENT_PUBLIC_ORIGIN must be an absolute http(s) origin (scheme://host[:port], no path or query) when MANAGEMENT_API_SECRET is set")
+		}
+	}
 	return nil
+}
+
+// normalizePublicOrigin matches how browsers serialize an Origin header:
+// no surrounding whitespace or trailing slash, and no explicit default
+// port (https://host:443 is sent as https://host). Path, query, and
+// fragment are left for Validate to reject.
+func normalizePublicOrigin(raw string) string {
+	value := strings.TrimRight(strings.TrimSpace(raw), "/")
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Host == "" {
+		return value
+	}
+	if (parsed.Scheme == "https" && parsed.Port() == "443") || (parsed.Scheme == "http" && parsed.Port() == "80") {
+		parsed.Host = parsed.Hostname()
+	}
+	return parsed.String()
 }
 
 func envDefault(key, fallback string) string {

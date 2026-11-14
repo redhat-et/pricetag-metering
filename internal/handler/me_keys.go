@@ -3,14 +3,17 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/redhat-et/pricetag-metering/internal/maasapi"
 	"github.com/redhat-et/pricetag-metering/internal/metrics"
+	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
 // Self-service key endpoints. They are deliberately separate from
@@ -19,6 +22,7 @@ import (
 // else. The MaaS identity headers come from that derived identity.
 
 func (h *AdminHandler) HandleMyKeys(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if h.maasClient == nil {
 		http.Error(w, "key service is not configured", http.StatusServiceUnavailable)
 		return
@@ -55,6 +59,21 @@ func (h *AdminHandler) myKeyIdentity(w http.ResponseWriter, r *http.Request) (us
 	if username == "" {
 		http.Error(w, "who are you?", http.StatusUnauthorized)
 		return "", "", nil, false
+	}
+	if h.cfg.ManagementAPISecret != "" {
+		// Standalone keys always use the operator-configured unprivileged
+		// group, never a stale administrator group from the browser session.
+		if h.store == nil || h.cfg.PartnerUserKeyGroup == "" {
+			http.Error(w, "personal key management unavailable", http.StatusServiceUnavailable)
+			return "", "", nil, false
+		}
+		profile, err := h.store.PartnerUserByMaaSUsername(r.Context(), username)
+		if err != nil || !profile.Active || profile.KeyRevocationPending {
+			http.Error(w, "active account required", http.StatusForbidden)
+			return "", "", nil, false
+		}
+		group = h.cfg.PartnerUserKeyGroup
+		return username, group, []string{group}, true
 	}
 	groups = NormalizeGroups(sessionGroups(r, h.cfg))
 	if len(groups) == 0 {
@@ -124,10 +143,14 @@ func (h *AdminHandler) myKeysList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not load your keys", http.StatusBadGateway)
 		return
 	}
-	if keys == nil {
-		keys = []maasapi.APIKeyResponse{}
+	owned := []maasapi.APIKeyResponse{}
+	for _, key := range keys {
+		if key.Username == username {
+			key.Key = "" // One-time secrets must never be re-exposed by a list.
+			owned = append(owned, key)
+		}
 	}
-	writeJSON(w, map[string]any{"data": keys})
+	writeJSON(w, map[string]any{"data": owned})
 }
 
 func (h *AdminHandler) myKeysCreate(w http.ResponseWriter, r *http.Request) {
@@ -140,10 +163,14 @@ func (h *AdminHandler) myKeysCreate(w http.ResponseWriter, r *http.Request) {
 		Group     string `json:"group"`
 		ExpiresIn string `json:"expiresIn"`
 	}
-	dec := json.NewDecoder(io.LimitReader(r.Body, 16<<10))
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&body); err != nil {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	if dec.Decode(new(any)) != io.EOF {
+		http.Error(w, "expected one JSON object", http.StatusBadRequest)
 		return
 	}
 	body.Name = strings.TrimSpace(body.Name)
@@ -182,6 +209,34 @@ func (h *AdminHandler) myKeysCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	metrics.KeysMintedTotal.Inc()
+	if h.store != nil {
+		// The identity check above does not lock the account; a deactivation
+		// can commit while the mint is in flight. Re-check and revoke a key
+		// that slipped past the revocation sweep rather than hand out a live
+		// credential. This fails closed: an unreadable account state revokes
+		// a freshly minted key the caller can simply re-request. Outside
+		// management mode the identity check above derives identity from
+		// session groups, and those deployments legitimately serve users
+		// with no partner record; a missing record there is not a
+		// deactivation. The state-returning lookup keeps deactivated and
+		// revocation-pending accounts distinguishable from absent ones, so
+		// the exception below can never cover them.
+		profile, err := h.store.ManagedUserByLogin(r.Context(), username)
+		noRecord := h.cfg.ManagementAPISecret == "" && errors.Is(err, storage.ErrPartnerUserNotFound)
+		if !noRecord && (err != nil || !profile.Active || profile.KeyRevocationPending) {
+			if result.ID != "" {
+				cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
+				defer cancel()
+				status, revokeErr := h.maasClient.RevokeUserAPIKey(cleanupCtx, result.ID, username, group)
+				if revokeErr != nil || status < 200 || status > 299 {
+					slog.Error("post-mint revocation failed; operator reconciliation required",
+						"user", username, "key_id", result.ID, "status", status, "error", revokeErr)
+				}
+			}
+			http.Error(w, "account is no longer active; key revoked", http.StatusForbidden)
+			return
+		}
+	}
 	writeJSON(w, result)
 }
 
@@ -194,6 +249,13 @@ func (h *AdminHandler) validatedExpiry(raw string) (string, error) {
 		if hours <= 0 {
 			hours = 90 * 24
 		}
+		if h.cfg.KeyPolicy.MaxExpiryHours > 0 && hours > h.cfg.KeyPolicy.MaxExpiryHours {
+			return "", errText("default key lifetime exceeds the maximum allowed lifetime")
+		}
+		// Guard the integer conversion as well as the configured maximum.
+		if hours > int((1<<63-1)/time.Hour) {
+			return "", errText("default key lifetime is too large")
+		}
 		return (time.Duration(hours) * time.Hour).String(), nil
 	}
 	if strings.EqualFold(raw, "none") || raw == "0" {
@@ -201,6 +263,15 @@ func (h *AdminHandler) validatedExpiry(raw string) (string, error) {
 			return "", errText("keys must expire; choose a duration")
 		}
 		return "", nil
+	}
+	// MaaS and the standalone CLI also accept whole days. Normalize before
+	// applying the same maximum used for native Go durations.
+	if strings.HasSuffix(raw, "d") {
+		days, err := strconv.ParseInt(strings.TrimSuffix(raw, "d"), 10, 64)
+		if err != nil || days <= 0 || days > (1<<63-1)/int64(24*time.Hour) {
+			return "", errText("invalid day duration")
+		}
+		raw = (time.Duration(days) * 24 * time.Hour).String()
 	}
 	d, err := time.ParseDuration(raw)
 	if err != nil || d <= 0 {
@@ -220,6 +291,24 @@ func (h *AdminHandler) myKeysRevoke(w http.ResponseWriter, r *http.Request, keyI
 	}
 	if strings.TrimSpace(keyID) == "" {
 		http.Error(w, "key id is required", http.StatusBadRequest)
+		return
+	}
+	// MaaS administrator groups can act on other users' keys. This personal
+	// endpoint must retain ownership checks even when the caller has that role.
+	keys, err := h.maasClient.ListUserAPIKeys(r.Context(), username, group)
+	if err != nil {
+		http.Error(w, "could not verify key ownership", http.StatusBadGateway)
+		return
+	}
+	owned := false
+	for _, key := range keys {
+		if key.ID == keyID && key.Username == username {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		http.Error(w, "key not found", http.StatusNotFound)
 		return
 	}
 	status, err := h.maasClient.RevokeUserAPIKey(r.Context(), keyID, username, group)

@@ -315,6 +315,14 @@ func (s *Store) ListAllPartnerUsers(ctx context.Context) ([]PartnerUser, error) 
 // normal unfiltered page. The offset is used only by the admin table; the full
 // list method remains available for internal manager and role lookups.
 func (s *Store) ListPartnerUsersPage(ctx context.Context, search string, limit, offset int) ([]PartnerUser, int, bool, error) {
+	return s.ListPartnerUsersPageByState(ctx, search, "active", limit, offset)
+}
+
+// ListPartnerUsersPageByState is the administrator directory; other callers remain active-only.
+func (s *Store) ListPartnerUsersPageByState(ctx context.Context, search, state string, limit, offset int) ([]PartnerUser, int, bool, error) {
+	if state != "all" && state != "active" && state != "inactive" {
+		return nil, 0, false, errors.New("invalid user state")
+	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -322,25 +330,26 @@ func (s *Store) ListPartnerUsersPage(ctx context.Context, search string, limit, 
 		offset = 0
 	}
 	// $1 holds the search term. An empty term disables the filter so the
-	// clause stays a no-op (every active row matches). user_id is cast to
+	// clause stays a no-op within the selected state. user_id is cast to
 	// text so a partial UUID search works. All comparisons are lower-cased
 	// for case-insensitivity.
-	where := `WHERE p.active AND ($1 = '' OR (
+	where := `WHERE ($2 = 'all' OR p.active = ($2 = 'active')) AND ($1 = '' OR (
 		lower(COALESCE(p.tags->>'email','')) LIKE '%' || lower($1) || '%'
 		OR lower(COALESCE(p.tags->>'first_name','')) LIKE '%' || lower($1) || '%'
 		OR lower(COALESCE(p.tags->>'last_name','')) LIKE '%' || lower($1) || '%'
 		OR lower(TRIM(CONCAT_WS(' ', p.tags->>'first_name', p.tags->>'last_name'))) LIKE '%' || lower($1) || '%'
 		OR lower(p.user_id::text) LIKE '%' || lower($1) || '%'
+		OR EXISTS (SELECT 1 FROM partner_user_logins l WHERE l.user_id=p.user_id AND lower(l.username) LIKE '%' || lower($1) || '%')
 	))`
 
 	var total int
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM partner_users p `+where, search).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM partner_users p `+where, search, state).Scan(&total); err != nil {
 		return nil, 0, false, err
 	}
 
 	rows, err := s.db.QueryContext(ctx, partnerUserSelect+`
-		`+where+` ORDER BY p.created_at, p.user_id LIMIT $2 OFFSET $3`, search, limit+1, offset)
+		`+where+` ORDER BY p.created_at, p.user_id LIMIT $3 OFFSET $4`, search, state, limit+1, offset)
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -788,6 +797,20 @@ func (s *Store) PartnerUserByMaaSUsername(ctx context.Context, username string) 
 	return user, err
 }
 
+// partnerUserForPolicy includes retained logins and inactive identities. Their
+// keys must retain restrictions after a rename and fail closed after deactivation.
+// Authentication and organization lookups continue to use the current, active
+// identity contract in PartnerUserByMaaSUsername.
+func (s *Store) partnerUserForPolicy(ctx context.Context, username string) (PartnerUser, error) {
+	user, err := scanPartnerUser(s.db.QueryRowContext(ctx, partnerUserSelect+`
+		JOIN partner_user_logins l ON l.user_id = p.user_id
+		WHERE LOWER(l.username) = LOWER($1)`, strings.TrimSpace(username)))
+	if errors.Is(err, sql.ErrNoRows) {
+		return PartnerUser{}, ErrPartnerUserNotFound
+	}
+	return user, err
+}
+
 // CurrentPartnerUserLogin resolves the canonical MaaS login for a verified
 // partner UUID. OIDC uses this after profile persistence because that patch
 // can move the is_current login when the IdP changes the email address.
@@ -1062,6 +1085,37 @@ func (s *Store) ListPartnerUsernames(ctx context.Context, userID string) ([]stri
 		usernames = append(usernames, username)
 	}
 	return usernames, rows.Err()
+}
+
+// ListPartnerUsernamesBatch resolves logins for many users in one query so
+// paginated listings do not issue a query per row. Ordering within each user
+// matches ListPartnerUsernames: current login first, then alphabetical.
+func (s *Store) ListPartnerUsernamesBatch(ctx context.Context, userIDs []string) (map[string][]string, error) {
+	out := make(map[string][]string, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	ids := make([]string, 0, len(userIDs))
+	for _, id := range userIDs {
+		normalized, err := normalizePartnerUserID(id)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, normalized)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id,username FROM partner_user_logins WHERE user_id=ANY($1) ORDER BY user_id,is_current DESC,username`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var userID, username string
+		if err := rows.Scan(&userID, &username); err != nil {
+			return nil, err
+		}
+		out[userID] = append(out[userID], username)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) ListPartnerUsers(ctx context.Context, tagFilters map[string]string, includeInactive bool, limit, offset int) (PartnerUserPage, error) {

@@ -46,8 +46,11 @@ func NewClient(baseURL, tenant string) *Client {
 		tenant:  tenant,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 			},
 		},
 	}
@@ -165,10 +168,12 @@ func (c *Client) ListUserAPIKeys(ctx context.Context, username, group string) ([
 		}
 		keys = append(keys, page.Data...)
 		if !page.HasMore {
-			break
+			return keys, nil
 		}
 	}
-	return keys, nil
+	// Refuse rather than return a silently partial list: callers use this
+	// to prove key ownership and to pick revocation targets.
+	return nil, fmt.Errorf("maas-api key list exceeded %d keys", 11*pageSize)
 }
 
 // RevokeUserAPIKey revokes one key as its owner and returns the MaaS status.
@@ -279,4 +284,44 @@ func saToken() string {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
+}
+
+func (c *Client) RevokeAllUserAPIKeys(ctx context.Context, username, group string, dryRun bool) (int, error) {
+	if strings.TrimSpace(username) == "" || group == "" {
+		return 0, fmt.Errorf("username and group required")
+	}
+	body, err := json.Marshal(map[string]any{"username": username, "dryRun": dryRun})
+	if err != nil {
+		return 0, err
+	}
+	groups, err := json.Marshal([]string{group})
+	if err != nil {
+		return 0, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/api-keys/bulk-revoke", bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-MaaS-Username", username)
+	req.Header.Set("X-MaaS-Group", string(groups))
+	req.Header.Set("X-MaaS-Tenant", c.tenant)
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("key revocation returned HTTP %d", resp.StatusCode)
+	}
+	var result struct {
+		Count *int `json:"revokedCount"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&result); err != nil {
+		return 0, err
+	}
+	if result.Count == nil || *result.Count < 0 {
+		return 0, fmt.Errorf("invalid key count")
+	}
+	return *result.Count, nil
 }
