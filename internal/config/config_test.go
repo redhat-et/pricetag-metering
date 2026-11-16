@@ -337,3 +337,86 @@ func TestValidateRejectsInvalidModelAccessEnforcement(t *testing.T) {
 		}
 	}
 }
+
+// MONTHLY_TOKEN_QUOTA is the one setting where a non-positive value is
+// meaningful: 0 disables the token gate instead of asking for a zero-token
+// budget. It is loaded through envFloatAllowNonPositive for that reason; the
+// positivity guard in envFloat stays for every other float setting.
+func TestMonthlyTokenQuotaNonPositiveDisablesGate(t *testing.T) {
+	for _, raw := range []string{"0", "-1", "-0.5", "0.0"} {
+		t.Setenv("MONTHLY_TOKEN_QUOTA", raw)
+		if got := Load().MonthlyTokenQuota; got > 0 {
+			t.Fatalf("MONTHLY_TOKEN_QUOTA=%q loaded as %v, want <= 0 (unlimited)", raw, got)
+		}
+	}
+
+	// An explicit large value must still survive verbatim: this is the knob
+	// production actually sets.
+	t.Setenv("MONTHLY_TOKEN_QUOTA", "2500000000000")
+	if got, want := Load().MonthlyTokenQuota, float64(2_500_000_000_000); got != want {
+		t.Fatalf("explicit quota = %v, want %v", got, want)
+	}
+
+	// Unset and unparsable values keep the documented default so a typo can
+	// never silently lift the safety net.
+	unsetEnv(t, "MONTHLY_TOKEN_QUOTA")
+	if got := Load().MonthlyTokenQuota; got != DefaultMonthlyTokenQuota {
+		t.Fatalf("unset quota = %v, want default %v", got, DefaultMonthlyTokenQuota)
+	}
+	for _, raw := range []string{"", "2.5T", "lots"} {
+		t.Setenv("MONTHLY_TOKEN_QUOTA", raw)
+		if got := Load().MonthlyTokenQuota; got != DefaultMonthlyTokenQuota {
+			t.Fatalf("MONTHLY_TOKEN_QUOTA=%q loaded as %v, want default %v", raw, got, DefaultMonthlyTokenQuota)
+		}
+	}
+}
+
+// envFloat's positivity guard is load-bearing for the settings that still use
+// it (QOS_CACHE_READ_WEIGHT today), so it is pinned here: the monthly quota
+// deliberately opts out via envFloatAllowNonPositive, and the two must not
+// drift into each other. Values are not trimmed, which is why a padded input
+// falls back rather than parsing.
+func TestEnvFloatRejectsNonPositive(t *testing.T) {
+	const key = "PRICETAG_ENVFLOAT_PROBE"
+	const fallback = 0.05
+	cases := []struct {
+		raw  string
+		want float64
+	}{
+		{"0.5", 0.5},
+		{"0", fallback},
+		{"-1", fallback},
+		{"", fallback},
+		{"abc", fallback},
+		{" 0.5 ", fallback},
+	}
+	for _, c := range cases {
+		t.Setenv(key, c.raw)
+		if got := envFloat(key, fallback); got != c.want {
+			t.Errorf("envFloat(%q) = %v, want %v", c.raw, got, c.want)
+		}
+	}
+	unsetEnv(t, key)
+	if got := envFloat(key, fallback); got != fallback {
+		t.Errorf("envFloat(unset) = %v, want fallback %v", got, fallback)
+	}
+
+	// The same inputs through the non-positive-tolerant helper: everything that
+	// parses survives, and only unset/unparsable falls back.
+	for _, c := range []struct {
+		raw  string
+		want float64
+	}{
+		{"0.5", 0.5},
+		{"0", 0},
+		{"-1", -1},
+		{"", fallback},
+		{"abc", fallback},
+		{" 0.5 ", fallback},
+	} {
+		t.Setenv(key, c.raw)
+		if got := envFloatAllowNonPositive(key, fallback); got != c.want {
+			t.Errorf("envFloatAllowNonPositive(%q) = %v, want %v", c.raw, got, c.want)
+		}
+	}
+}

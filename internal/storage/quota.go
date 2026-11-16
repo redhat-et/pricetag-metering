@@ -140,9 +140,11 @@ func (s *Store) GetQuotaPolicy(ctx context.Context) (QuotaPolicy, error) {
 		        updated_by, updated_at FROM quota_policy WHERE id = true`,
 	).Scan(&p.DefaultMonthlyUSD, &p.DefaultMonthlyTokens, &p.Enforced, pq.Array(&p.AllowedOverLimitModels),
 		&p.UpdatedBy, &p.UpdatedAt)
-	if err == nil && p.DefaultMonthlyTokens == 0 {
+	// 0 from DB means "unlimited" (admin set to disable gate); keep it.
+	// Only fall back when column is missing/negative (legacy).
+	if err == nil && p.DefaultMonthlyTokens < 0 {
 		p.DefaultMonthlyTokens = s.tokenQuota
-		if p.DefaultMonthlyTokens == 0 {
+		if p.DefaultMonthlyTokens < 0 {
 			p.DefaultMonthlyTokens = 10_000_000_000
 		}
 	}
@@ -168,8 +170,8 @@ func (s *Store) UpdateQuotaPolicy(ctx context.Context, actor string, u QuotaPoli
 	if u.DefaultMonthlyUSD != nil && *u.DefaultMonthlyUSD <= 0 {
 		return QuotaPolicy{}, fmt.Errorf("default_monthly_usd must be > 0")
 	}
-	if u.DefaultMonthlyTokens != nil && *u.DefaultMonthlyTokens <= 0 {
-		return QuotaPolicy{}, fmt.Errorf("default_monthly_tokens must be > 0")
+	if u.DefaultMonthlyTokens != nil && *u.DefaultMonthlyTokens < 0 {
+		return QuotaPolicy{}, fmt.Errorf("default_monthly_tokens must be >= 0 (0 = unlimited)")
 	}
 	var clean []string
 	if u.Models != nil {
@@ -657,12 +659,13 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	if err != nil {
 		return d, fmt.Errorf("quota policy lookup: %w", err)
 	}
-	if defaultTokens <= 0 {
+	if defaultTokens < 0 {
 		defaultTokens = s.tokenQuota
-		if defaultTokens <= 0 {
+		if defaultTokens < 0 {
 			defaultTokens = 10_000_000_000
 		}
 	}
+	// 0 remains "unlimited" — quotaDecision will set TokenLimit via role/override or keep 0, and computeUsageStats treats <=0 as HasAccess:true.
 	// Zero-cost models are always allowed after the dollar cap: using them
 	// cannot increase spend. Add them to the post-cap allowlist so free and
 	// hosted models do not depend on a manually maintained global list.

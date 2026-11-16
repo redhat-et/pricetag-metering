@@ -15,8 +15,10 @@ import (
 )
 
 // DefaultMonthlyTokenQuota is the per-user monthly token allowance applied
-// when MONTHLY_TOKEN_QUOTA is unset.
-const DefaultMonthlyTokenQuota = 10_000_000_000
+// when MONTHLY_TOKEN_QUOTA is unset. A non-positive MONTHLY_TOKEN_QUOTA
+// (0 or negative) disables the token gate: usage is reported but never gates
+// access (computeUsageStats HasAccess:true for tokenQuota <= 0).
+const DefaultMonthlyTokenQuota = 100_000_000
 
 // MeteringMode selects which workloads a process runs.
 //
@@ -421,7 +423,7 @@ func Load() Config {
 		Port:              envDefault("PORT", "8080"),
 		MetricsPort:       envDefault("METRICS_PORT", "9902"),
 		MeteringMode:      parseMeteringModeOrRaw(os.Getenv("METERING_MODE")),
-		MonthlyTokenQuota: envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
+		MonthlyTokenQuota: envFloatAllowNonPositive("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
 		// The $600 safety net is on by default. Operators can still use the
 		// environment as a deployment-level kill switch while the policy's
 		// enforced field is the normal super-admin control.
@@ -635,9 +637,37 @@ func envBool(key string, fallback bool) bool {
 }
 
 func envFloat(key string, fallback float64) float64 {
-	v, err := strconv.ParseFloat(os.Getenv(key), 64)
-	if err != nil || v <= 0 {
+	v, ok := parseEnvFloat(key)
+	if !ok || v <= 0 {
 		return fallback
 	}
 	return v
+}
+
+// envFloatAllowNonPositive is envFloat without the sign guard: any value that
+// parses is returned verbatim, including 0 and negatives, and the fallback
+// applies only when the key is unset or holds something that is not a float.
+//
+// Use it only where <= 0 is a documented value rather than a mistake. Today
+// that is MONTHLY_TOKEN_QUOTA alone, where non-positive means "unlimited": the
+// downstream computeUsageStats returns HasAccess:true for tokenQuota <= 0.
+func envFloatAllowNonPositive(key string, fallback float64) float64 {
+	v, ok := parseEnvFloat(key)
+	if !ok {
+		return fallback
+	}
+	return v
+}
+
+// parseEnvFloat is the single float parser behind both helpers: pure parsing,
+// no defaulting and no policy. ok reports whether the key held a float at all,
+// which is what lets the two callers apply opposite sign rules without
+// duplicating the ParseFloat/err handling. Values are NOT trimmed, so a padded
+// value is treated as unparsable exactly as it always was.
+func parseEnvFloat(key string) (float64, bool) {
+	v, err := strconv.ParseFloat(os.Getenv(key), 64)
+	if err != nil {
+		return 0, false
+	}
+	return v, true
 }
