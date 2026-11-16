@@ -10,6 +10,7 @@ the section to the corresponding GitHub tag.
 
 ### Added
 
+- Dashboard country policy: super-admin-managed list of blocked countries; blocked users and managers get a "coming soon" page instead of the dashboard (inference and keys unaffected), and manager team tables hide blocked people while keeping their usage in every total ([PR #156](https://github.com/redhat-et/pricetag-metering/pull/156)).
 - Zero-rate pricing for the Curvebender-hosted Muse Spark Open model `rits/meta-models/Muse-Spark-Open-816B-A42B-NVFP4` ([PR #148](https://github.com/redhat-et/pricetag-metering/pull/148)).
 
 ### Changed
