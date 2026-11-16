@@ -44,8 +44,13 @@ header h1 span{color:var(--text2);font-weight:400;font-size:14px;margin-left:8px
 .kpi-sub select{background:var(--bg);color:var(--green);border:1px solid rgba(63,185,80,.4);padding:2px 6px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px}
 /* Cache-ratio assumption line sits on its own row under the vs dropdown. */
 #kpi-savings-note{display:block;margin-top:4px;opacity:.85}
-.chart-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.chart-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;flex-wrap:wrap}
 .chart-head h2{margin-bottom:0}
+.rank-toggle-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rank-toggle-label{font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--text2)}
+.rank-toggle-wrap .tl-toggle{margin-bottom:0;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:2px}
+.rank-toggle-wrap .tl-toggle button{border:0;background:transparent;padding:4px 10px}
+.rank-toggle-wrap .tl-toggle button.active{background:var(--blue);color:#fff}
 
 h2{font-size:16px;font-weight:600;margin-bottom:12px;color:var(--text)}
 h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);padding:2px 8px;border-radius:4px;margin-left:8px;cursor:pointer}
@@ -530,10 +535,13 @@ tr.clickable{cursor:pointer}
   <div class="chart-box user-wide-card">
     <div class="chart-head">
       <h2>By User <span style="font-size:11px;color:var(--text2);font-weight:400">(top 30)</span></h2>
-      <div class="tl-toggle" id="user-metric-toggle" style="margin-bottom:0">
-        <button data-um="cost" class="active demo-cost">Cost</button>
-        <button data-um="tokens">Tokens</button>
-        <button data-um="requests">Requests</button>
+      <div class="rank-toggle-wrap">
+        <span class="rank-toggle-label" id="user-metric-label">Rank by</span>
+        <div class="tl-toggle" id="user-metric-toggle" role="group" aria-labelledby="user-metric-label">
+          <button data-um="cost" class="active demo-cost" aria-pressed="true">Cost</button>
+          <button data-um="tokens" aria-pressed="false">Tokens</button>
+          <button data-um="requests" aria-pressed="false">Requests</button>
+        </div>
       </div>
     </div>
     <div class="pie-split">
@@ -1206,8 +1214,9 @@ function clearAllFilters(){
 function renderUserRank(data,m){
   var el=document.getElementById('user-rank');
   if(!el)return;
+  var metricLabel={cost:'cost',tokens:'tokens',requests:'requests'}[m]||m;
   var max=Math.max.apply(null,data.map(function(d){return d.value;}).concat([0]));
-   el.innerHTML='<div class="gt-title" style="grid-column:1/-1;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:700;margin-bottom:2px">Top 30 users</div>'+data.map(function(d,i){
+   el.innerHTML='<div class="gt-title" style="grid-column:1/-1;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:700;margin-bottom:2px">Top 30 users by '+pmEsc(metricLabel)+'</div>'+data.map(function(d,i){
     var item=d.item||{};
     var username=item.username||'';
     var name=d.label||username||'—';
@@ -1239,7 +1248,11 @@ function renderUserCostChart(){
 }
 
 function setMetricToggle(id,attr,value){
-  document.querySelectorAll('#'+id+' button').forEach(function(b){b.classList.toggle('active',b.dataset[attr]===value);});
+  document.querySelectorAll('#'+id+' button').forEach(function(b){
+    var on=b.dataset[attr]===value;
+    b.classList.toggle('active',on);
+    b.setAttribute('aria-pressed',on?'true':'false');
+  });
 }
 function syncDemoMetrics(){
   if(!demoPrivacyEnabled())return false;
@@ -1873,11 +1886,10 @@ document.getElementById('tool-metric-toggle').addEventListener('click',e=>{
 });
 
 document.getElementById('user-metric-toggle').addEventListener('click',e=>{
-  if(e.target.tagName!=='BUTTON')return;
-  if(demoPrivacyEnabled()&&e.target.dataset.um==='cost')return;
-  document.querySelector('#user-metric-toggle .active').classList.remove('active');
-  e.target.classList.add('active');
-  userPieMetric=e.target.dataset.um;
+  const btn=e.target.closest('button');if(!btn)return;
+  if(demoPrivacyEnabled()&&btn.dataset.um==='cost')return;
+  setMetricToggle('user-metric-toggle','um',btn.dataset.um);
+  userPieMetric=btn.dataset.um;
    refreshUserChartOnly().catch(function(){renderUserCostChart();});
 });
 
