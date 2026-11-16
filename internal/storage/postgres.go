@@ -1789,6 +1789,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.migrateQuota(ctx); err != nil {
 		return err
 	}
+	if err := s.migrateDashboardPolicy(ctx); err != nil {
+		return err
+	}
 	if err := s.migrateUserModelPolicy(ctx); err != nil {
 		return err
 	}
@@ -1958,6 +1961,18 @@ var migrations = []string{
 		value TEXT NOT NULL
 	)`,
 	`INSERT INTO rollup_meta (key, value) VALUES ('tool_rollups_ready', 'false') ON CONFLICT (key) DO NOTHING`,
+	// Dashboard country policy: a row means "dashboard blocked for this
+	// country". Seeded once (see migrateDashboardPolicy), after which the
+	// super-admin tab owns the list.
+	`CREATE TABLE IF NOT EXISTS dashboard_blocked_countries (
+		country CHAR(2) PRIMARY KEY,
+		added_by TEXT NOT NULL DEFAULT '',
+		added_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`,
+	`CREATE TABLE IF NOT EXISTS dashboard_policy_meta (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	)`,
 }
 
 // SeedPricing upserts model pricing from an external source (e.g., LiteLLM).

@@ -36,6 +36,11 @@ type OrgUsageRow struct {
 	QuotaUSD      float64 `json:"quota_usd"`
 	QuotaSpentUSD float64 `json:"quota_spent_usd"`
 	OverLimit     bool    `json:"over_limit"`
+
+	// Blocked is true when the dashboard country policy covers this person.
+	// Manager responses drop these rows and keep their usage in the totals;
+	// it is never serialized so the browser cannot infer the policy list.
+	Blocked bool `json:"-"`
 }
 
 // ceilToHour moves a non-hour-aligned timestamp forward to the next hour.
@@ -113,7 +118,8 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 			COALESCE(pu.manager_user_id::text,''),
 			(m.user_id IS NOT NULL),
 			COALESCE(u.requests,0), COALESCE(u.total_tokens,0), COALESCE(u.cost_usd,0),
-			to_char(u.last_used, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+			to_char(u.last_used, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+			(dbc.country IS NOT NULL)
 		FROM (SELECT DISTINCT user_id FROM subtree) st
 		JOIN partner_users pu ON pu.user_id = st.user_id
 		LEFT JOIN managers m ON m.user_id = st.user_id
@@ -122,6 +128,10 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 			ORDER BY is_current DESC, username LIMIT 1
 		) cl ON true
 		LEFT JOIN u ON u.user_id = st.user_id
+		-- Dashboard country policy: the row is flagged, not filtered, so the
+		-- manager's totals can stay inclusive while the table hides the person.
+		LEFT JOIN dashboard_blocked_countries dbc
+			ON dbc.country = UPPER(BTRIM(COALESCE(pu.tags->>'country', '')))
 		ORDER BY 8 DESC, 2`, requests, cost, lastUsed, from, window, partnerFullNameExpr)
 	rows, err := s.db.QueryContext(ctx, query, rootUserID, since, until)
 	if err != nil {
@@ -133,7 +143,7 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 		var r OrgUsageRow
 		var lastUsed sql.NullString
 		if err := rows.Scan(&r.Slug, &r.FullName, &r.Username, &r.ManagerSlug,
-			&r.IsManager, &r.Requests, &r.TotalTokens, &r.CostUSD, &lastUsed); err != nil {
+			&r.IsManager, &r.Requests, &r.TotalTokens, &r.CostUSD, &lastUsed, &r.Blocked); err != nil {
 			return nil, err
 		}
 		if lastUsed.Valid {

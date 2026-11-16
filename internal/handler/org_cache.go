@@ -69,6 +69,16 @@ func orgScopeFromRequest(r *http.Request) (string, bool) {
 	return root, ok
 }
 
+// InvalidateAll drops every cached manager response. The dashboard country
+// policy calls it on a change so hidden rows/totals apply immediately instead
+// of waiting for the entry's TTL.
+func (c *orgResponseCache) InvalidateAll() {
+	if c == nil || !c.enabled || c.entries == nil {
+		return
+	}
+	c.entries.Purge()
+}
+
 func (c *orgResponseCache) wrap(next http.HandlerFunc, resolve func(http.ResponseWriter, *http.Request) (string, bool)) http.HandlerFunc {
 	if c == nil || !c.enabled {
 		return next

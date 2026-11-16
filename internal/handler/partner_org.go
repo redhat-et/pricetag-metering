@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"math"
 	"net/http"
 	"strings"
 
@@ -27,6 +28,15 @@ func NewPartnerOrgHandler(store *storage.Store, cfg config.Config) *PartnerOrgHa
 // lookup, so a hit never outlives a revoked role or subtree.
 func (h *PartnerOrgHandler) Cached(next http.HandlerFunc) http.HandlerFunc {
 	return h.cache.wrap(next, h.scopeRoot)
+}
+
+// InvalidateCache drops cached manager responses. The dashboard country policy
+// calls it after a change so hidden rows and inclusive totals apply at once.
+func (h *PartnerOrgHandler) InvalidateCache() {
+	if h == nil {
+		return
+	}
+	h.cache.InvalidateAll()
 }
 
 // resolvedScope reuses the cache wrapper's authorization result when present,
@@ -176,7 +186,77 @@ func (h *PartnerOrgHandler) HandleOrgUsage(w http.ResponseWriter, r *http.Reques
 	if rows == nil {
 		rows = []storage.OrgUsageRow{}
 	}
+	// Dashboard country policy: managers do not see people from blocked
+	// regions in their tables. Their usage still counts in the totals
+	// (HandleOrgTotals) and in the charts. Super-admins see everyone: they
+	// own the policy and need the full directory.
+	if !IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r) {
+		visible := make([]storage.OrgUsageRow, 0, len(rows))
+		for _, row := range rows {
+			if !row.Blocked {
+				visible = append(visible, row)
+			}
+		}
+		rows = visible
+	}
 	writeJSON(w, rows)
+}
+
+// orgTotalsResponse is the server-side total for a manager's subtree. It is
+// computed over every person in scope, including the rows the country policy
+// hides from the table, so the page's totals never shrink when a region is
+// blocked. BlockedPeople is what the table note reports.
+type orgTotalsResponse struct {
+	People        int     `json:"people"`
+	WithKey       int     `json:"with_key"`
+	BlockedPeople int     `json:"blocked_people"`
+	Requests      int     `json:"requests"`
+	TotalTokens   int64   `json:"total_tokens"`
+	CostUSD       float64 `json:"cost_usd"`
+	QuotaUSD      float64 `json:"quota_usd"`
+	QuotaSpentUSD float64 `json:"quota_spent_usd"`
+	OverLimit     int     `json:"over_limit"`
+}
+
+// HandleOrgTotals returns inclusive subtree totals for the manager page.
+func (h *PartnerOrgHandler) HandleOrgTotals(w http.ResponseWriter, r *http.Request) {
+	root, ok := h.resolvedScope(w, r)
+	if !ok {
+		return
+	}
+	since, until := parseTimeWindow(r)
+	rows, err := h.store.GetPartnerOrgUsage(r.Context(), root, since, until)
+	if err != nil {
+		slog.Error("org totals query failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	out := orgTotalsResponse{People: len(rows)}
+	for _, row := range rows {
+		if row.Username != "" {
+			out.WithKey++
+		}
+		out.Requests += row.Requests
+		out.TotalTokens += row.TotalTokens
+		out.CostUSD += row.CostUSD
+		out.QuotaUSD += row.QuotaUSD
+		out.QuotaSpentUSD += row.QuotaSpentUSD
+		if row.OverLimit {
+			out.OverLimit++
+		}
+		if row.Blocked {
+			out.BlockedPeople++
+		}
+	}
+	if IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r) {
+		// Super-admins see the blocked rows too, so nothing is hidden from
+		// them and the manager-page note would be misleading.
+		out.BlockedPeople = 0
+	}
+	out.CostUSD = math.Round(out.CostUSD*100) / 100
+	out.QuotaUSD = math.Round(out.QuotaUSD*100) / 100
+	out.QuotaSpentUSD = math.Round(out.QuotaSpentUSD*100) / 100
+	writeJSON(w, out)
 }
 
 // orgChartsResponse bundles the analytics data the manager charts need in a
@@ -268,6 +348,43 @@ func (h *PartnerOrgHandler) HandleOrgCharts(w http.ResponseWriter, r *http.Reque
 	if users == nil {
 		users = []storage.UserSummary{}
 	}
+	// Dashboard country policy: a manager must not see blocked people named in
+	// the user pie, but their spend must stay in the slice total. Fold them
+	// into one labelled bucket instead of dropping them (which would shrink
+	// the pie). Super-admins see the full breakdown.
+	if !IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r) {
+		blockedUsernames, blockErr := h.store.DashboardBlockedUsernamesInSubtree(ctx, root)
+		if blockErr != nil {
+			slog.Error("org charts country policy failed", "error", blockErr)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		if len(blockedUsernames) > 0 {
+			kept := make([]storage.UserSummary, 0, len(users))
+			var hidden storage.UserSummary
+			hiddenUsers := 0
+			for _, user := range users {
+				if _, blocked := blockedUsernames[user.Username]; !blocked {
+					kept = append(kept, user)
+					continue
+				}
+				hiddenUsers++
+				hidden.Requests += user.Requests
+				hidden.PromptTokens += user.PromptTokens
+				hidden.CompletionTokens += user.CompletionTokens
+				hidden.TotalTokens += user.TotalTokens
+				hidden.CostUSD += user.CostUSD
+				hidden.SavedUSD += user.SavedUSD
+			}
+			if hiddenUsers > 0 {
+				hidden.DisplayName = "Hidden by dashboard policy"
+				hidden.CostUSD = math.Round(hidden.CostUSD*100) / 100
+				hidden.SavedUSD = math.Round(hidden.SavedUSD*100) / 100
+				kept = append(kept, hidden)
+			}
+			users = kept
+		}
+	}
 
 	timeline, err := h.store.GetDashboardTimeline(ctx, since, until, "", userFilter, "", "model")
 	if err != nil {
@@ -318,6 +435,21 @@ func (h *PartnerOrgHandler) HandleOrgPerson(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		if !inTree {
+			http.Error(w, "person outside your visibility scope", http.StatusForbidden)
+			return
+		}
+	}
+	// The country policy hides blocked people from manager tables; a direct
+	// drill-down must not become a side door into their usage. Super-admins
+	// are exempt for the same reason the tables are.
+	if !IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r) {
+		blocked, blockErr := h.store.PartnerUserCountryBlocked(r.Context(), slug)
+		if blockErr != nil {
+			slog.Error("person country policy check failed", "slug", slug, "error", blockErr)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		if blocked {
 			http.Error(w, "person outside your visibility scope", http.StatusForbidden)
 			return
 		}

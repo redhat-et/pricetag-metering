@@ -294,6 +294,7 @@ td.num{text-align:right}
       <tbody id="rows"></tbody>
     </table>
     </div>
+    <p id="policyNote" class="dim" style="margin-top:10px;font-size:12px" hidden></p>
   </div>
 </main>
 
@@ -700,15 +701,24 @@ function setupTeamCombobox(){
 
 async function load(){
   try{
-    const url='/api/v1/org/usage?range='+range+(drillSlug?'&root='+encodeURIComponent(drillSlug):'');
-    const data=await (await fetch(url)).json();
+    const qs='range='+range+(drillSlug?'&root='+encodeURIComponent(drillSlug):'');
+    const [data,totals]=await Promise.all([
+      fetch('/api/v1/org/usage?'+qs).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j;}),
+      // Totals are computed over the whole subtree, including people the
+      // dashboard country policy hides from the table below.
+      fetch('/api/v1/org/totals?'+qs).then(r=>r.ok?r.json():null).catch(()=>null)
+    ]);
     if(!Array.isArray(data))throw new Error(data.error||'usage failed');
     rows=data;
     if(!drillSlug){rows0=data;drillRoot=scopeRootSlug;buildFilter();}
     renderRows();
+    renderPolicyNote(totals);
     const active=rows.filter(r=>r.requests>0).length;
-    document.getElementById('kPeople').textContent=rows.length;
-    document.getElementById('kPeopleS').textContent=active+' with usage this window';
+    const people=totals&&Number.isFinite(totals.people)?totals.people:rows.length;
+    document.getElementById('kPeople').textContent=people;
+    let peopleSub=active+' with usage this window';
+    if(totals&&totals.blocked_people>0)peopleSub+=' · '+totals.blocked_people+' hidden by policy';
+    document.getElementById('kPeopleS').textContent=peopleSub;
     const selected=drillSlug?rows0.find(r=>r.slug===drillSlug):null;
     const personView=!!(selected&&!selected.is_manager);
     document.getElementById('membersTitle').textContent=personView?'Person usage':(adminScope&&!drillSlug?'Organisation members':'Team members');
@@ -718,15 +728,30 @@ async function load(){
     const keyed=rows.filter(r=>r.username).length;
     document.getElementById('scopeSub').textContent=personView
       ? 'Individual usage · '+keyed+' with a gateway key · this window'
-      : rows.length+' people in your tree · '+keyed+' with a gateway key · their usage and yours, this window';
+      : people+' people in your tree · '+keyed+' with a gateway key · their usage and yours, this window';
     // Team budget: both sums cover the calendar month (quota_spent_usd is
     // deliberately month-to-date on the server, whatever range is shown).
-    const lim=rows.reduce((s,r)=>s+(r.quota_usd||0),0);
-    const mtd=rows.reduce((s,r)=>s+(r.quota_spent_usd||0),0);
-    const over=rows.filter(r=>r.over_limit).length;
+    const lim=totals&&Number.isFinite(totals.quota_usd)?totals.quota_usd:rows.reduce((s,r)=>s+(r.quota_usd||0),0);
+    const mtd=totals&&Number.isFinite(totals.quota_spent_usd)?totals.quota_spent_usd:rows.reduce((s,r)=>s+(r.quota_spent_usd||0),0);
+    const over=totals&&Number.isFinite(totals.over_limit)?totals.over_limit:rows.filter(r=>r.over_limit).length;
     setKBudget(mtd,lim,over);
     loadCharts();
   }catch(e){document.getElementById('rows').innerHTML='<tr><td colspan="6" class="err">'+esc(e.message)+'</td></tr>';}
+}
+
+// Dashboard country policy: blocked people are not listed, but their usage is
+// part of every total on this page. Say so, so the row count and the totals
+// cannot look like they disagree.
+function renderPolicyNote(totals){
+  const el=document.getElementById('policyNote');
+  if(!el)return;
+  const n=totals&&Number.isFinite(totals.blocked_people)?totals.blocked_people:0;
+  if(n>0){
+    el.textContent=n+(n===1?' person':' people')+' hidden by dashboard policy — their usage is included in totals.';
+    el.hidden=false;
+  }else{
+    el.hidden=true;el.textContent='';
+  }
 }
 
 // Budget gauge: one bar for spend-vs-limit. Green at ease, yellow only when

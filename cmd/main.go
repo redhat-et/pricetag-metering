@@ -385,7 +385,15 @@ func main() {
 		pricingDiscountHandler := handler.NewPricingDiscountHandler(store)
 		historicalRepricingHandler := handler.NewHistoricalRepricingHandler(store)
 		modelPolicyAdminHandler := handler.NewModelPolicyAdminHandler(store)
-		auth := authHandler.RequireAuth
+
+		// Dashboard country policy. The gate wraps every session route below
+		// (pages and their JSON APIs); inference, ingestion and key-minting
+		// routes never pass through it, so keys keep working while the
+		// dashboard is region-gated. See internal/handler/dashboard_gate.go.
+		dashboardGate := handler.NewDashboardCountryGate(store, cfg)
+		auth := func(next http.HandlerFunc) http.HandlerFunc {
+			return authHandler.RequireAuth(dashboardGate.Wrap(next))
+		}
 
 		// Machine-to-machine APIs — no session required
 		m2mAuth := func(next http.HandlerFunc) http.HandlerFunc { return handler.RequireM2MAuth(cfg, next) }
@@ -512,6 +520,12 @@ func main() {
 		mux.HandleFunc("/api/v1/admin/pricing/reprice", auth(handler.RequirePartnerSuperAdmin(cfg, store, historicalRepricingHandler.Handle)))
 		mux.HandleFunc("/api/v1/admin/pricing/reprice/", auth(handler.RequirePartnerSuperAdmin(cfg, store, historicalRepricingHandler.HandleStatus)))
 		mux.HandleFunc("/api/v1/admin/model-policies", auth(handler.RequirePartnerSuperAdmin(cfg, store, modelPolicyAdminHandler.HandleList)))
+		// Dashboard country policy — super-admin only. The gate exempts
+		// super-admins, so this tab stays reachable even if every country is
+		// blocked.
+		dashboardPolicyHandler := handler.NewDashboardPolicyHandler(store, cfg, dashboardGate)
+		mux.HandleFunc("/api/v1/admin/dashboard-policies", auth(handler.RequirePartnerSuperAdmin(cfg, store, dashboardPolicyHandler.Handle)))
+		mux.HandleFunc("/api/v1/admin/dashboard-policies/", auth(handler.RequirePartnerSuperAdmin(cfg, store, dashboardPolicyHandler.HandleCountry)))
 		// OpenShift users/entitlements management (redesigned admin page).
 
 		// Key APIs are reachable by any signed-in user: the user dashboard manages
@@ -527,6 +541,9 @@ func main() {
 		// scope (plain user sees self, manager sees subtree, super-admin sees
 		// all). Backed entirely by partner_users.
 		orgHandler := handler.NewPartnerOrgHandler(store, cfg)
+		// A dashboard country policy change invalidates the manager-response
+		// cache so hidden rows and inclusive totals apply immediately.
+		dashboardPolicyHandler.SetOnChange(orgHandler.InvalidateCache)
 		managerAuth := func(next http.HandlerFunc) http.HandlerFunc { return auth(next) }
 		mux.HandleFunc("/manager", managerAuth(orgHandler.ServeManager))
 		mux.HandleFunc("/api/v1/org/scope", managerAuth(orgHandler.HandleScope))
@@ -535,6 +552,9 @@ func main() {
 		// and role. Keep this wrapping in main: it was silently dropped in a
 		// rebase once, and a handler-level test cannot catch that.
 		mux.HandleFunc("/api/v1/org/usage", managerAuth(orgHandler.Cached(orgHandler.HandleOrgUsage)))
+		// Inclusive subtree totals: blocked people are hidden from the usage
+		// rows but their spend stays in these numbers.
+		mux.HandleFunc("/api/v1/org/totals", managerAuth(orgHandler.Cached(orgHandler.HandleOrgTotals)))
 		mux.HandleFunc("/api/v1/org/charts", managerAuth(orgHandler.Cached(orgHandler.HandleOrgCharts)))
 		mux.HandleFunc("/api/v1/org/person", managerAuth(orgHandler.HandleOrgPerson))
 	} else {
