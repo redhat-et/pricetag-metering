@@ -21,6 +21,7 @@ func NewQuotaAdminHandler(store *storage.Store) *QuotaAdminHandler {
 
 type quotaPolicyUpdateRequest struct {
 	DefaultMonthlyUSD      *float64  `json:"default_monthly_usd"`
+	DefaultMonthlyTokens   *int64    `json:"default_monthly_tokens"`
 	Enforced               *bool     `json:"enforced"`
 	AllowedOverLimitModels *[]string `json:"allowed_over_limit_models"`
 }
@@ -53,9 +54,10 @@ func (h *QuotaAdminHandler) HandlePolicy(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		policy, err := h.store.UpdateQuotaPolicy(r.Context(), quotaAdminActor(r), storage.QuotaPolicyUpdate{
-			DefaultMonthlyUSD: body.DefaultMonthlyUSD,
-			Enforced:          body.Enforced,
-			Models:            body.AllowedOverLimitModels,
+			DefaultMonthlyUSD:    body.DefaultMonthlyUSD,
+			DefaultMonthlyTokens: body.DefaultMonthlyTokens,
+			Enforced:             body.Enforced,
+			Models:               body.AllowedOverLimitModels,
 		})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

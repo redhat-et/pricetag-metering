@@ -108,6 +108,7 @@ func (s *Store) migrateModelAccess(ctx context.Context) error {
 			UNIQUE (role_id, tenant_id)
 		)`,
 		`ALTER TABLE model_access_roles ADD COLUMN IF NOT EXISTS monthly_usd NUMERIC(12,2) NOT NULL DEFAULT 0`,
+		`ALTER TABLE model_access_roles ADD COLUMN IF NOT EXISTS monthly_tokens BIGINT NOT NULL DEFAULT 0 CHECK (monthly_tokens >= 0)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS model_access_roles_one_default ON model_access_roles (tenant_id) WHERE is_default AND retired_at IS NULL`,
 		`CREATE INDEX IF NOT EXISTS model_access_roles_tenant_idx ON model_access_roles (tenant_id, retired_at)`,
 
@@ -188,6 +189,22 @@ func (s *Store) migrateModelAccess(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS quota_credits_subject_idx ON quota_credits (tenant_id, subject_id, expires_at)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS quota_credits_request_unique ON quota_credits (tenant_id, request_id) WHERE request_id IS NOT NULL`,
+
+		`CREATE TABLE IF NOT EXISTS token_credits (
+			credit_id UUID PRIMARY KEY,
+			tenant_id UUID NOT NULL REFERENCES policy_tenants(tenant_id) ON DELETE CASCADE,
+			subject_id UUID NOT NULL,
+			amount_tokens BIGINT NOT NULL CHECK (amount_tokens > 0),
+			expires_at TIMESTAMPTZ NULL,
+			reason TEXT NOT NULL,
+			created_by TEXT NOT NULL DEFAULT '',
+			approved_by TEXT NULL,
+			request_id TEXT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			FOREIGN KEY (subject_id, tenant_id) REFERENCES policy_subjects(subject_id, tenant_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS token_credits_subject_idx ON token_credits (tenant_id, subject_id, expires_at)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS token_credits_request_unique ON token_credits (tenant_id, request_id) WHERE request_id IS NOT NULL`,
 
 		`CREATE TABLE IF NOT EXISTS catalog_models (
 			tenant_id UUID NOT NULL REFERENCES policy_tenants(tenant_id) ON DELETE CASCADE,

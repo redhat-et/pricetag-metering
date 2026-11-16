@@ -660,12 +660,12 @@ td .tag{white-space:nowrap}
         <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccess()">Refresh</button>
       </div>
     </div>
-    <div class="ts" style="margin-bottom:12px">Roles grant exact public model IDs and may add a per-member monthly budget. The default role applies to everyone active; role budgets add up. Model access and budget are enforced separately.</div>
+    <div class="ts" style="margin-bottom:12px">Roles grant exact public model IDs and may add a per-member monthly budget and token limit. The default role applies to everyone active; role budgets add up and token limits use the highest role value. Model access, budget and tokens are enforced separately.</div>
     <div id="ma-catalog-note" class="ts" style="margin-bottom:10px"></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
       <button class="btn btn-grn" onclick="openRoleWizard()">Create role…</button>
       <input id="ma-role-search" class="tbl-input" placeholder="Filter roles" oninput="renderModelAccessRoles()" style="width:180px;padding:7px 10px;font-size:12px">
-      <span class="ts">Guided: name → default → models → cost centers → budget → review.</span>
+      <span class="ts">Guided: name → default → models → cost centers → budget &amp; tokens → review.</span>
     </div>
     <div id="ma-roles"><div class="loading"><div class="spinner"></div>Loading roles...</div></div>
   </div>
@@ -745,6 +745,7 @@ td .tag{white-space:nowrap}
 
     <div id="ma-wizard-step5" style="display:none">
       <div class="field"><label>Monthly budget per member (USD, optional)</label><input type="number" id="ma-new-budget" min="0" step="1" placeholder="e.g. 300"><div class="ts">Adds to the member's budget across roles. Empty/0 falls back to the global default. Temporary extra credits are added per person later.</div></div>
+      <div class="field"><label>Monthly token limit per member (optional)</label><input type="number" id="ma-new-token-limit" min="0" step="1000000" placeholder="e.g. 10000000000"><div class="ts">Absolute cap for this role. Highest role value wins; empty/0 inherits the global <span id="ma-global-token-display">—</span> limit. Use temporary token credits per person to add extra.</div></div>
       <div id="ma-new-free-models" class="ts"></div>
     </div>
 
@@ -776,6 +777,11 @@ td .tag{white-space:nowrap}
       <label>$ / person / month</label>
       <input id="ma-role-budget" type="number" min="0" step="1" placeholder="0" style="width:160px">
       <div class="ts">Adds to each member's budget. Empty/0 falls back to the global default.</div>
+    </div>
+    <div class="field">
+      <label>Tokens / person / month (optional)</label>
+      <input id="ma-role-token-limit" type="number" min="0" step="1000000" placeholder="0" style="width:180px">
+      <div class="ts">Absolute cap. Highest role value wins; 0 inherits global limit.</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" id="ma-role-retire" style="color:#ff6b6b;margin-right:auto" onclick="retireModelAccessRole()">Retire role</button>
@@ -1126,7 +1132,22 @@ function splitModels(value) {
   return String(value || '').split(/[\n,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
 }
 
+var globalTokenLimit = 10000000000;
+function loadGlobalTokenLimit() {
+  fetchJSON('/api/v1/admin/safety-net').then(function(p) {
+    if (p && p.default_monthly_tokens) globalTokenLimit = p.default_monthly_tokens;
+    var el = document.getElementById('ma-global-token-display');
+    if (el) el.textContent = fmtTokens(globalTokenLimit);
+  }).catch(function(){});
+}
+function fmtTokens(n) {
+  n = Number(n) || 0;
+  if (n >= 1e9) return (n/1e9).toFixed(1).replace(/\.0$/,'') + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'') + 'M';
+  return n.toLocaleString('en-US');
+}
 function loadModelAccess() {
+  loadGlobalTokenLimit();
   return Promise.all([
     fetchJSON(maURL('/roles')),
     fetchJSON(maURL('/subjects?limit=200')),
@@ -1282,7 +1303,7 @@ function renderModelAccessRoles() {
     return '<tr' + (r.role_id === maHighlightRoleID ? ' style="background:var(--c2)"' : '') + '>' +
       '<td><strong>' + esc(r.name) + '</strong>' + (r.is_default ? ' <span class="badge badge-grn">default</span>' : '') + '</td>' +
       '<td>' + models.length + '</td>' +
-      '<td>' + (r.monthly_usd ? '$' + r.monthly_usd + '/person' : '—') + '</td>' +
+      '<td>' + (r.monthly_usd ? '$' + r.monthly_usd + '/person' : '—') + '<div class="ts" style="font-size:10px">' + (r.monthly_tokens ? fmtTokens(r.monthly_tokens) + ' tokens' : '') + '</div></td>' +
       '<td>' + (r.subject_count || 0).toLocaleString('en-US') + '</td>' +
       '<td class="ts" title="' + esc(models.join(', ')) + '">' + esc(sample || '—') + '</td>' +
       '<td style="white-space:nowrap">' +
@@ -1318,6 +1339,7 @@ function openRoleWizard() {
   maGroupSelection = new Set();
   document.getElementById('ma-new-name').value = '';
   document.getElementById('ma-new-budget').value = '';
+  document.getElementById('ma-new-token-limit').value = '';
   document.getElementById('ma-new-default').checked = false;
   document.getElementById('ma-wizard-replace').checked = false;
   renderModelSummary('new');
@@ -1499,6 +1521,7 @@ function renderRoleWizard() {
     var models = maNewModels;
     var freeModels = freeSelectedModelIDs(models);
     var budget = parseFloat(document.getElementById('ma-new-budget').value || '0') || 0;
+    var tokenLimit = parseInt(document.getElementById('ma-new-token-limit').value || '0', 10) || 0;
     var costCenters = maWizardCostCenters.length
       ? esc(maWizardCostCenters.join(', ')) + ' (one-time snapshot)'
       : 'none yet — assign later';
@@ -1515,7 +1538,8 @@ function renderRoleWizard() {
       '<div><strong>Models:</strong> ' + (models.length ? esc(models.join(', ')) : 'none (grants no access)') + '</div>' +
       '<div><strong>Free over budget:</strong> ' + (freeModels.length ? esc(freeModels.join(', ')) : 'none') + '</div>' +
       assignment +
-      '<div><strong>Budget:</strong> ' + (budget > 0 ? '$' + budget + '/person/month' : 'no role budget — inherits global default') + '</div>';
+      '<div><strong>Budget:</strong> ' + (budget > 0 ? '$' + budget + '/person/month' : 'no role budget — inherits global default') + '</div>' +
+      '<div><strong>Token limit:</strong> ' + (tokenLimit > 0 ? fmtTokens(tokenLimit) + '/person/month' : 'no role token limit — inherits global ' + fmtTokens(globalTokenLimit)) + '</div>';
   }
   document.getElementById('ma-wizard-back').style.display = step === 1 ? 'none' : '';
   document.getElementById('ma-wizard-next').style.display = step === 6 ? 'none' : '';
@@ -1544,6 +1568,8 @@ function roleWizardNext() {
   if (maWizardStep === 5) {
     var budget = parseFloat(document.getElementById('ma-new-budget').value || '0');
     if (isNaN(budget) || budget < 0) { showToast('Budget must be zero or positive', 'error'); return; }
+    var tok = parseInt(document.getElementById('ma-new-token-limit').value || '0', 10);
+    if (isNaN(tok) || tok < 0) { showToast('Token limit must be zero or positive', 'error'); return; }
   }
   maWizardStep++;
   renderRoleWizard();
@@ -1558,6 +1584,7 @@ function createModelAccessRole() {
   var models = maNewModels;
   var isDefault = document.getElementById('ma-new-default').checked;
   var monthlyUSD = parseFloat(document.getElementById('ma-new-budget').value || '0') || 0;
+  var monthlyTokens = parseInt(document.getElementById('ma-new-token-limit').value || '0', 10) || 0;
   if (!name) { showToast('Role name is required', 'error'); return; }
   var duplicate = maRoles.filter(function(r) { return (r.name || '').toLowerCase() === name.toLowerCase(); })[0];
   if (duplicate) { showToast('A role named "' + duplicate.name + '" already exists. Choose another name.', 'error'); return; }
@@ -1565,7 +1592,7 @@ function createModelAccessRole() {
   var replaceDefault = isDefault && existingDefault && document.getElementById('ma-wizard-replace').checked;
   sendJSON(maURL('/roles'), 'POST', {
     name: name, description: '', models: models, is_default: isDefault,
-    replace_default: !!replaceDefault, monthly_usd: monthlyUSD
+    replace_default: !!replaceDefault, monthly_usd: monthlyUSD, monthly_tokens: monthlyTokens
   }).then(function(role) {
     var applyPeople = Promise.resolve(null);
     if (!isDefault) {
@@ -1608,6 +1635,7 @@ function editModelAccessRole(roleID) {
     (role.is_default ? 'Default role · applies to every active person' : 'Explicit role') +
     ' · ' + (role.subject_count || 0).toLocaleString('en-US') + ' people';
   document.getElementById('ma-role-budget').value = role.monthly_usd || '';
+  document.getElementById('ma-role-token-limit').value = role.monthly_tokens || '';
   maRoleModels = (role.models || []).slice();
   renderModelSummary('role');
   var retire = document.getElementById('ma-role-retire');
@@ -1625,9 +1653,11 @@ function saveRoleEditor() {
   if (!maRole) return;
   var models = maRoleModels;
   var amount = parseFloat(document.getElementById('ma-role-budget').value || '0') || 0;
+  var tokens = parseInt(document.getElementById('ma-role-token-limit').value || '0', 10) || 0;
   Promise.all([
     sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/models'), 'PUT', {models: models}),
-    sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/budget'), 'PUT', {monthly_usd: amount})
+    sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/budget'), 'PUT', {monthly_usd: amount}),
+    sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/token-budget'), 'PUT', {monthly_tokens: tokens})
   ]).then(function() {
     showToast('Role updated', 'success');
     closeRoleEditor();
@@ -1722,6 +1752,14 @@ function showModelAccessEffective(subjectID) {
         '<input id="ma-credit-reason" class="tbl-input" placeholder="Reason" style="flex:1;min-width:150px;padding:6px 8px;font-size:12px">' +
         '<button class="btn btn-outline" onclick="addModelAccessCredit()">Add credit</button>' +
       '</div>' +
+      '<div class="ts" style="margin-bottom:4px">Extra token credits</div>' +
+      '<div id="ma-token-credit-list" class="ts" style="margin-bottom:6px">Loading…</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+        '<input id="ma-token-credit-amount" type="number" min="1" step="1000000" class="tbl-input" placeholder="tokens" style="width:120px;padding:6px 8px;font-size:12px">' +
+        '<input id="ma-token-credit-expiry" type="date" class="tbl-input" style="padding:6px 8px;font-size:12px">' +
+        '<input id="ma-token-credit-reason" class="tbl-input" placeholder="Reason" style="flex:1;min-width:150px;padding:6px 8px;font-size:12px">' +
+        '<button class="btn btn-outline" onclick="addModelAccessTokenCredit()">Add tokens</button>' +
+      '</div>' +
       '<div class="ts" style="margin-bottom:14px">Policy version: ' + esc(String(e.policy_version || 0)) + '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
         '<button class="btn btn-outline" onclick="editModelAccessGrants()">Edit direct grants</button>' +
@@ -1736,8 +1774,15 @@ function showModelAccessEffective(subjectID) {
       var eom = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       expiry.value = eom.toISOString().slice(0, 10);
     }
+    var tokenExpiry = document.getElementById('ma-token-credit-expiry');
+    if (tokenExpiry && !tokenExpiry.value) {
+      var now2 = new Date();
+      var eom2 = new Date(now2.getFullYear(), now2.getMonth() + 1, 0);
+      tokenExpiry.value = eom2.toISOString().slice(0, 10);
+    }
     document.getElementById('ma-effective-ov').classList.add('show');
     loadModelAccessCredits(subjectID);
+    loadModelAccessTokenCredits(subjectID);
   }).catch(function(err) { showToast('Effective access failed: ' + err.message, 'error'); });
 }
 
@@ -1781,6 +1826,43 @@ function removeModelAccessCredit(creditID) {
   sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/credits/' + encodeURIComponent(creditID)), 'DELETE')
     .then(function() { showToast('Credit removed', 'success'); loadModelAccessCredits(maEffectiveSubject); })
     .catch(function(err) { showToast('Remove credit failed: ' + err.message, 'error'); });
+}
+function loadModelAccessTokenCredits(subjectID) {
+  fetchJSON(maURL('/subjects/' + encodeURIComponent(subjectID) + '/token-credits')).then(function(credits) {
+    var el = document.getElementById('ma-token-credit-list');
+    if (!el) return;
+    if (!credits.length) { el.textContent = 'No extra token credits.'; return; }
+    el.innerHTML = credits.map(function(c) {
+      return '<div style="display:flex;gap:8px;align-items:center;margin:2px 0">' +
+        '<span class="tag tag-blu">' + esc(fmtTokens(c.amount_tokens)) + '</span>' +
+        '<span>' + (c.expires_at ? 'expires ' + esc(String(c.expires_at).slice(0, 10)) : 'no expiry') + '</span>' +
+        '<span class="ts">' + esc(c.reason) + '</span>' +
+        '<button class="btn btn-outline" style="padding:2px 6px;font-size:10px" onclick="removeModelAccessTokenCredit(\'' + esc(c.credit_id) + '\')">Remove</button>' +
+      '</div>';
+    }).join('');
+  }).catch(function() { var el = document.getElementById('ma-token-credit-list'); if (el) el.textContent = 'Tokens unavailable.'; });
+}
+function addModelAccessTokenCredit() {
+  if (!maEffectiveSubject) return;
+  var amount = parseInt(document.getElementById('ma-token-credit-amount').value || '0', 10);
+  var reason = (document.getElementById('ma-token-credit-reason').value || '').trim();
+  var date = document.getElementById('ma-token-credit-expiry').value;
+  if (!(amount > 0) || !reason) { showToast('Token amount and reason are required', 'error'); return; }
+  var expires = date ? new Date(date + 'T23:59:59Z').toISOString() : null;
+  var requestId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/token-credits'), 'POST', {amount_tokens: amount, expires_at: expires, reason: reason, request_id: requestId})
+    .then(function() {
+      showToast('Token credit added', 'success');
+      document.getElementById('ma-token-credit-amount').value = '';
+      document.getElementById('ma-token-credit-reason').value = '';
+      loadModelAccessTokenCredits(maEffectiveSubject);
+    }).catch(function(err) { showToast('Token credit failed: ' + err.message, 'error'); });
+}
+function removeModelAccessTokenCredit(creditID) {
+  if (!maEffectiveSubject) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/token-credits/' + encodeURIComponent(creditID)), 'DELETE')
+    .then(function() { showToast('Token credit removed', 'success'); loadModelAccessTokenCredits(maEffectiveSubject); })
+    .catch(function(err) { showToast('Remove token credit failed: ' + err.message, 'error'); });
 }
 
 function addRoleToEffective() {
@@ -1930,9 +2012,10 @@ function renderSafetyNet() {
   var opts = safetyNetModels.filter(function(m) { return draft.indexOf(m) < 0; }).map(function(m) { return '<option value="' + esc(m) + '">'; }).join('');
   document.getElementById('safety-net-meta').textContent = p.enforced ? 'ENFORCING' : 'tracking only';
   document.getElementById('safety-net-body').innerHTML =
-    '<div class="warning" style="margin-bottom:14px"><span class="icon">!</span><div>Enforcement uses month-to-date USD spend. Bypass matching is exact and case-sensitive; the gateway must provide the request model for it to work.</div></div>' +
+    '<div class="warning" style="margin-bottom:14px"><span class="icon">!</span><div>Enforcement uses month-to-date USD spend and token count. Bypass matching is exact and case-sensitive; the gateway must provide the request model for it to work.</div></div>' +
     '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;padding:4px 0 14px">' +
       '<div><label class="field-label">Monthly limit (USD)</label><input type="number" id="safety-limit" min="1" step="1" value="' + esc(p.default_monthly_usd) + '" style="width:140px"></div>' +
+      '<div><label class="field-label">Monthly token limit</label><input type="number" id="safety-token-limit" min="1" step="1000000" value="' + esc(p.default_monthly_tokens || 10000000000) + '" style="width:180px"><div class="ts">' + fmtTokens(p.default_monthly_tokens || 10000000000) + ' tokens</div></div>' +
       '<div><label class="field-label">Enforcement</label><label style="display:flex;gap:8px;align-items:center;margin-top:9px"><input type="checkbox" id="safety-enforced" style="width:auto" ' + (p.enforced ? 'checked' : '') + '> Block over-limit requests</label></div>' +
     '</div>' +
     '<div style="border-top:1px solid var(--border);padding-top:14px"><label class="field-label">Models allowed after the limit</label><div style="margin:8px 0 12px">' + chips + '</div>' +
@@ -1950,7 +2033,10 @@ function removeSafetyModel(index) { safetyNetDraft.splice(index, 1); renderSafet
 function saveSafetyNet() {
   var limit = parseFloat(document.getElementById('safety-limit').value);
   if (!(limit > 0)) { showToast('Monthly limit must be greater than zero', 'error'); return; }
-  updateJSON('/api/v1/admin/safety-net', 'PUT', {default_monthly_usd: limit, enforced: document.getElementById('safety-enforced').checked, allowed_over_limit_models: safetyNetDraft}).then(function() {
+  var tokenLimit = parseInt(document.getElementById('safety-token-limit').value, 10);
+  var payload = {default_monthly_usd: limit, enforced: document.getElementById('safety-enforced').checked, allowed_over_limit_models: safetyNetDraft};
+  if (tokenLimit > 0) payload.default_monthly_tokens = tokenLimit;
+  updateJSON('/api/v1/admin/safety-net', 'PUT', payload).then(function() {
     showToast('Safety net saved', 'success'); loadSafetyNet();
   }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
 }

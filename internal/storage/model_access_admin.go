@@ -32,6 +32,7 @@ type ModelAccessRole struct {
 	OwnerSubjectID string     `json:"owner_subject_id,omitempty"`
 	IsDefault      bool       `json:"is_default"`
 	MonthlyUSD     float64    `json:"monthly_usd"`
+	MonthlyTokens  int64      `json:"monthly_tokens"`
 	Models         []string   `json:"models"`
 	SubjectCount   int        `json:"subject_count"`
 	RetiredAt      *time.Time `json:"retired_at,omitempty"`
@@ -91,7 +92,7 @@ func normalizeExactModels(models []string, max int) ([]string, error) {
 func (s *Store) ListModelAccessRoles(ctx context.Context, tenantID string) ([]ModelAccessRole, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT r.role_id::text, r.tenant_id::text, r.name, r.description,
-		       COALESCE(r.owner_subject_id::text, ''), r.is_default, r.monthly_usd,
+		       COALESCE(r.owner_subject_id::text, ''), r.is_default, r.monthly_usd, r.monthly_tokens,
 		       COALESCE(array_agg(rm.model_id ORDER BY rm.model_id)
 		                FILTER (WHERE rm.model_id IS NOT NULL), '{}')::text[],
 		       CASE WHEN r.is_default THEN (
@@ -125,7 +126,7 @@ func (s *Store) ListModelAccessRoles(ctx context.Context, tenantID string) ([]Mo
 		var models []string
 		var retired sql.NullTime
 		if err := rows.Scan(&role.RoleID, &role.TenantID, &role.Name, &role.Description,
-			&role.OwnerSubjectID, &role.IsDefault, &role.MonthlyUSD, pq.Array(&models), &role.SubjectCount,
+			&role.OwnerSubjectID, &role.IsDefault, &role.MonthlyUSD, &role.MonthlyTokens, pq.Array(&models), &role.SubjectCount,
 			&retired, &role.CreatedAt, &role.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -170,12 +171,19 @@ func (s *Store) GetModelAccessRole(ctx context.Context, tenantID, roleID string)
 }
 
 func (s *Store) CreateModelAccessRole(ctx context.Context, tenantID, actor, name, description string, models []string, isDefault bool, monthlyUSD float64) (ModelAccessRole, error) {
+	return s.CreateModelAccessRoleWithTokens(ctx, tenantID, actor, name, description, models, isDefault, monthlyUSD, 0)
+}
+
+func (s *Store) CreateModelAccessRoleWithTokens(ctx context.Context, tenantID, actor, name, description string, models []string, isDefault bool, monthlyUSD float64, monthlyTokens int64) (ModelAccessRole, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 120 {
 		return ModelAccessRole{}, fmt.Errorf("%w: name required, max 120 bytes", ErrInvalidModelAccessRole)
 	}
 	if monthlyUSD < 0 {
 		return ModelAccessRole{}, fmt.Errorf("%w: monthly_usd must be >= 0", ErrInvalidModelAccessRole)
+	}
+	if monthlyTokens < 0 {
+		return ModelAccessRole{}, fmt.Errorf("%w: monthly_tokens must be >= 0", ErrInvalidModelAccessRole)
 	}
 	clean, err := normalizeRoleModels(models)
 	if err != nil {
@@ -208,9 +216,9 @@ func (s *Store) CreateModelAccessRole(ctx context.Context, tenantID, actor, name
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO model_access_roles
-			(role_id, tenant_id, name, description, is_default, monthly_usd, created_by, updated_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
-		roleID, tenantID, name, strings.TrimSpace(description), isDefault, monthlyUSD, actor); err != nil {
+			(role_id, tenant_id, name, description, is_default, monthly_usd, monthly_tokens, created_by, updated_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+		roleID, tenantID, name, strings.TrimSpace(description), isDefault, monthlyUSD, monthlyTokens, actor); err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
 			return ModelAccessRole{}, fmt.Errorf("%w: %q is already in use", ErrModelAccessRoleNameExists, name)
@@ -228,7 +236,7 @@ func (s *Store) CreateModelAccessRole(ctx context.Context, tenantID, actor, name
 		return ModelAccessRole{}, err
 	}
 	if err := s.auditTx(ctx, tx, actor, "model_access.role_create", roleID, map[string]any{
-		"name": name, "models": clean, "is_default": isDefault, "monthly_usd": monthlyUSD,
+		"name": name, "models": clean, "is_default": isDefault, "monthly_usd": monthlyUSD, "monthly_tokens": monthlyTokens,
 	}); err != nil {
 		return ModelAccessRole{}, err
 	}
@@ -305,6 +313,83 @@ func (s *Store) SetModelAccessRoleBudget(ctx context.Context, tenantID, roleID, 
 	}
 	s.invalidateQuotaCache()
 	return nil
+}
+
+func (s *Store) SetModelAccessRoleTokenBudget(ctx context.Context, tenantID, roleID, actor string, monthlyTokens int64) error {
+	if monthlyTokens < 0 {
+		return fmt.Errorf("%w: monthly_tokens must be >= 0", ErrInvalidModelAccessRole)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `
+		UPDATE model_access_roles
+		SET monthly_tokens = $3, updated_by = $4, updated_at = NOW()
+		WHERE tenant_id = $1 AND role_id = $2 AND retired_at IS NULL`,
+		tenantID, roleID, monthlyTokens, actor)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return ErrModelAccessRoleNotFound
+	}
+	if err := s.bumpPolicyVersionTx(ctx, tx, tenantID); err != nil {
+		return err
+	}
+	if err := s.auditTx(ctx, tx, actor, "model_access.role_token_budget_set", roleID, map[string]any{
+		"monthly_tokens": monthlyTokens,
+	}); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.invalidateQuotaCache()
+	return nil
+}
+
+func (s *Store) GetRoleTokenBudgetAndCredits(ctx context.Context, tenantID, subjectID string) (int64, int64, error) {
+	var budget, credits int64
+	if err := s.db.QueryRowContext(ctx, `
+		WITH assigned AS (
+			SELECT r.monthly_tokens
+			FROM model_access_roles r
+			WHERE r.tenant_id = $1 AND r.is_default AND r.retired_at IS NULL AND r.monthly_tokens > 0
+			  AND EXISTS (
+			    SELECT 1 FROM policy_subjects s
+			    WHERE s.tenant_id = $1 AND s.subject_id = $2 AND s.principal_type = 'partner_user'
+			  )
+			  AND NOT EXISTS (
+			    SELECT 1 FROM model_access_default_exclusions e
+			    WHERE e.tenant_id = $1 AND e.subject_id = $2
+			      AND (e.expires_at IS NULL OR e.expires_at > NOW())
+			  )
+			  AND NOT EXISTS (
+			    SELECT 1 FROM model_access_role_assignments a
+			    WHERE a.tenant_id = r.tenant_id AND a.role_id = r.role_id
+			      AND a.subject_id = $2
+			  )
+			UNION ALL
+			SELECT r.monthly_tokens
+			FROM model_access_role_assignments a
+			JOIN model_access_roles r
+			  ON r.role_id = a.role_id AND r.tenant_id = a.tenant_id
+			WHERE a.tenant_id = $1 AND a.subject_id = $2 AND r.retired_at IS NULL AND r.monthly_tokens > 0
+		),
+		active_credits AS (
+			SELECT COALESCE(SUM(amount_tokens), 0) AS total
+			FROM token_credits
+			WHERE tenant_id = $1 AND subject_id = $2
+			  AND (expires_at IS NULL OR expires_at > NOW())
+		)
+		SELECT COALESCE((SELECT MAX(monthly_tokens) FROM assigned), 0),
+		       (SELECT total FROM active_credits)`,
+		tenantID, subjectID).Scan(&budget, &credits); err != nil {
+		return 0, 0, fmt.Errorf("role token budget/credit lookup: %w", err)
+	}
+	return budget, credits, nil
 }
 
 type QuotaCredit struct {
@@ -717,6 +802,31 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 // "no role budget configured" and quota falls back to the global default.
 // quotaDecision runs on the entitlement hot path, so this avoids a second
 // database call per decision.
+func (s *Store) GetPolicySubjectByID(ctx context.Context, tenantID, subjectID string) (PolicySubjectRecord, error) {
+	var r PolicySubjectRecord
+	err := s.db.QueryRowContext(ctx, `
+		SELECT s.subject_id::text, s.tenant_id::text, s.principal_type, s.external_id,
+		       s.display_name, s.status, s.source,
+		       COALESCE(pu.tags->>'first_name', ''),
+		       COALESCE(pu.tags->>'last_name', ''),
+		       COALESCE(pu.tags->>'email', ''),
+		       COALESCE(pu.tags->>'cost_center', ''),
+		       COALESCE(pu.tags->>'cost_center_description', ''),
+		       COALESCE(pu.tags->>'organization', ''),
+		       COALESCE(pu.tags->>'job_title', ''),
+		       COALESCE(pu.tags->>'employee_type', ''),
+		       COALESCE(ARRAY(SELECT jsonb_array_elements_text(pu.tags->'groups')), '{}')::text[],
+		       s.created_at, s.updated_at
+		FROM policy_subjects s
+		LEFT JOIN partner_users pu ON s.principal_type = 'partner_user' AND pu.user_id::text = s.external_id
+		WHERE s.tenant_id = $1 AND s.subject_id = $2`, tenantID, subjectID).
+		Scan(&r.SubjectID, &r.TenantID, &r.PrincipalType, &r.ExternalID,
+			&r.DisplayName, &r.Status, &r.Source, &r.FirstName, &r.LastName, &r.Email, &r.CostCenter,
+			&r.CostCenterDescription, &r.Organization, &r.JobTitle, &r.EmployeeType,
+			pq.Array(&r.Groups), &r.CreatedAt, &r.UpdatedAt)
+	return r, err
+}
+
 func (s *Store) GetRoleBudgetAndCreditsUSD(ctx context.Context, tenantID, subjectID string) (float64, float64, error) {
 	var budget, credits float64
 	if err := s.db.QueryRowContext(ctx, `

@@ -457,6 +457,28 @@ func (s *Store) PartnerLoginsForUsername(ctx context.Context, username string) (
 	return out, rows.Err()
 }
 
+func (s *Store) PartnerLoginsForSubjectID(ctx context.Context, subjectID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT l.username
+		FROM policy_subjects s
+		JOIN partner_user_logins l ON l.user_id::text = s.external_id
+		WHERE s.subject_id = $1 AND s.principal_type = 'partner_user'
+		ORDER BY l.username`, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 // PartnerIdentityForUsername resolves the canonical partner user behind a MaaS
 // login and returns the configured tag value in the same round trip. A login
 // with no partner record returns found=false; callers treat it as an unknown

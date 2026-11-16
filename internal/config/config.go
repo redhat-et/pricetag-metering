@@ -16,7 +16,7 @@ import (
 
 // DefaultMonthlyTokenQuota is the per-user monthly token allowance applied
 // when MONTHLY_TOKEN_QUOTA is unset.
-const DefaultMonthlyTokenQuota = 100_000_000
+const DefaultMonthlyTokenQuota = 10_000_000_000
 
 // MeteringMode selects which workloads a process runs.
 //

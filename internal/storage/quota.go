@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 
 	"github.com/redhat-et/pricetag-metering/internal/metrics"
@@ -85,6 +86,21 @@ var quotaMigrations = []string{
 	// RecordQuotaDenial). The earlier aggregated quota_denials counter table
 	// is retired: fresh installs never create it, existing databases drop it.
 	`DROP TABLE IF EXISTS quota_denials`,
+	// Token quota: the global per-user monthly token allowance. The DB value
+	// is authoritative; the process config MonthlyTokenQuota seeds it on first
+	// migration and provides the fallback for tests without a DB.
+	`ALTER TABLE quota_policy ADD COLUMN IF NOT EXISTS default_monthly_tokens BIGINT NOT NULL DEFAULT 10000000000`,
+	`UPDATE quota_policy SET default_monthly_tokens = 10000000000 WHERE default_monthly_tokens = 0`,
+	// Per-person permanent token override: absolute cap that replaces the
+	// global/role token base for one person.
+	`CREATE TABLE IF NOT EXISTS quota_token_overrides (
+		scope TEXT NOT NULL CHECK (scope IN ('user')),
+		principal TEXT NOT NULL,
+		monthly_tokens BIGINT NOT NULL CHECK (monthly_tokens > 0),
+		updated_by TEXT NOT NULL DEFAULT '',
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		PRIMARY KEY (scope, principal)
+	)`,
 }
 
 func (s *Store) migrateQuota(ctx context.Context) error {
@@ -99,8 +115,9 @@ func (s *Store) migrateQuota(ctx context.Context) error {
 // --- Policy & overrides (admin surface) ---
 
 type QuotaPolicy struct {
-	DefaultMonthlyUSD float64 `json:"default_monthly_usd"`
-	Enforced          bool    `json:"enforced"`
+	DefaultMonthlyUSD    float64 `json:"default_monthly_usd"`
+	DefaultMonthlyTokens int64   `json:"default_monthly_tokens"`
+	Enforced             bool    `json:"enforced"`
 	// AllowedOverLimitModels: the post-cap allowance list (issue #22).
 	// Exact, case-sensitive model identifiers; empty disables the feature.
 	AllowedOverLimitModels []string  `json:"allowed_over_limit_models"`
@@ -119,10 +136,16 @@ type QuotaOverride struct {
 func (s *Store) GetQuotaPolicy(ctx context.Context) (QuotaPolicy, error) {
 	var p QuotaPolicy
 	err := s.db.QueryRowContext(ctx,
-		`SELECT default_monthly_usd, enforced, allowed_over_limit_models,
+		`SELECT default_monthly_usd, default_monthly_tokens, enforced, allowed_over_limit_models,
 		        updated_by, updated_at FROM quota_policy WHERE id = true`,
-	).Scan(&p.DefaultMonthlyUSD, &p.Enforced, pq.Array(&p.AllowedOverLimitModels),
+	).Scan(&p.DefaultMonthlyUSD, &p.DefaultMonthlyTokens, &p.Enforced, pq.Array(&p.AllowedOverLimitModels),
 		&p.UpdatedBy, &p.UpdatedAt)
+	if err == nil && p.DefaultMonthlyTokens == 0 {
+		p.DefaultMonthlyTokens = s.tokenQuota
+		if p.DefaultMonthlyTokens == 0 {
+			p.DefaultMonthlyTokens = 10_000_000_000
+		}
+	}
 	return p, err
 }
 
@@ -130,9 +153,10 @@ func (s *Store) GetQuotaPolicy(ctx context.Context) (QuotaPolicy, error) {
 // untouched". Models replaces the whole list when non-nil (empty list =
 // feature off).
 type QuotaPolicyUpdate struct {
-	DefaultMonthlyUSD *float64
-	Enforced          *bool
-	Models            *[]string
+	DefaultMonthlyUSD    *float64
+	DefaultMonthlyTokens *int64
+	Enforced             *bool
+	Models               *[]string
 }
 
 // UpdateQuotaPolicy applies every present field in ONE transaction with
@@ -143,6 +167,9 @@ type QuotaPolicyUpdate struct {
 func (s *Store) UpdateQuotaPolicy(ctx context.Context, actor string, u QuotaPolicyUpdate) (QuotaPolicy, error) {
 	if u.DefaultMonthlyUSD != nil && *u.DefaultMonthlyUSD <= 0 {
 		return QuotaPolicy{}, fmt.Errorf("default_monthly_usd must be > 0")
+	}
+	if u.DefaultMonthlyTokens != nil && *u.DefaultMonthlyTokens <= 0 {
+		return QuotaPolicy{}, fmt.Errorf("default_monthly_tokens must be > 0")
 	}
 	var clean []string
 	if u.Models != nil {
@@ -189,6 +216,9 @@ func (s *Store) UpdateQuotaPolicy(ctx context.Context, actor string, u QuotaPoli
 	if u.DefaultMonthlyUSD != nil {
 		add("default_monthly_usd = $%d", *u.DefaultMonthlyUSD)
 	}
+	if u.DefaultMonthlyTokens != nil {
+		add("default_monthly_tokens = $%d", *u.DefaultMonthlyTokens)
+	}
 	if u.Enforced != nil {
 		add("enforced = $%d", *u.Enforced)
 	}
@@ -203,6 +233,9 @@ func (s *Store) UpdateQuotaPolicy(ctx context.Context, actor string, u QuotaPoli
 	audit := map[string]any{}
 	if u.DefaultMonthlyUSD != nil {
 		audit["default_monthly_usd"] = *u.DefaultMonthlyUSD
+	}
+	if u.DefaultMonthlyTokens != nil {
+		audit["default_monthly_tokens"] = *u.DefaultMonthlyTokens
 	}
 	if u.Enforced != nil {
 		audit["enforced"] = *u.Enforced
@@ -278,6 +311,227 @@ func (s *Store) DeleteQuotaOverride(ctx context.Context, actor, scope, principal
 	return nil
 }
 
+type TokenOverride struct {
+	Scope         string    `json:"scope"` // "user" only
+	Principal     string    `json:"principal"`
+	MonthlyTokens int64     `json:"monthly_tokens"`
+	UpdatedBy     string    `json:"updated_by"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+func (s *Store) GetTokenOverride(ctx context.Context, principal string) (TokenOverride, error) {
+	var o TokenOverride
+	err := s.db.QueryRowContext(ctx,
+		`SELECT scope, principal, monthly_tokens, updated_by, updated_at FROM quota_token_overrides WHERE scope = 'user' AND principal = $1`, principal,
+	).Scan(&o.Scope, &o.Principal, &o.MonthlyTokens, &o.UpdatedBy, &o.UpdatedAt)
+	return o, err
+}
+
+func (s *Store) ListTokenOverrides(ctx context.Context) ([]TokenOverride, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT scope, principal, monthly_tokens, updated_by, updated_at FROM quota_token_overrides ORDER BY principal`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TokenOverride
+	for rows.Next() {
+		var o TokenOverride
+		if err := rows.Scan(&o.Scope, &o.Principal, &o.MonthlyTokens, &o.UpdatedBy, &o.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) UpsertTokenOverride(ctx context.Context, actor, principal string, monthlyTokens int64) error {
+	principal = strings.TrimSpace(principal)
+	if principal == "" {
+		return fmt.Errorf("principal required")
+	}
+	if monthlyTokens <= 0 {
+		return fmt.Errorf("monthly_tokens must be > 0 (delete the override to fall back to the default)")
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO quota_token_overrides (scope, principal, monthly_tokens, updated_by)
+		VALUES ('user', $1, $2, $3)
+		ON CONFLICT (scope, principal) DO UPDATE SET
+			monthly_tokens = EXCLUDED.monthly_tokens,
+			updated_by = EXCLUDED.updated_by,
+			updated_at = NOW()`,
+		principal, monthlyTokens, actor); err != nil {
+		return err
+	}
+	if err := s.Audit(ctx, actor, "token.override_set", "user:"+principal, map[string]any{"monthly_tokens": monthlyTokens}); err != nil {
+		return err
+	}
+	s.invalidateQuotaCache()
+	return nil
+}
+
+func (s *Store) DeleteTokenOverride(ctx context.Context, actor, principal string) error {
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM quota_token_overrides WHERE scope = 'user' AND principal = $1`, principal); err != nil {
+		return err
+	}
+	if err := s.Audit(ctx, actor, "token.override_delete", "user:"+principal, nil); err != nil {
+		return err
+	}
+	s.invalidateQuotaCache()
+	return nil
+}
+
+type TokenCredit struct {
+	CreditID     string     `json:"credit_id"`
+	TenantID     string     `json:"tenant_id"`
+	SubjectID    string     `json:"subject_id"`
+	AmountTokens int64      `json:"amount_tokens"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	Reason       string     `json:"reason"`
+	CreatedBy    string     `json:"created_by"`
+	ApprovedBy   string     `json:"approved_by,omitempty"`
+	RequestID    string     `json:"request_id,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+
+func (s *Store) AddTokenCredit(ctx context.Context, tenantID, subjectID string, amountTokens int64, expiresAt *time.Time, reason, actor, requestID string) (TokenCredit, error) {
+	if amountTokens <= 0 {
+		return TokenCredit{}, fmt.Errorf("credit amount must be > 0")
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return TokenCredit{}, fmt.Errorf("reason is required")
+	}
+	requestID = strings.TrimSpace(requestID)
+	var requestArg any
+	if requestID != "" {
+		requestArg = requestID
+	}
+	credit := TokenCredit{
+		CreditID:     uuid.NewString(),
+		TenantID:     tenantID,
+		SubjectID:    subjectID,
+		AmountTokens: amountTokens,
+		ExpiresAt:    expiresAt,
+		Reason:       reason,
+		CreatedBy:    actor,
+		RequestID:    requestID,
+		CreatedAt:    time.Now().UTC(),
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return TokenCredit{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO token_credits
+			(credit_id, tenant_id, subject_id, amount_tokens, expires_at, reason, created_by, request_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (tenant_id, request_id) WHERE request_id IS NOT NULL DO NOTHING`,
+		credit.CreditID, tenantID, subjectID, amountTokens, expiresAt, reason, actor, requestArg)
+	if err != nil {
+		return TokenCredit{}, fmt.Errorf("add token credit: %w", err)
+	}
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return TokenCredit{}, err
+	}
+	if inserted == 0 {
+		var existing TokenCredit
+		var expires sql.NullTime
+		if err := tx.QueryRowContext(ctx, `
+			SELECT credit_id::text, tenant_id::text, subject_id::text, amount_tokens,
+			       expires_at, reason, created_by, COALESCE(approved_by, ''),
+			       COALESCE(request_id, ''), created_at
+			FROM token_credits
+			WHERE tenant_id = $1 AND request_id = $2`, tenantID, requestID).
+			Scan(&existing.CreditID, &existing.TenantID, &existing.SubjectID,
+				&existing.AmountTokens, &expires, &existing.Reason, &existing.CreatedBy,
+				&existing.ApprovedBy, &existing.RequestID, &existing.CreatedAt); err != nil {
+			return TokenCredit{}, fmt.Errorf("load idempotent token credit: %w", err)
+		}
+		if expires.Valid {
+			t := expires.Time
+			existing.ExpiresAt = &t
+		}
+		if existing.SubjectID != subjectID || existing.AmountTokens != amountTokens {
+			return TokenCredit{}, fmt.Errorf("request_id already used for a different credit")
+		}
+		if err := tx.Commit(); err != nil {
+			return TokenCredit{}, err
+		}
+		return existing, nil
+	}
+	if err := s.auditTx(ctx, tx, actor, "model_access.token_credit_add", subjectID, map[string]any{
+		"amount_tokens": amountTokens, "expires_at": expiresAt, "reason": reason, "request_id": requestID,
+	}); err != nil {
+		return TokenCredit{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return TokenCredit{}, err
+	}
+	s.invalidateQuotaCache()
+	return credit, nil
+}
+
+func (s *Store) ListTokenCredits(ctx context.Context, tenantID, subjectID string) ([]TokenCredit, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT credit_id::text, tenant_id::text, subject_id::text, amount_tokens,
+		       expires_at, reason, created_by, COALESCE(approved_by, ''),
+		       COALESCE(request_id, ''), created_at
+		FROM token_credits
+		WHERE tenant_id = $1 AND subject_id = $2
+		ORDER BY created_at DESC`, tenantID, subjectID)
+	if err != nil {
+		return nil, fmt.Errorf("list token credits: %w", err)
+	}
+	defer rows.Close()
+	out := []TokenCredit{}
+	for rows.Next() {
+		var c TokenCredit
+		var expires sql.NullTime
+		if err := rows.Scan(&c.CreditID, &c.TenantID, &c.SubjectID, &c.AmountTokens,
+			&expires, &c.Reason, &c.CreatedBy, &c.ApprovedBy, &c.RequestID, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		if expires.Valid {
+			t := expires.Time
+			c.ExpiresAt = &t
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteTokenCredit(ctx context.Context, tenantID, subjectID, creditID, actor string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `
+		DELETE FROM token_credits
+		WHERE tenant_id = $1 AND subject_id = $2 AND credit_id = $3`,
+		tenantID, subjectID, creditID)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return fmt.Errorf("token credit not found")
+	}
+	if err := s.auditTx(ctx, tx, actor, "model_access.token_credit_delete", subjectID, map[string]any{
+		"credit_id": creditID,
+	}); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.invalidateQuotaCache()
+	return nil
+}
+
 // quotaAllowanceMax caps the allowance list size; entries are model ids.
 const quotaAllowanceMax = 50
 
@@ -301,6 +555,11 @@ type QuotaDecision struct {
 	LimitUSD          float64  `json:"limit_usd"`               // effective monthly limit
 	SpentUSD          float64  `json:"spent_usd"`
 	TokensUsed        int64    `json:"-"`
+	BaseTokens        int64    `json:"base_tokens,omitempty"`  // global, role, or per-person override before credits
+	RoleTokenBudget   int64    `json:"role_token_budget,omitempty"`
+	TokenCredit       int64    `json:"token_credit,omitempty"`
+	TokenSource       string   `json:"token_source,omitempty"` // user_override | role | default
+	TokenLimit        int64    `json:"token_limit,omitempty"`  // effective monthly token limit
 	// Subject is the canonical partner user UUID behind the requested
 	// login. It is used only for internal per-person state, never sent to
 	// the inference upstream.
@@ -380,20 +639,29 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	}
 
 	var userOv, defaultUSD float64
+	var userTokenOv, defaultTokens int64
 	err = s.db.QueryRowContext(ctx, `
-		SELECT pol.default_monthly_usd, pol.enforced,
+		SELECT pol.default_monthly_usd, pol.default_monthly_tokens, pol.enforced,
 			pol.allowed_over_limit_models,
 			COALESCE(ou.monthly_usd, -1),
+			COALESCE(tou.monthly_tokens, -1),
 			to_char(date_trunc('month', NOW()), 'YYYY-MM'),
 			date_trunc('month', NOW()) + interval '1 month'
-		FROM (SELECT default_monthly_usd, enforced, allowed_over_limit_models
+		FROM (SELECT default_monthly_usd, default_monthly_tokens, enforced, allowed_over_limit_models
 			FROM quota_policy WHERE id = true) pol
-		LEFT JOIN quota_overrides ou ON ou.scope = 'user' AND ou.principal = $1`,
+		LEFT JOIN quota_overrides ou ON ou.scope = 'user' AND ou.principal = $1
+		LEFT JOIN quota_token_overrides tou ON tou.scope = 'user' AND tou.principal = $1`,
 		username,
-	).Scan(&defaultUSD, &d.Enforced, pq.Array(&d.OverLimitModels),
-		&userOv, &d.Month, &d.MonthEnds)
+	).Scan(&defaultUSD, &defaultTokens, &d.Enforced, pq.Array(&d.OverLimitModels),
+		&userOv, &userTokenOv, &d.Month, &d.MonthEnds)
 	if err != nil {
 		return d, fmt.Errorf("quota policy lookup: %w", err)
+	}
+	if defaultTokens <= 0 {
+		defaultTokens = s.tokenQuota
+		if defaultTokens <= 0 {
+			defaultTokens = 10_000_000_000
+		}
 	}
 	// Zero-cost models are always allowed after the dollar cap: using them
 	// cannot increase spend. Add them to the post-cap allowlist so free and
@@ -408,6 +676,7 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	// A per-person permanent override replaces the role sum; temporary credits
 	// add on top. If no role has a budget, fall back to the global policy.
 	var roleBudget, creditUSD float64
+	var roleTokens, tokenCredit int64
 	tenantID, tenantErr := s.EnsureDefaultTenant(ctx)
 	if tenantErr != nil {
 		return d, fmt.Errorf("default tenant lookup: %w", tenantErr)
@@ -416,6 +685,9 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	switch {
 	case subjectErr == nil:
 		if roleBudget, creditUSD, err = s.GetRoleBudgetAndCreditsUSD(ctx, tenantID, subjectID); err != nil {
+			return d, err
+		}
+		if roleTokens, tokenCredit, err = s.GetRoleTokenBudgetAndCredits(ctx, tenantID, subjectID); err != nil {
 			return d, err
 		}
 	case errors.Is(subjectErr, ErrPartnerUserNotFound):
@@ -438,6 +710,23 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 		d.BudgetSource = "default"
 	}
 	d.LimitUSD = d.BaseUSD + creditUSD
+
+	// Token limit: absolute per-person cap. Permanent per-person override
+	// replaces the global/role base; temporary token credits add on top.
+	d.RoleTokenBudget = roleTokens
+	d.TokenCredit = tokenCredit
+	switch {
+	case userTokenOv >= 0:
+		d.BaseTokens = userTokenOv
+		d.TokenSource = "user_override"
+	case roleTokens > 0:
+		d.BaseTokens = roleTokens
+		d.TokenSource = "role"
+	default:
+		d.BaseTokens = defaultTokens
+		d.TokenSource = "default"
+	}
+	d.TokenLimit = d.BaseTokens + tokenCredit
 
 	if s.monthSpendEnabled.Load() {
 		err = s.db.QueryRowContext(ctx, `

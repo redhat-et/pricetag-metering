@@ -146,6 +146,7 @@ type createModelAccessRoleRequest struct {
 	IsDefault      bool     `json:"is_default"`
 	ReplaceDefault bool     `json:"replace_default"`
 	MonthlyUSD     float64  `json:"monthly_usd"`
+	MonthlyTokens  int64    `json:"monthly_tokens"`
 }
 
 type setModelAccessRoleModelsRequest struct {
@@ -179,11 +180,22 @@ type setRoleBudgetRequest struct {
 	MonthlyUSD float64 `json:"monthly_usd"`
 }
 
+type setRoleTokenBudgetRequest struct {
+	MonthlyTokens int64 `json:"monthly_tokens"`
+}
+
 type addQuotaCreditRequest struct {
 	AmountUSD float64    `json:"amount_usd"`
 	ExpiresAt *time.Time `json:"expires_at"`
 	Reason    string     `json:"reason"`
 	RequestID string     `json:"request_id"`
+}
+
+type addTokenCreditRequest struct {
+	AmountTokens int64      `json:"amount_tokens"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	Reason       string     `json:"reason"`
+	RequestID    string     `json:"request_id"`
 }
 
 type excludeDefaultRequest struct {
@@ -330,8 +342,8 @@ func (h *ModelAccessHandler) handleRoles(w http.ResponseWriter, r *http.Request,
 					return
 				}
 			}
-			role, err := h.store.CreateModelAccessRole(r.Context(), tenant, actor,
-				body.Name, body.Description, body.Models, body.IsDefault, body.MonthlyUSD)
+			role, err := h.store.CreateModelAccessRoleWithTokens(r.Context(), tenant, actor,
+				body.Name, body.Description, body.Models, body.IsDefault, body.MonthlyUSD, body.MonthlyTokens)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, storage.ErrModelAccessRoleNameExists) {
@@ -383,6 +395,26 @@ func (h *ModelAccessHandler) handleRoles(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		if err := h.store.SetModelAccessRoleBudget(r.Context(), tenant, roleID, actor, body.MonthlyUSD); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		role, err := h.store.GetModelAccessRole(r.Context(), tenant, roleID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, role)
+	case "token-budget":
+		if r.Method != http.MethodPut {
+			w.Header().Set("Allow", "PUT")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var body setRoleTokenBudgetRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		if err := h.store.SetModelAccessRoleTokenBudget(r.Context(), tenant, roleID, actor, body.MonthlyTokens); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -597,6 +629,118 @@ func (h *ModelAccessHandler) handleSubjects(w http.ResponseWriter, r *http.Reque
 		}
 		if len(rest) == 3 && r.Method == http.MethodDelete {
 			if err := h.store.DeleteQuotaCredit(r.Context(), tenant, subjectID, rest[2], actor); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	case "token-credits":
+		if len(rest) == 2 && r.Method == http.MethodGet {
+			credits, err := h.store.ListTokenCredits(r.Context(), tenant, subjectID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if credits == nil {
+				credits = []storage.TokenCredit{}
+			}
+			writeJSON(w, credits)
+			return
+		}
+		if len(rest) == 2 && r.Method == http.MethodPost {
+			var body addTokenCreditRequest
+			if !decodeJSON(w, r, &body) {
+				return
+			}
+			credit, err := h.store.AddTokenCredit(r.Context(), tenant, subjectID, body.AmountTokens, body.ExpiresAt, body.Reason, actor, body.RequestID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			writeJSONStatus(w, http.StatusCreated, credit)
+			return
+		}
+		if len(rest) == 3 && r.Method == http.MethodDelete {
+			if err := h.store.DeleteTokenCredit(r.Context(), tenant, subjectID, rest[2], actor); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	case "token-override":
+		// Permanent per-person token limit (absolute). Kept for API completeness
+		// but the primary UI path is token-credits (with optional expiry).
+		if len(rest) == 2 && r.Method == http.MethodGet {
+			logins, _ := h.store.PartnerLoginsForSubjectID(r.Context(), subjectID)
+			username := ""
+			if len(logins) > 0 {
+				username = logins[0]
+			} else if sub, err := h.store.GetPolicySubjectByID(r.Context(), tenant, subjectID); err == nil && sub.Email != "" {
+				username = sub.Email
+			}
+			if username == "" {
+				http.Error(w, "cannot resolve username", http.StatusBadRequest)
+				return
+			}
+			p, err := h.store.GetTokenOverride(r.Context(), username)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			writeJSON(w, p)
+			return
+		}
+		if len(rest) == 2 && r.Method == http.MethodPut {
+			var body struct {
+				MonthlyTokens int64 `json:"monthly_tokens"`
+			}
+			if !decodeJSON(w, r, &body) {
+				return
+			}
+			logins, _ := h.store.PartnerLoginsForSubjectID(r.Context(), subjectID)
+			username := ""
+			if len(logins) > 0 {
+				username = logins[0]
+			} else if sub, err := h.store.GetPolicySubjectByID(r.Context(), tenant, subjectID); err == nil && sub.Email != "" {
+				username = sub.Email
+			}
+			if username == "" {
+				http.Error(w, "cannot resolve username for token override", http.StatusBadRequest)
+				return
+			}
+			if body.MonthlyTokens <= 0 {
+				if err := h.store.DeleteTokenOverride(r.Context(), actor, username); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			if err := h.store.UpsertTokenOverride(r.Context(), actor, username, body.MonthlyTokens); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			policy, err := h.store.GetTokenOverride(r.Context(), username)
+			if err != nil {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			writeJSON(w, policy)
+			return
+		}
+		if len(rest) == 2 && r.Method == http.MethodDelete {
+			logins, _ := h.store.PartnerLoginsForSubjectID(r.Context(), subjectID)
+			username := subjectID
+			if len(logins) > 0 {
+				username = logins[0]
+			} else if sub, err := h.store.GetPolicySubjectByID(r.Context(), tenant, subjectID); err == nil && sub.Email != "" {
+				username = sub.Email
+			}
+			if err := h.store.DeleteTokenOverride(r.Context(), actor, username); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
