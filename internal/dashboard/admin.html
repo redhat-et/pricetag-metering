@@ -839,7 +839,7 @@ td .tag{white-space:nowrap}
 <div class="tab-panel" id="tab-safety-net">
   <div class="card">
     <div class="card-hdr"><div><span class="card-title">Monthly Safety Net</span><span class="card-count" id="safety-net-meta"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadSafetyNet()">Refresh</button></div>
-    <div class="ts" style="margin-bottom:14px">Fallback limits used only when a person has <b>no role</b> providing a budget/tokens — e.g. no Default role budget, excluded from Default, or an unlinked login. People with any role limit use that role’s value (budgets add, highest token wins); use per-person credits to add extra. Token <code>0</code> = unlimited (no gate, as with <code>MONTHLY_TOKEN_QUOTA=0</code>); Roles override this global.</div>
+    <div class="ts" style="margin-bottom:14px">Global defaults. If a person belongs to any role with a budget or token limit, the role wins — budgets add up, highest token limit wins. Safety Net applies only to people with <b>no role</b> (unlinked login or excluded from Default). To raise one person, add a per-person credit. Token limit <code>0</code> = unlimited.</div>
     <div id="safety-net-body"><div class="loading"><div class="spinner"></div>Loading safety-net policy...</div></div>
   </div>
 </div>
@@ -2012,7 +2012,7 @@ function renderSafetyNet() {
   var opts = safetyNetModels.filter(function(m) { return draft.indexOf(m) < 0; }).map(function(m) { return '<option value="' + esc(m) + '">'; }).join('');
   document.getElementById('safety-net-meta').textContent = p.enforced ? 'ENFORCING' : 'tracking only';
   document.getElementById('safety-net-body').innerHTML =
-    '<div class="warning" style="margin-bottom:14px"><span class="icon">!</span><div>Enforcement uses month-to-date USD spend and token count. Bypass matching is exact and case-sensitive; the gateway must provide the request model for it to work.</div></div>' +
+    '<div class="warning" style="margin-bottom:14px"><span class="icon">!</span><div>Checked on every request against month-to-date spend and tokens. Bypass list uses exact model IDs — the gateway must send the request model.</div></div>' +
     '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;padding:4px 0 14px">' +
       '<div><label class="field-label">Monthly limit (USD)</label><input type="number" id="safety-limit" min="1" step="1" value="' + esc(p.default_monthly_usd) + '" style="width:140px"></div>' +
       '<div><label class="field-label">Monthly token limit (0 = unlimited)</label><input type="number" id="safety-token-limit" min="0" step="1000000" value="' + esc(p.default_monthly_tokens != null ? p.default_monthly_tokens : 10000000000) + '" style="width:180px"><div class="ts">' + (p.default_monthly_tokens ? fmtTokens(p.default_monthly_tokens) + ' tokens' : 'unlimited — token gate off') + '</div></div>' +
