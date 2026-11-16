@@ -73,10 +73,28 @@ func TestTopUsersRankShowsCountryCostCenterAndDemoPrivacy(t *testing.T) {
 		// The user pie (and its tooltip) is gone: renderUserCostChart renders
 		// only the ranked legend, with no unreachable chart code after it.
 		"renderUserRank(data,userPieMetric);\n}",
+		"<div class=\"ur-grid\">",
+		"grid-auto-flow:column",
+		"grid-template-rows:repeat(10,minmax(0,auto))",
+		"border-left:1px dotted",
 	} {
 		if !bytes.Contains(data, []byte(want)) {
 			t.Errorf("dashboard.html no longer contains %q", want)
 		}
+	}
+}
+
+func TestTopUsersRankUsesColumnMajorOrderingOnNarrowScreens(t *testing.T) {
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(data)
+	if !strings.Contains(page, ".user-rank .ur-grid{grid-auto-flow:row;grid-template-columns:1fr;grid-template-rows:none}") {
+		t.Error("top-user ranking should collapse to one row-major column on narrow screens")
+	}
+	if !strings.Contains(page, ".user-rank .ur-grid::before,.user-rank .ur-grid::after{display:none}") {
+		t.Error("column separators should be hidden on narrow screens")
 	}
 }
 
