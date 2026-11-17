@@ -551,10 +551,10 @@ func main() {
 		// every lookup, so a hit still re-checks the caller's current subtree
 		// and role. Keep this wrapping in main: it was silently dropped in a
 		// rebase once, and a handler-level test cannot catch that.
+		// /org/usage returns {rows, totals}: blocked people are hidden from
+		// the rows but their spend stays in the totals, computed in the same
+		// pass so the heaviest manager query runs once per view.
 		mux.HandleFunc("/api/v1/org/usage", managerAuth(orgHandler.Cached(orgHandler.HandleOrgUsage)))
-		// Inclusive subtree totals: blocked people are hidden from the usage
-		// rows but their spend stays in these numbers.
-		mux.HandleFunc("/api/v1/org/totals", managerAuth(orgHandler.Cached(orgHandler.HandleOrgTotals)))
 		mux.HandleFunc("/api/v1/org/charts", managerAuth(orgHandler.Cached(orgHandler.HandleOrgCharts)))
 		mux.HandleFunc("/api/v1/org/person", managerAuth(orgHandler.HandleOrgPerson))
 	} else {

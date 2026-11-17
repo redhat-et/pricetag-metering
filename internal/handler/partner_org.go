@@ -169,39 +169,6 @@ func (h *PartnerOrgHandler) scopeRoot(w http.ResponseWriter, r *http.Request) (s
 	return root, true
 }
 
-// HandleOrgUsage returns per-person usage rollups for the manager table.
-// GET /api/v1/org/usage?range=&root=
-func (h *PartnerOrgHandler) HandleOrgUsage(w http.ResponseWriter, r *http.Request) {
-	root, ok := h.resolvedScope(w, r)
-	if !ok {
-		return
-	}
-	since, until := parseTimeWindow(r)
-	rows, err := h.store.GetPartnerOrgUsage(r.Context(), root, since, until)
-	if err != nil {
-		slog.Error("org usage query failed", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	if rows == nil {
-		rows = []storage.OrgUsageRow{}
-	}
-	// Dashboard country policy: managers do not see people from blocked
-	// regions in their tables. Their usage still counts in the totals
-	// (HandleOrgTotals) and in the charts. Super-admins see everyone: they
-	// own the policy and need the full directory.
-	if !IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r) {
-		visible := make([]storage.OrgUsageRow, 0, len(rows))
-		for _, row := range rows {
-			if !row.Blocked {
-				visible = append(visible, row)
-			}
-		}
-		rows = visible
-	}
-	writeJSON(w, rows)
-}
-
 // orgTotalsResponse is the server-side total for a manager's subtree. It is
 // computed over every person in scope, including the rows the country policy
 // hides from the table, so the page's totals never shrink when a region is
@@ -218,8 +185,19 @@ type orgTotalsResponse struct {
 	OverLimit     int     `json:"over_limit"`
 }
 
-// HandleOrgTotals returns inclusive subtree totals for the manager page.
-func (h *PartnerOrgHandler) HandleOrgTotals(w http.ResponseWriter, r *http.Request) {
+// orgUsageResponse is one manager read: the rows for the table plus the
+// inclusive subtree totals. They ship together because both need the same
+// GetPartnerOrgUsage result — splitting them into two endpoints ran the most
+// expensive manager query twice per page load.
+type orgUsageResponse struct {
+	Rows   []storage.OrgUsageRow `json:"rows"`
+	Totals orgTotalsResponse     `json:"totals"`
+}
+
+// HandleOrgUsage returns per-person usage rollups for the manager table and
+// the inclusive subtree totals in one pass.
+// GET /api/v1/org/usage?range=&root=
+func (h *PartnerOrgHandler) HandleOrgUsage(w http.ResponseWriter, r *http.Request) {
 	root, ok := h.resolvedScope(w, r)
 	if !ok {
 		return
@@ -227,10 +205,34 @@ func (h *PartnerOrgHandler) HandleOrgTotals(w http.ResponseWriter, r *http.Reque
 	since, until := parseTimeWindow(r)
 	rows, err := h.store.GetPartnerOrgUsage(r.Context(), root, since, until)
 	if err != nil {
-		slog.Error("org totals query failed", "error", err)
+		slog.Error("org usage query failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	if rows == nil {
+		rows = []storage.OrgUsageRow{}
+	}
+	superAdmin := IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r)
+	// Totals cover the whole subtree, including blocked people.
+	totals := orgTotals(rows, superAdmin)
+	// Dashboard country policy: managers do not see people from blocked
+	// regions in their tables; their usage stays in the totals and charts.
+	// Super-admins see everyone: they own the policy and need the directory.
+	visible := rows
+	if !superAdmin {
+		visible = make([]storage.OrgUsageRow, 0, len(rows))
+		for _, row := range rows {
+			if !row.Blocked {
+				visible = append(visible, row)
+			}
+		}
+	}
+	writeJSON(w, orgUsageResponse{Rows: visible, Totals: totals})
+}
+
+// orgTotals sums the full (unfiltered) row set. An empty result must not
+// marshal as null, so Rows is normalised by the caller.
+func orgTotals(rows []storage.OrgUsageRow, superAdmin bool) orgTotalsResponse {
 	out := orgTotalsResponse{People: len(rows)}
 	for _, row := range rows {
 		if row.Username != "" {
@@ -248,7 +250,7 @@ func (h *PartnerOrgHandler) HandleOrgTotals(w http.ResponseWriter, r *http.Reque
 			out.BlockedPeople++
 		}
 	}
-	if IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r) {
+	if superAdmin {
 		// Super-admins see the blocked rows too, so nothing is hidden from
 		// them and the manager-page note would be misleading.
 		out.BlockedPeople = 0
@@ -256,7 +258,7 @@ func (h *PartnerOrgHandler) HandleOrgTotals(w http.ResponseWriter, r *http.Reque
 	out.CostUSD = math.Round(out.CostUSD*100) / 100
 	out.QuotaUSD = math.Round(out.QuotaUSD*100) / 100
 	out.QuotaSpentUSD = math.Round(out.QuotaSpentUSD*100) / 100
-	writeJSON(w, out)
+	return out
 }
 
 // orgChartsResponse bundles the analytics data the manager charts need in a

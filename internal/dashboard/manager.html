@@ -702,13 +702,13 @@ function setupTeamCombobox(){
 async function load(){
   try{
     const qs='range='+range+(drillSlug?'&root='+encodeURIComponent(drillSlug):'');
-    const [data,totals]=await Promise.all([
-      fetch('/api/v1/org/usage?'+qs).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j;}),
-      // Totals are computed over the whole subtree, including people the
-      // dashboard country policy hides from the table below.
-      fetch('/api/v1/org/totals?'+qs).then(r=>r.ok?r.json():null).catch(()=>null)
-    ]);
-    if(!Array.isArray(data))throw new Error(data.error||'usage failed');
+    // One request: rows for the table plus the inclusive subtree totals,
+    // computed server-side in the same query. Older builds return a bare
+    // array — fall back to rows-only so a cached page still works.
+    const bundle=await fetch('/api/v1/org/usage?'+qs).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j;});
+    const data=Array.isArray(bundle)?bundle:bundle.rows;
+    const totals=Array.isArray(bundle)?null:(bundle.totals||null);
+    if(!Array.isArray(data))throw new Error(bundle.error||'usage failed');
     rows=data;
     if(!drillSlug){rows0=data;drillRoot=scopeRootSlug;buildFilter();}
     renderRows();
