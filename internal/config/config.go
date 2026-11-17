@@ -644,16 +644,14 @@ func envFloat(key string, fallback float64) float64 {
 	return v
 }
 
-// envFloatAllowNonPositive is envFloat without the sign guard: any value that
-// parses is returned verbatim, including 0 and negatives, and the fallback
-// applies only when the key is unset or holds something that is not a float.
-//
-// Use it only where <= 0 is a documented value rather than a mistake. Today
-// that is MONTHLY_TOKEN_QUOTA alone, where non-positive means "unlimited": the
-// downstream computeUsageStats returns HasAccess:true for tokenQuota <= 0.
+// envFloatAllowNonPositive is envFloat without the positivity guard but
+// still rejects negatives for safety: only 0 means "unlimited" (no gate); a
+// negative is treated as unset/typo → fallback. Today only
+// MONTHLY_TOKEN_QUOTA uses this: 0 disables the token gate via
+// computeUsageStats(…, <=0 → HasAccess:true).
 func envFloatAllowNonPositive(key string, fallback float64) float64 {
 	v, ok := parseEnvFloat(key)
-	if !ok {
+	if !ok || v < 0 {
 		return fallback
 	}
 	return v

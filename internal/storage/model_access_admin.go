@@ -796,12 +796,6 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 	return out, rows.Err()
 }
 
-// GetRoleBudgetAndCreditsUSD resolves the additive role budget and the active
-// temporary credits in one round trip. The default role contributes only to
-// partner users and only when the subject is not excluded; a zero budget means
-// "no role budget configured" and quota falls back to the global default.
-// quotaDecision runs on the entitlement hot path, so this avoids a second
-// database call per decision.
 func (s *Store) GetPolicySubjectByID(ctx context.Context, tenantID, subjectID string) (PolicySubjectRecord, error) {
 	var r PolicySubjectRecord
 	err := s.db.QueryRowContext(ctx, `
@@ -827,6 +821,12 @@ func (s *Store) GetPolicySubjectByID(ctx context.Context, tenantID, subjectID st
 	return r, err
 }
 
+// GetRoleBudgetAndCreditsUSD resolves the additive role budget and the active
+// temporary credits in one round trip. The default role contributes only to
+// partner users and only when the subject is not excluded; a zero budget means
+// "no role budget configured" and quota falls back to the global default.
+// quotaDecision runs on the entitlement hot path, so this avoids a second
+// database call per decision.
 func (s *Store) GetRoleBudgetAndCreditsUSD(ctx context.Context, tenantID, subjectID string) (float64, float64, error) {
 	var budget, credits float64
 	if err := s.db.QueryRowContext(ctx, `

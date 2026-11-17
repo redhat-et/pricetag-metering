@@ -86,11 +86,9 @@ var quotaMigrations = []string{
 	// RecordQuotaDenial). The earlier aggregated quota_denials counter table
 	// is retired: fresh installs never create it, existing databases drop it.
 	`DROP TABLE IF EXISTS quota_denials`,
-	// Token quota: the global per-user monthly token allowance. The DB value
-	// is authoritative; the process config MonthlyTokenQuota seeds it on first
-	// migration and provides the fallback for tests without a DB.
+	// Token quota: the global per-user monthly token allowance. DB value is
+	// authoritative (fresh DB defaults to 10B); 0 = unlimited via Safety Net.
 	`ALTER TABLE quota_policy ADD COLUMN IF NOT EXISTS default_monthly_tokens BIGINT NOT NULL DEFAULT 10000000000`,
-	`UPDATE quota_policy SET default_monthly_tokens = 10000000000 WHERE default_monthly_tokens = 0`,
 	// Per-person permanent token override: absolute cap that replaces the
 	// global/role token base for one person.
 	`CREATE TABLE IF NOT EXISTS quota_token_overrides (
@@ -557,7 +555,7 @@ type QuotaDecision struct {
 	LimitUSD          float64  `json:"limit_usd"`               // effective monthly limit
 	SpentUSD          float64  `json:"spent_usd"`
 	TokensUsed        int64    `json:"-"`
-	BaseTokens        int64    `json:"base_tokens,omitempty"`  // global, role, or per-person override before credits
+	BaseTokens        int64    `json:"base_tokens,omitempty"` // global, role, or per-person override before credits
 	RoleTokenBudget   int64    `json:"role_token_budget,omitempty"`
 	TokenCredit       int64    `json:"token_credit,omitempty"`
 	TokenSource       string   `json:"token_source,omitempty"` // user_override | role | default
@@ -716,6 +714,8 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 
 	// Token limit: absolute per-person cap. Permanent per-person override
 	// replaces the global/role base; temporary token credits add on top.
+	// 0 = unlimited (MONTHLY_TOKEN_QUOTA=0 or Safety Net 0) — ignore credits
+	// rather than capping an unlimited user at credit amount.
 	d.RoleTokenBudget = roleTokens
 	d.TokenCredit = tokenCredit
 	switch {
@@ -729,7 +729,11 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 		d.BaseTokens = defaultTokens
 		d.TokenSource = "default"
 	}
-	d.TokenLimit = d.BaseTokens + tokenCredit
+	if d.BaseTokens <= 0 {
+		d.TokenLimit = 0
+	} else {
+		d.TokenLimit = d.BaseTokens + tokenCredit
+	}
 
 	if s.monthSpendEnabled.Load() {
 		err = s.db.QueryRowContext(ctx, `

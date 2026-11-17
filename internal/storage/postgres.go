@@ -544,10 +544,8 @@ func (s *Store) getMonthlyUsage(ctx context.Context, username, model string, exe
 	if err != nil {
 		return UsageStats{}, err
 	}
-	tokenQuota := s.tokenQuota
-	if decision.TokenLimit > 0 {
-		tokenQuota = decision.TokenLimit
-	}
+	// DB-backed per-person token limit; 0 = unlimited (Safety Net 0 or MONTHLY_TOKEN_QUOTA=0).
+	tokenQuota := decision.TokenLimit
 	stats := computeUsageStats(decision.TokensUsed, tokenQuota)
 	stats.TokenLimit = decision.TokenLimit
 	stats.TokenUsed = decision.TokensUsed

@@ -343,10 +343,17 @@ func TestValidateRejectsInvalidModelAccessEnforcement(t *testing.T) {
 // budget. It is loaded through envFloatAllowNonPositive for that reason; the
 // positivity guard in envFloat stays for every other float setting.
 func TestMonthlyTokenQuotaNonPositiveDisablesGate(t *testing.T) {
-	for _, raw := range []string{"0", "-1", "-0.5", "0.0"} {
+	for _, raw := range []string{"0", "0.0"} {
 		t.Setenv("MONTHLY_TOKEN_QUOTA", raw)
-		if got := Load().MonthlyTokenQuota; got > 0 {
-			t.Fatalf("MONTHLY_TOKEN_QUOTA=%q loaded as %v, want <= 0 (unlimited)", raw, got)
+		if got := Load().MonthlyTokenQuota; got != 0 {
+			t.Fatalf("MONTHLY_TOKEN_QUOTA=%q loaded as %v, want 0 (unlimited)", raw, got)
+		}
+	}
+	// Negatives are rejected for safety (typo shouldn't lift net) → fallback.
+	for _, raw := range []string{"-1", "-0.5"} {
+		t.Setenv("MONTHLY_TOKEN_QUOTA", raw)
+		if got := Load().MonthlyTokenQuota; got != DefaultMonthlyTokenQuota {
+			t.Fatalf("MONTHLY_TOKEN_QUOTA=%q loaded as %v, want default %v", raw, got, DefaultMonthlyTokenQuota)
 		}
 	}
 
@@ -401,15 +408,14 @@ func TestEnvFloatRejectsNonPositive(t *testing.T) {
 		t.Errorf("envFloat(unset) = %v, want fallback %v", got, fallback)
 	}
 
-	// The same inputs through the non-positive-tolerant helper: everything that
-	// parses survives, and only unset/unparsable falls back.
+	// Only 0 is special via this helper; negatives fall back (safety net).
 	for _, c := range []struct {
 		raw  string
 		want float64
 	}{
 		{"0.5", 0.5},
 		{"0", 0},
-		{"-1", -1},
+		{"-1", fallback},
 		{"", fallback},
 		{"abc", fallback},
 		{" 0.5 ", fallback},
