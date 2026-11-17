@@ -351,6 +351,10 @@ func (s *Store) SetModelAccessRoleTokenBudget(ctx context.Context, tenantID, rol
 }
 
 func (s *Store) GetRoleTokenBudgetAndCredits(ctx context.Context, tenantID, subjectID string) (int64, int64, error) {
+	// For absolute token caps, include the default role even when an
+	// explicit assignment exists: otherwise a user assigned to a role with
+	// monthly_tokens unset would silently lose the default cap and fall back
+	// to the global 10B (escalation).
 	var budget, credits int64
 	if err := s.db.QueryRowContext(ctx, `
 		WITH assigned AS (
@@ -365,11 +369,6 @@ func (s *Store) GetRoleTokenBudgetAndCredits(ctx context.Context, tenantID, subj
 			    SELECT 1 FROM model_access_default_exclusions e
 			    WHERE e.tenant_id = $1 AND e.subject_id = $2
 			      AND (e.expires_at IS NULL OR e.expires_at > NOW())
-			  )
-			  AND NOT EXISTS (
-			    SELECT 1 FROM model_access_role_assignments a
-			    WHERE a.tenant_id = r.tenant_id AND a.role_id = r.role_id
-			      AND a.subject_id = $2
 			  )
 			UNION ALL
 			SELECT r.monthly_tokens
