@@ -77,11 +77,11 @@ func TestDashboardCountryPolicyLifecycle(t *testing.T) {
 		frLogin = "fr-user@example.com"
 		usLogin = "us-user@example.com"
 	)
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO partner_users (user_id, tags) VALUES ($1, $2)`,
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO partner_users (user_id, tags, created_by, updated_by) VALUES ($1, $2, 'policy-test', 'policy-test')`,
 		frUser, `{"email":"fr-user@example.com","country":"fr","first_name":"Fr"}`); err != nil {
 		t.Fatalf("insert FR user: %v", err)
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO partner_users (user_id, tags) VALUES ($1, $2)`,
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO partner_users (user_id, tags, created_by, updated_by) VALUES ($1, $2, 'policy-test', 'policy-test')`,
 		usUser, `{"email":"us-user@example.com","country":"US","first_name":"Us"}`); err != nil {
 		t.Fatalf("insert US user: %v", err)
 	}
