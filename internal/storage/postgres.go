@@ -383,6 +383,8 @@ func (s *Store) PoolStats() sql.DBStats {
 	return s.db.Stats()
 }
 
+func (s *Store) DB() *sql.DB { return s.db }
+
 type TeamUserUsage struct {
 	Username         string       `json:"username"`
 	Requests         int          `json:"requests"`
