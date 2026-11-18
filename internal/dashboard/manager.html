@@ -401,6 +401,14 @@ td.num{text-align:right}
 // team KPI tiles, never per-request rows, so sub-cent rounding is irrelevant.
 const fmt$=v=>'$'+Number(v||0).toLocaleString(undefined,{maximumFractionDigits:2});
 const fmtTok=v=>{v=Number(v||0);if(v>=1e9)return (v/1e9).toFixed(2)+'B';if(v>=1e6)return (v/1e6).toFixed(2)+'M';if(v>=1e3)return (v/1e3).toFixed(1)+'K';return ''+v};
+// Shared by the self view: throw on a non-2xx response (so the caller can
+// surface an error row) and parse the body once. Manager charts keep their
+// own inline fetch because they tolerate a failed refresh.
+async function chartJSON(url){
+  const r=await fetch(url,{cache:'no-store'});
+  if(!r.ok)throw new Error((await r.text()).trim().slice(0,200)||('HTTP '+r.status));
+  return r.json();
+}
 let range='mtd', rows=[], tlChart=null, sortKey='CostUSD', sortDir=-1, me={}, drillSlug='';
 let tlMetric='tokens'; // 'tokens' | 'cost' — the Daily model usage toggle
 
@@ -846,8 +854,7 @@ async function loadSelfCharts(overview){
     const panel=document.getElementById('tlPanel'); if(panel)panel.style.display='none';
     renderSavedKPI(ov);
     renderPies();
-    document.getElementById('chartsError').hidden=true;
-  }catch(e){chartFailure(e);}
+  }catch(e){/* charts stay as-is; the table reports real failures */}
 }
 
 function personName(username){

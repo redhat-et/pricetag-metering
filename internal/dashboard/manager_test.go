@@ -59,6 +59,18 @@ func TestManagerShowsTeamSpendKPI(t *testing.T) {
 	if bytes.Contains(data, []byte("/api/v1/dashboard/users")) {
 		t.Error("self view must not use the admin-only org-wide /api/v1/dashboard/users")
 	}
+	// The self path relies on chartJSON, which must be defined on this page
+	// (node --check only validates syntax, not undefined references).
+	if !bytes.Contains(data, []byte("async function chartJSON(url){")) {
+		t.Error("manager.html must define chartJSON for the self view")
+	}
+	// #chartsError and chartFailure belong to the standalone dashboard page;
+	// referencing them here throws at runtime.
+	for _, unwanted := range []string{"chartsError", "chartFailure("} {
+		if bytes.Contains(data, []byte(unwanted)) {
+			t.Errorf("manager.html must not reference %q", unwanted)
+		}
+	}
 }
 
 func TestManagerDemoModeHidesActualSpend(t *testing.T) {
