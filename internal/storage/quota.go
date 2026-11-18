@@ -139,7 +139,7 @@ func (s *Store) GetQuotaPolicy(ctx context.Context) (QuotaPolicy, error) {
 	).Scan(&p.DefaultMonthlyUSD, &p.DefaultMonthlyTokens, &p.Enforced, pq.Array(&p.AllowedOverLimitModels),
 		&p.UpdatedBy, &p.UpdatedAt)
 	// 0 from DB means "unlimited" (admin set to disable gate); keep it.
-	// Only fall back when column is missing/negative (legacy).
+	// Only fall back for negative values (legacy rows before guard).
 	if err == nil && p.DefaultMonthlyTokens < 0 {
 		p.DefaultMonthlyTokens = s.tokenQuota
 		if p.DefaultMonthlyTokens < 0 {

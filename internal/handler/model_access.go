@@ -619,6 +619,10 @@ func (h *ModelAccessHandler) handleSubjects(w http.ResponseWriter, r *http.Reque
 			if !decodeJSON(w, r, &body) {
 				return
 			}
+			if body.ExpiresAt != nil && body.ExpiresAt.Before(time.Now()) {
+				http.Error(w, "expires_at must be in the future", http.StatusBadRequest)
+				return
+			}
 			credit, err := h.store.AddQuotaCredit(r.Context(), tenant, subjectID, body.AmountUSD, body.ExpiresAt, body.Reason, actor, body.RequestID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
@@ -652,6 +656,10 @@ func (h *ModelAccessHandler) handleSubjects(w http.ResponseWriter, r *http.Reque
 		if len(rest) == 2 && r.Method == http.MethodPost {
 			var body addTokenCreditRequest
 			if !decodeJSON(w, r, &body) {
+				return
+			}
+			if body.ExpiresAt != nil && body.ExpiresAt.Before(time.Now()) {
+				http.Error(w, "expires_at must be in the future", http.StatusBadRequest)
 				return
 			}
 			credit, err := h.store.AddTokenCredit(r.Context(), tenant, subjectID, body.AmountTokens, body.ExpiresAt, body.Reason, actor, body.RequestID)
@@ -734,11 +742,15 @@ func (h *ModelAccessHandler) handleSubjects(w http.ResponseWriter, r *http.Reque
 		}
 		if len(rest) == 2 && r.Method == http.MethodDelete {
 			logins, _ := h.store.PartnerLoginsForSubjectID(r.Context(), subjectID)
-			username := subjectID
+			username := ""
 			if len(logins) > 0 {
 				username = logins[0]
 			} else if sub, err := h.store.GetPolicySubjectByID(r.Context(), tenant, subjectID); err == nil && sub.Email != "" {
 				username = sub.Email
+			}
+			if username == "" {
+				http.Error(w, "cannot resolve username", http.StatusBadRequest)
+				return
 			}
 			if err := h.store.DeleteTokenOverride(r.Context(), actor, username); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
