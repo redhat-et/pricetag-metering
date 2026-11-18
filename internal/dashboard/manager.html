@@ -35,7 +35,7 @@ a{color:inherit;text-decoration:none}
 .demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private .person-name,.demo-private .det-name,.demo-private .det-who{filter:blur(3px);user-select:none}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
 .demo-badge{display:none;align-items:center;gap:5px;border:1px solid #e8a83066;background:#e8a8301f;color:#e8a830;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}.demo-private .demo-badge{display:inline-flex}
 /* Demo mode is tokens-only: actual spend disappears, savings stay visible. */
-.demo-private .demo-cost{display:none!important}.demo-private #kpiBudgetTile,.demo-private #approvals,.demo-private #apprBanner{display:none!important}
+.demo-private .demo-cost{display:none!important}.demo-private #kpiSpendTile,.demo-private #kpiBudgetTile,.demo-private #approvals,.demo-private #apprBanner{display:none!important}
 .ab-out{color:var(--warn);border:1px solid #2e3848;border-radius:8px;padding:6px 14px;font:600 12px/18px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-decoration:none}
 .ab-out:hover{border-color:var(--warn)}
 @media(max-width:640px){.appbar{top:8px;padding:10px 14px;gap:10px}}
@@ -242,6 +242,7 @@ td.num{text-align:right}
   <p class="sub" id="scopeSub">Loading…</p>
   <div id="selfNote"></div>
   <div class="kpis">
+    <div class="kpi" id="kpiSpendTile"><div class="l" id="kSpendL">Team spend</div><div class="v" id="kSpend">–</div><div class="s" id="kSpendS"></div></div>
     <div class="kpi" id="kpiBudgetTile"><div class="l" id="kBudgetL">Team budget</div><div class="v" id="kBudget">–</div><div class="kbar"><i id="kBudgetBar"></i></div><div class="s" id="kBudgetS"></div></div>
     <div class="kpi"><div class="l">Saved · Hosted Models</div><div class="v saved-pos" id="kSaved">–</div><div class="s">vs <select class="refsel" id="refSel" onchange="savingsRef=this.value;loadCharts();"></select><span id="kSavedNote"></span></div></div>
     <div class="kpi" id="kpiMembers"><div class="l">Members</div><div class="v" id="kPeople">–</div><div class="s" id="kPeopleS"></div></div>
@@ -731,6 +732,14 @@ async function load(){
       : people+' people in your tree · '+keyed+' with a gateway key · their usage and yours, this window';
     // Team budget: both sums cover the calendar month (quota_spent_usd is
     // deliberately month-to-date on the server, whatever range is shown).
+    // Team spend: total cost/tokens/requests for the window, including the
+    // people the dashboard country policy hides from the table.
+    const spendCost=totals&&Number.isFinite(totals.cost_usd)?totals.cost_usd:rows.reduce((s,r)=>s+(r.cost_usd||0),0);
+    const spendTokens=totals&&Number.isFinite(totals.total_tokens)?totals.total_tokens:rows.reduce((s,r)=>s+(r.total_tokens||0),0);
+    const spendReq=totals&&Number.isFinite(totals.requests)?totals.requests:rows.reduce((s,r)=>s+(r.requests||0),0);
+    document.getElementById('kSpend').textContent=fmt$(spendCost);
+    document.getElementById('kSpendS').textContent=fmtTok(spendTokens)+' tokens · '+spendReq+' requests this window';
+    document.getElementById('kSpendL').textContent=personView?'Person spend':(adminScope&&!drillSlug?'Org spend':'Team spend');
     const lim=totals&&Number.isFinite(totals.quota_usd)?totals.quota_usd:rows.reduce((s,r)=>s+(r.quota_usd||0),0);
     const mtd=totals&&Number.isFinite(totals.quota_spent_usd)?totals.quota_spent_usd:rows.reduce((s,r)=>s+(r.quota_spent_usd||0),0);
     const over=totals&&Number.isFinite(totals.over_limit)?totals.over_limit:rows.filter(r=>r.over_limit).length;
@@ -1141,6 +1150,7 @@ async function boot(){
     document.getElementById('kpiMembers').style.display='none';
     // No team, but a budget of one: paint the tile from the caller's own quota.
     document.getElementById('kBudgetL').textContent='My budget';
+    document.getElementById('kSpendL').textContent='My spend';
     if(me.quota)setKBudget(me.quota.spent_usd,me.quota.limit_usd,me.quota.spent_usd>=me.quota.limit_usd);
   } else if(sc.scope==='manager'){
     scopeRootSlug=sc.personSlug||'';
@@ -1155,6 +1165,7 @@ async function boot(){
     document.getElementById('scopeTitle').textContent='Org view';
     document.getElementById('scopeSub').textContent='Super admin — everyone in the organisation, one table. Filter to any team or person above.';
     document.getElementById('kBudgetL').textContent='Org budget';
+    document.getElementById('kSpendL').textContent='Org spend';
   }
   loadInbox();
   if(sc.scope!=='self')load();
@@ -1244,6 +1255,12 @@ function rejectReq(id){
 async function loadSelf(){
   const users=await (await fetch('/api/v1/dashboard/users?range='+range)).json();
   rows=users.map(u=>({full_name:u.display_name||u.username,cost_usd:u.cost_usd,total_tokens:u.total_tokens,requests:u.requests,last_used:null,is_manager:false,no_identity:!u.requests}));
+  const spendCost=rows.reduce((s,r)=>s+(r.cost_usd||0),0);
+  const spendTokens=rows.reduce((s,r)=>s+(r.total_tokens||0),0);
+  const spendReq=rows.reduce((s,r)=>s+(r.requests||0),0);
+  document.getElementById('kSpend').textContent=fmt$(spendCost);
+  document.getElementById('kSpendS').textContent=fmtTok(spendTokens)+' tokens · '+spendReq+' requests this window';
+  document.getElementById('kSpendL').textContent='My spend';
   renderRows();
   loadSelfCharts();
 }

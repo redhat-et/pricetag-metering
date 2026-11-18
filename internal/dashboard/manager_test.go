@@ -30,6 +30,29 @@ func TestManagerPickerReviewGuards(t *testing.T) {
 	}
 }
 
+// The team KPI tiles must show spend for the selected window, including the
+// people the dashboard country policy hides from the table.
+func TestManagerShowsTeamSpendKPI(t *testing.T) {
+	data, err := FS.ReadFile("manager.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`id="kpiSpendTile"`,
+		`id="kSpendL">Team spend`,
+		`id="kSpend"`,
+		`document.getElementById('kSpend').textContent=fmt$(spendCost);`,
+		`tokens · '+spendReq+' requests this window'`,
+		`personView?'Person spend':(adminScope&&!drillSlug?'Org spend':'Team spend')`,
+		`document.getElementById('kSpendL').textContent='My spend';`,
+		`.demo-private #kpiSpendTile,.demo-private #kpiBudgetTile`,
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("manager.html no longer contains %q", want)
+		}
+	}
+}
+
 func TestManagerDemoModeHidesActualSpend(t *testing.T) {
 	data, err := FS.ReadFile("manager.html")
 	if err != nil {
