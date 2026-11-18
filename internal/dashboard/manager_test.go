@@ -46,10 +46,18 @@ func TestManagerShowsTeamSpendKPI(t *testing.T) {
 		`personView?'Person spend':(adminScope&&!drillSlug?'Org spend':'Team spend')`,
 		`document.getElementById('kSpendL').textContent='My spend';`,
 		`.demo-private #kpiSpendTile,.demo-private #kpiBudgetTile`,
+		// Self view must be self-pinned: /dashboard/* is admin-only and
+		// unscoped for admins, so it cannot source "My spend".
+		`/api/v1/me/usage/summary?range=`,
+		`/api/v1/me/usage/models?range=`,
+		`id="tlPanel"`,
 	} {
 		if !bytes.Contains(data, []byte(want)) {
 			t.Errorf("manager.html no longer contains %q", want)
 		}
+	}
+	if bytes.Contains(data, []byte("/api/v1/dashboard/users")) {
+		t.Error("self view must not use the admin-only org-wide /api/v1/dashboard/users")
 	}
 }
 

@@ -274,7 +274,7 @@ td.num{text-align:right}
       <canvas id="userChart" height="170"></canvas>
     </div>
   </div>
-  <div class="panel">
+  <div class="panel" id="tlPanel">
     <h2 class="chart-head"><span>Daily model usage</span><span class="tlt" id="tlToggle">
       <button data-tm="tokens" class="on">Tokens</button><button data-tm="cost" class="demo-cost">Dollars</button>
     </span></h2>
@@ -827,22 +827,27 @@ async function loadCharts(){
   }catch(e){/* the table reports real failures; charts just stay as-is */}
 }
 
-// Same endpoints, self-scoped by the server: a non-manager opening the page
-// sees their own pies, timeline and Saved card.
-async function loadSelfCharts(){
+// Self view charts. /api/v1/dashboard/* is admin-only and unscoped for
+// admins, so the self view must use the self-pinned /api/v1/me/usage
+// endpoints instead: summary for the overview/Saved card and models for the
+// model pie. The By-User pie collapses to the caller, and the daily timeline
+// has no self-scoped source, so that panel is hidden here.
+async function loadSelfCharts(overview){
   try{
-    const j=async u=>await (await fetch(u)).json();
-    const [ov,mo,us,tl]=await Promise.all([
-      j('/api/v1/dashboard/overview?range='+range+'&ref='+encodeURIComponent(savingsRef)),
-      j('/api/v1/dashboard/models?range='+range),
-      j('/api/v1/dashboard/users?range='+range+'&sort=cost_usd&order=desc&limit=10&ref='+encodeURIComponent(savingsRef)),
-      j('/api/v1/dashboard/timeline?range='+range+'&group_by=user')
-    ]);
-    chartsCache={overview:ov,models:mo,users:us,timeline:tl};
-    renderTimeline(tl||[]);
+    const models=await chartJSON('/api/v1/me/usage/models?range='+range);
+    const ov=overview||{};
+    chartsCache={
+      overview:ov,
+      models:Array.isArray(models)?models:[],
+      users:[{username:me.user||'',display_name:me.display_name||'',
+              total_tokens:ov.total_tokens||0,requests:ov.total_requests||0,cost_usd:ov.total_cost_usd||0}],
+      timeline:[]
+    };
+    const panel=document.getElementById('tlPanel'); if(panel)panel.style.display='none';
     renderSavedKPI(ov);
     renderPies();
-  }catch(e){}
+    document.getElementById('chartsError').hidden=true;
+  }catch(e){chartFailure(e);}
 }
 
 function personName(username){
@@ -1169,7 +1174,9 @@ async function boot(){
   }
   loadInbox();
   if(sc.scope!=='self')load();
-  else loadSelf();
+  else loadSelf().catch(function(error){
+    document.getElementById('rows').innerHTML='<tr><td colspan="6" class="err">'+esc(error instanceof Error?error.message:String(error))+'</td></tr>';
+  });
 }
 
 // ── Approval inbox (disabled: quota request/approval removed in phase one) ──
@@ -1253,16 +1260,29 @@ function rejectReq(id){
 }
 
 async function loadSelf(){
-  const users=await (await fetch('/api/v1/dashboard/users?range='+range)).json();
-  rows=users.map(u=>({full_name:u.display_name||u.username,cost_usd:u.cost_usd,total_tokens:u.total_tokens,requests:u.requests,last_used:null,is_manager:false,no_identity:!u.requests}));
-  const spendCost=rows.reduce((s,r)=>s+(r.cost_usd||0),0);
-  const spendTokens=rows.reduce((s,r)=>s+(r.total_tokens||0),0);
-  const spendReq=rows.reduce((s,r)=>s+(r.requests||0),0);
+  // Self-pinned: the admin-only /dashboard/users listing returns the whole
+  // organisation for admins (and 403 for plain users), so "My spend" and the
+  // single-row table come from /me/usage/summary, which is scoped to the
+  // caller's partner logins on the server.
+  const summary=await chartJSON('/api/v1/me/usage/summary?range='+range);
+  const ov=summary.overview||{};
+  const q=summary.quota||me.quota||null;
+  const spendCost=Number(ov.total_cost_usd||0);
+  const spendTokens=Number(ov.total_tokens||0);
+  const spendReq=Number(ov.total_requests||0);
+  rows=[{
+    slug:'', full_name:(me.display_name||me.user||''), username:(me.user||''),
+    is_manager:false, requests:spendReq, total_tokens:spendTokens, cost_usd:spendCost,
+    last_used:null, no_identity:false,
+    quota_exempt:!!(q&&q.exempt), quota_enforced:q?!!q.enforced:false,
+    quota_usd:(q&&q.limit_usd)||0, quota_spent_usd:(q&&q.spent_usd)||0,
+    over_limit:!!(q&&q.limit_usd&&q.spent_usd>=q.limit_usd)
+  }];
   document.getElementById('kSpend').textContent=fmt$(spendCost);
   document.getElementById('kSpendS').textContent=fmtTok(spendTokens)+' tokens · '+spendReq+' requests this window';
   document.getElementById('kSpendL').textContent='My spend';
   renderRows();
-  loadSelfCharts();
+  await loadSelfCharts(ov);
 }
 
 // ── Person detail (per-model spend + hosted savings) ──────────────────────
