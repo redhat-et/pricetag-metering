@@ -73,7 +73,7 @@ func TestTopUsersRankShowsCountryCostCenterAndDemoPrivacy(t *testing.T) {
 		// The user pie (and its tooltip) is gone: renderUserCostChart renders
 		// only the ranked legend, with no unreachable chart code after it.
 		"renderUserRank(data,userPieMetric);\n}",
-		"<div class=\"ur-grid\">",
+		"<div class=\"ur-grid\" data-cols=\"",
 		"grid-auto-flow:column",
 		"grid-template-rows:repeat(10,minmax(0,auto))",
 		"border-left:1px dotted",
@@ -81,6 +81,36 @@ func TestTopUsersRankShowsCountryCostCenterAndDemoPrivacy(t *testing.T) {
 		if !bytes.Contains(data, []byte(want)) {
 			t.Errorf("dashboard.html no longer contains %q", want)
 		}
+	}
+}
+
+// A filtered roster shorter than 21 entries must not leave empty tracks or
+// stray rules: the renderer derives the column count from the entry count.
+func TestTopUsersRankUsesOnlyTheColumnsTheListNeeds(t *testing.T) {
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(data)
+	for _, want := range []string{
+		`var cols=Math.min(3,Math.max(1,Math.ceil(data.length/10)));`,
+		`<div class="ur-grid" data-cols="'+cols+'">`,
+		`.ur-grid[data-cols="1"]{grid-template-columns:minmax(0,1fr)}`,
+		`.ur-grid[data-cols="1"]::before,.ur-grid[data-cols="1"]::after{display:none}`,
+		`.ur-grid[data-cols="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}`,
+		`.ur-grid[data-cols="2"]::before{left:50%}`,
+		`.ur-grid[data-cols="2"]::after{display:none}`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("dashboard.html no longer contains %q", want)
+		}
+	}
+	// The data-cols rules must precede the narrow-screen fallback so the
+	// fallback still wins at equal specificity.
+	cols := strings.Index(page, `.ur-grid[data-cols="1"]`)
+	narrow := strings.Index(page, "@media(max-width:900px)")
+	if cols < 0 || narrow < 0 || cols > narrow {
+		t.Error("data-cols rules must be declared before the max-width:900px fallback")
 	}
 }
 

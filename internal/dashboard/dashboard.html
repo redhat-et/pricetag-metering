@@ -192,6 +192,15 @@ tr.clickable{cursor:pointer}
 .user-rank .ur-grid::before,.user-rank .ur-grid::after{content:"";position:absolute;top:0;bottom:0;border-left:1px dotted rgba(139,148,158,.45);pointer-events:none}
 .user-rank .ur-grid::before{left:calc((100% - 2*var(--ur-gap))/3 + var(--ur-gap)/2)}
 .user-rank .ur-grid::after{left:calc(2*((100% - 2*var(--ur-gap))/3) + var(--ur-gap)*1.5)}
+/* A short list must not leave empty tracks or stray rules: the renderer sets
+   data-cols from the entry count (1-10 -> 1 column, 11-20 -> 2, 21-30 -> 3).
+   These rules sit before the max-width:900px block so the narrow-screen
+   fallback still overrides them (equal specificity, later in the cascade). */
+.ur-grid[data-cols="1"]{grid-template-columns:minmax(0,1fr)}
+.ur-grid[data-cols="1"]::before,.ur-grid[data-cols="1"]::after{display:none}
+.ur-grid[data-cols="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ur-grid[data-cols="2"]::before{left:50%}
+.ur-grid[data-cols="2"]::after{display:none}
 .user-map-row .user-wide-card{min-width:0}
 .user-map-row .user-wide-card .pie-split{min-height:300px;gap:12px}
 .user-map-row .user-wide-card .pie-column{flex:0 0 270px;width:270px}
@@ -1224,8 +1233,11 @@ function renderUserRank(data,m){
   var metricLabel={cost:'cost',tokens:'tokens',requests:'requests'}[m]||m;
   var max=Math.max.apply(null,data.map(function(d){return d.value;}).concat([0]));
    // .ur-grid is column-major with 10 fixed rows: ranks 1-10 fill the first
-   // column, 11-20 the second, 21-30 the third.
-   el.innerHTML='<div class="gt-title" style="font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:700;margin-bottom:2px">Top 30 users by '+pmEsc(metricLabel)+'</div><div class="ur-grid">'+data.map(function(d,i){
+   // column, 11-20 the second, 21-30 the third. Use only as many columns as
+   // the filtered list needs, so a short roster fills the card width instead
+   // of leaving empty tracks and separators in blank space.
+   var cols=Math.min(3,Math.max(1,Math.ceil(data.length/10)));
+   el.innerHTML='<div class="gt-title" style="font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:700;margin-bottom:2px">Top 30 users by '+pmEsc(metricLabel)+'</div><div class="ur-grid" data-cols="'+cols+'">'+data.map(function(d,i){
     var item=d.item||{};
     var username=item.username||'';
     var name=d.label||username||'—';
