@@ -245,7 +245,7 @@ func TestDemoModeHidesActualSpend(t *testing.T) {
 		"document.getElementById('kpi-cost').textContent=demoPrivacyEnabled()?'Hidden':fmtC(d.total_cost_usd);",
 		"cachedRecent=Array.isArray(data)?data:[];",
 		`class="num demo-cost">${fmtC(r.cost_usd)}`,
-		"if(demoPrivacyEnabled()&&e.target.dataset.um==='cost')return;",
+		"if(demoPrivacyEnabled()&&btn.dataset.um==='cost')return;",
 	} {
 		if !bytes.Contains(data, []byte(want)) {
 			t.Errorf("dashboard.html no longer contains %q", want)
