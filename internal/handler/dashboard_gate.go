@@ -50,7 +50,7 @@ func NewDashboardCountryGate(store *storage.Store, cfg config.Config) *Dashboard
 	page, err := fs.ReadFile(dashboard.FS, "blocked.html")
 	if err != nil {
 		slog.Error("dashboard policy page missing", "error", err)
-		page = []byte("<!doctype html><title>Coming soon</title><p>The dashboard is not available in your region yet. Coming soon.</p>")
+		page = []byte("<!doctype html><title>EnMaaS — Coming soon</title><p>The EnMaaS dashboard is not available in your region yet. Coming soon.</p>")
 	}
 	return &DashboardCountryGate{
 		store:   store,
