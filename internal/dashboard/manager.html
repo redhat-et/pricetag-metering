@@ -244,7 +244,7 @@ td.num{text-align:right}
   <div class="kpis">
     <div class="kpi" id="kpiSpendTile"><div class="l" id="kSpendL">Team spend</div><div class="v" id="kSpend">–</div><div class="s" id="kSpendS"></div></div>
     <div class="kpi" id="kpiBudgetTile"><div class="l" id="kBudgetL">Team budget</div><div class="v" id="kBudget">–</div><div class="kbar"><i id="kBudgetBar"></i></div><div class="s" id="kBudgetS"></div></div>
-    <div class="kpi"><div class="l">Saved · Hosted Models</div><div class="v saved-pos" id="kSaved">–</div><div class="s">vs <select class="refsel" id="refSel" onchange="savingsRef=this.value;loadCharts();"></select><span id="kSavedNote"></span></div></div>
+    <div class="kpi"><div class="l">Saved · Hosted Models</div><div class="v saved-pos" id="kSaved">–</div><div class="s">vs <select class="refsel" id="refSel" onchange="refChanged()"></select><span id="kSavedNote"></span></div></div>
     <div class="kpi" id="kpiMembers"><div class="l">Members</div><div class="v" id="kPeople">–</div><div class="s" id="kPeopleS"></div></div>
   </div>
   <!-- Pending-decisions banner: same role as the user's "request pending"
@@ -795,6 +795,7 @@ function setKBudget(spent,limit,overCount){
 let drillRoot=''; // slug of the subtree currently shown (own slug for managers, '' for whole org)
 let scopeRootSlug='';
 let adminScope=false; // super-admins only: whole organisation, not a manager's branch
+let selfMode=false;    // no direct reports: the /me/* self-pinned endpoints back this view
 
 // ── Team analytics: timeline + pies ───────────────────────────────────────
 // Same pie set as the Usage page, fed by /api/v1/org/charts: the server
@@ -842,7 +843,7 @@ async function loadCharts(){
 // has no self-scoped source, so that panel is hidden here.
 async function loadSelfCharts(overview){
   try{
-    const models=await chartJSON('/api/v1/me/usage/models?range='+range);
+    const models=await chartJSON('/api/v1/me/usage/models?range='+range+'&ref='+encodeURIComponent(savingsRef));
     const ov=overview||{};
     chartsCache={
       overview:ov,
@@ -1094,6 +1095,19 @@ function renderPies(){
 function setMetricToggle(id,attr,value){
   document.querySelectorAll('#'+id+' button').forEach(function(b){b.classList.toggle('on',b.dataset[attr]===value);});
 }
+// The reference-model selector drives the Saved KPI. Self scope must stay on
+// the self-pinned endpoints: the org charts call 403s for a plain user.
+function refChanged(){
+  savingsRef=document.getElementById('refSel').value;
+  if(selfMode){
+    loadSelf().catch(function(error){
+      document.getElementById('rows').innerHTML='<tr><td colspan="6" class="err">'+esc(error instanceof Error?error.message:String(error))+'</td></tr>';
+    });
+    return;
+  }
+  loadCharts();
+}
+
 function syncDemoMetrics(){
   if(!demoPrivacyEnabled())return false;
   var changed=false;
@@ -1155,6 +1169,7 @@ async function boot(){
   }
   const sc=await (await fetch('/api/v1/org/scope')).json();
   if(sc.scope==='self'){
+    selfMode=true;
     document.getElementById('scopeTitle').textContent='My usage';
     document.getElementById('scopeSub').textContent='You are not listed as a manager in the directory — showing your own usage.';
     document.getElementById('selfNote').innerHTML=
@@ -1271,7 +1286,7 @@ async function loadSelf(){
   // organisation for admins (and 403 for plain users), so "My spend" and the
   // single-row table come from /me/usage/summary, which is scoped to the
   // caller's partner logins on the server.
-  const summary=await chartJSON('/api/v1/me/usage/summary?range='+range);
+  const summary=await chartJSON('/api/v1/me/usage/summary?range='+range+'&ref='+encodeURIComponent(savingsRef));
   const ov=summary.overview||{};
   const q=summary.quota||me.quota||null;
   const spendCost=Number(ov.total_cost_usd||0);

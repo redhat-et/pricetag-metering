@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,6 +44,15 @@ func (h *MeUsageHandler) HandleSummary(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "could not load usage", http.StatusInternalServerError)
 		return
+	}
+	// Mirror the admin overview: the Saved · Hosted Models card is the same
+	// server-side CTE the table uses, so the self view cannot invent or drop
+	// savings. A failed savings query leaves the fields at zero rather than
+	// failing the whole summary.
+	if saved, ratio, applied, serr := h.store.GetHostedSavings(r.Context(), since, until, "", user, "", r.URL.Query().Get("ref")); serr != nil {
+		slog.Error("self hosted savings query failed", "error", serr)
+	} else {
+		overview.SavedUSD, overview.SavingsRatio, overview.RatioApplied = saved, ratio, applied
 	}
 	resp := map[string]any{"overview": overview}
 	if quota, qerr := h.store.GetQuotaView(r.Context(), caller(r, h.cfg), false); qerr == nil {

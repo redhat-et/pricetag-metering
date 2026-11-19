@@ -48,9 +48,15 @@ func TestManagerShowsTeamSpendKPI(t *testing.T) {
 		`.demo-private #kpiSpendTile,.demo-private #kpiBudgetTile`,
 		// Self view must be self-pinned: /dashboard/* is admin-only and
 		// unscoped for admins, so it cannot source "My spend".
-		`/api/v1/me/usage/summary?range=`,
-		`/api/v1/me/usage/models?range=`,
+		`/api/v1/me/usage/summary?range='+range+'&ref='+encodeURIComponent(savingsRef)`,
+		`/api/v1/me/usage/models?range='+range+'&ref='+encodeURIComponent(savingsRef)`,
 		`id="tlPanel"`,
+		// The Saved KPI needs the reference model on the self path too, and a
+		// ref change must not fall back to the org charts (403 for plain users).
+		`onchange="refChanged()"`,
+		`function refChanged(){`,
+		`if(selfMode){`,
+		`selfMode=true;`,
 	} {
 		if !bytes.Contains(data, []byte(want)) {
 			t.Errorf("manager.html no longer contains %q", want)
