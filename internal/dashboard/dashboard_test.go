@@ -114,6 +114,33 @@ func TestTopUsersRankUsesOnlyTheColumnsTheListNeeds(t *testing.T) {
 	}
 }
 
+// The usage surfaces are expensive to compute on the shared database, so they
+// must not poll. Both pages keep an explicit Refresh control instead.
+func TestUsagePagesDoNotAutoRefresh(t *testing.T) {
+	for _, file := range []string{"admin.html", "dashboard.html"} {
+		data, err := FS.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(data, []byte("setInterval(")) {
+			t.Errorf("%s must not poll; keep the manual Refresh control", file)
+		}
+	}
+	manual := map[string]string{
+		"admin.html":     `refreshTab(activeTab,true)`,
+		"dashboard.html": `onclick="refresh(true)"`,
+	}
+	for file, want := range manual {
+		data, err := FS.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("%s lost its manual refresh control (%q)", file, want)
+		}
+	}
+}
+
 func TestTopUsersRankUsesColumnMajorOrderingOnNarrowScreens(t *testing.T) {
 	data, err := FS.ReadFile("dashboard.html")
 	if err != nil {

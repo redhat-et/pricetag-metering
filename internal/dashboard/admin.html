@@ -996,8 +996,6 @@ td .tag{white-space:nowrap}
 /* ================================================================
    State
    ================================================================ */
-var refreshTimer = null;
-var REFRESH_INTERVAL = 30000;
 var modelNameMap = {};
 var knownGroups = [];
 var validGroups = []; // canonical org groups, from the live MaaSSubscription CR
@@ -2254,16 +2252,9 @@ fetchJSON('/api/v1/admin/models').then(function(models) {
   touchUpdated();
 })();
 
-/* Auto-refresh the visible tab only, and never while a field has focus
-   or there are unsaved edits — an admin console that overwrites typing
-   mid-keystroke is worse than one that shows a stale row for 30s. */
-refreshTimer = setInterval(function() {
-  if (document.querySelector('.modal-overlay.open, .confirm-overlay.open')) return;
-  var ae = document.activeElement;
-  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
-  if (activeTab === 'people' || activeTab === 'model-access' || activeTab === 'safety-net') return; // editable tabs use explicit refresh/save
-  refreshTab(activeTab, false);
-}, REFRESH_INTERVAL);
+/* Tabs refresh on demand only. The console used to poll the visible tab
+   every 30s, which kept the usage queries hot on a shared database; the
+   Refresh buttons in each card and in the tab bar are the explicit path. */
 
 window.addEventListener('hashchange', function() {
   var h = (location.hash || '').replace('#', '');
