@@ -353,6 +353,26 @@ func TestDemoModeHidesActualSpend(t *testing.T) {
 	}
 }
 
+// The demo badge is inserted into the header only after privacy mode is
+// enabled. Its width must not make the navigation jump to another flex line
+// or align against the right edge of the header on desktop.
+func TestDemoModeKeepsHeaderNavigationAnchored(t *testing.T) {
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"@media(min-width:1201px)",
+		".demo-private .appbar nav{flex:0 0 auto;flex-shrink:0}",
+		".demo-private .appbar .ab-right{flex:1 1 0;min-width:0;justify-content:flex-end",
+		".demo-private .appbar nav a{padding-left:10px;padding-right:10px}",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("dashboard.html is missing demo header layout rule %q", want)
+		}
+	}
+}
+
 // Structural string checks cannot catch a misplaced brace: one syntax error
 // makes the browser discard the entire inline script, so the dashboard renders
 // its skeletons but never issues a single API request. Parse every inline

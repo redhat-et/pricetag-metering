@@ -321,6 +321,18 @@ tr.clickable{cursor:pointer}
 .demo-private .demo-cost{display:none!important}.demo-private #quota-banner{display:none!important}
 .ab-out{color:#e8554e;border:1px solid #2e3848;padding:6px 14px;border-radius:8px;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;font-weight:600;line-height:18px;text-decoration:none}
 .ab-out:hover{border-color:#e8554e}
+/* Keep the navigation anchored beside the logo when the super-admin turns
+   on demo privacy. The badge adds enough width to make the flex container
+   wrap; without these desktop-only compact rules the nav jumps to the far
+   right/next flex line while the header controls reflow. */
+@media(min-width:1201px){
+  .demo-private.appbar,.demo-private .appbar{flex-wrap:nowrap}
+  .demo-private .appbar nav{flex:0 0 auto;flex-shrink:0}
+  .demo-private .appbar nav a{padding-left:10px;padding-right:10px}
+  .demo-private .appbar .ab-right{flex:1 1 0;min-width:0;justify-content:flex-end;gap:6px;flex-wrap:nowrap}
+  .demo-private .appbar .ab-btn,.demo-private .appbar .ab-out{padding-left:10px;padding-right:10px}
+  .demo-private .appbar .demo-badge{padding-left:6px;padding-right:6px;font-size:9px;letter-spacing:.3px}
+}
 @media(max-width:640px){.appbar{top:8px;padding:10px 14px;gap:10px}}
 @media(max-width:1200px){.appbar{align-items:flex-start}.appbar nav{flex:1 1 auto;min-width:0}.ab-right{flex:1 1 100%;margin-left:0;justify-content:flex-start}}
 </style>
