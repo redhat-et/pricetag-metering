@@ -448,6 +448,7 @@ func main() {
 		mux.HandleFunc("/account", auth(accountHandler.ServeAccount))
 		mux.HandleFunc("/api/v1/me/usage/summary", auth(meUsageHandler.HandleSummary))
 		mux.HandleFunc("/api/v1/me/usage/models", auth(meUsageHandler.HandleModels))
+		mux.HandleFunc("/api/v1/me/usage/timeline", auth(meUsageHandler.HandleTimeline))
 		mux.HandleFunc("/api/v1/me/usage/recent", auth(meUsageHandler.HandleRecent))
 		mux.HandleFunc("/api/v1/me/keys", auth(adminHandler.HandleMyKeys))
 		mux.HandleFunc("/api/v1/me/keys/", auth(adminHandler.HandleMyKeys))

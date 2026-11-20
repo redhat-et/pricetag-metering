@@ -838,21 +838,27 @@ async function loadCharts(){
 
 // Self view charts. /api/v1/dashboard/* is admin-only and unscoped for
 // admins, so the self view must use the self-pinned /api/v1/me/usage
-// endpoints instead: summary for the overview/Saved card and models for the
-// model pie. The By-User pie collapses to the caller, and the daily timeline
-// has no self-scoped source, so that panel is hidden here.
+// endpoints instead: summary for the overview/Saved card, models for the
+// model pie, and timeline for the per-model daily chart. The By-User pie
+// collapses to the caller.
 async function loadSelfCharts(overview){
   try{
     const models=await chartJSON('/api/v1/me/usage/models?range='+range+'&ref='+encodeURIComponent(savingsRef));
+    let timeline=[];
+    try{
+      timeline=await chartJSON('/api/v1/me/usage/timeline?range='+range);
+    }catch(e){/* keep the panel hidden rather than showing stale data */}
     const ov=overview||{};
     chartsCache={
       overview:ov,
       models:Array.isArray(models)?models:[],
       users:[{username:me.user||'',display_name:me.display_name||'',
               total_tokens:ov.total_tokens||0,requests:ov.total_requests||0,cost_usd:ov.total_cost_usd||0}],
-      timeline:[]
+      timeline:Array.isArray(timeline)?timeline:[]
     };
-    const panel=document.getElementById('tlPanel'); if(panel)panel.style.display='none';
+    const panel=document.getElementById('tlPanel');
+    if(panel)panel.style.display=chartsCache.timeline.length?'':'none';
+    renderTimeline(chartsCache.timeline);
     renderSavedKPI(ov);
     renderPies();
   }catch(e){/* charts stay as-is; the table reports real failures */}

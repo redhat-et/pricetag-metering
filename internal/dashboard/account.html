@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>My usage — EnMaaS</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
   (function () {
     try {
@@ -21,6 +22,12 @@
   }
   *{margin:0;padding:0;box-sizing:border-box}
   body{background:var(--bg);color:var(--t);font:13px/1.55 Inter,-apple-system,BlinkMacSystemFont,sans-serif}
+  /* ── Subtle welcome-page background animation (shared with Org usage) ──── */
+  #dashboard-flow{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.25;mix-blend-mode:screen}
+  .pg{position:relative;z-index:1}
+  .tl-wrap{position:relative;height:260px;margin-top:16px}
+  .tl-wrap canvas{width:100%!important;height:100%!important}
+  .tl-empty{padding:28px 0;text-align:center;color:var(--t2)}
   a{color:var(--blu);text-decoration:none}
   .appbar{position:sticky;top:12px;z-index:40;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
           min-height:58px;padding:12px 22px;background:rgba(20,24,32,.96);backdrop-filter:blur(10px);
@@ -204,6 +211,9 @@
 </head>
 <body>
 
+<!-- Decorative only: keep this block easy to remove if the effect is not useful. -->
+<canvas id="dashboard-flow" aria-hidden="true"></canvas>
+
 <header class="appbar">
   <a class="logo" href="/account"><span class="en">En</span><em>MaaS</em></a>
   <nav>
@@ -299,6 +309,23 @@
           <div class="legend" id="split-legend"></div>
         </div>
       </div>
+    </div>
+
+    <div class="card" style="margin-bottom:18px" id="self-tl-card">
+      <div class="card-head">
+        <div>
+          <h2>Daily model usage</h2>
+          <div class="hint">Your tokens or spend per model over the selected period</div>
+        </div>
+        <div class="metric-toggle" id="self-tl-toggle" role="group" aria-label="Daily model usage metric" style="margin:0">
+          <button type="button" class="on" data-tl-metric="tokens">Tokens</button>
+          <button type="button" data-tl-metric="cost">Dollars</button>
+        </div>
+      </div>
+      <div class="tl-wrap" id="self-tl-wrap">
+        <canvas id="self-model-timeline" aria-label="Daily model usage chart"></canvas>
+      </div>
+      <div class="tl-empty" id="self-tl-empty" hidden>No usage in this period.</div>
     </div>
 
     <div class="card" style="margin-bottom:18px">
@@ -445,10 +472,86 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- ── Subtle welcome-page background animation (issue #11) ────────────── -->
+<script>
+(function(){
+  "use strict";
+  var canvas=document.getElementById("dashboard-flow");
+  if(!canvas||!canvas.getContext)return;
+
+  var reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var ctx=canvas.getContext("2d");
+  var dpr=Math.min(window.devicePixelRatio||1,2);
+  var width=0,height=0,gate=0,running=!reduced&&!document.hidden,frameId=null;
+  var tokens=[];
+  var glyphs=["tok","{ }","42","1010","⧉",">>","…"];
+  var prices=["$0.15","$0.47","$0.016","$1.20"];
+
+  function resize(){
+    width=window.innerWidth;height=window.innerHeight;
+    canvas.width=width*dpr;canvas.height=height*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    gate=Math.max(36,Math.min(width-36,width*.5));
+  }
+  function spawn(){
+    return {x:-28,y:24+Math.random()*Math.max(1,height-48),
+      vx:.18+Math.random()*.38,g:glyphs[(Math.random()*glyphs.length)|0],
+      priced:false,stamp:prices[(Math.random()*prices.length)|0],born:0,alpha:0};
+  }
+  function schedule(){
+    if(running&&frameId===null)frameId=window.requestAnimationFrame(draw);
+  }
+  function draw(ts){
+    frameId=null;
+    if(!running&&!reduced)return;
+    ctx.clearRect(0,0,width,height);
+    var line="rgba(88,166,255,.42)",soft="rgba(169,182,198,.68)",price="rgba(112,184,255,.9)";
+    var glow=ctx.createLinearGradient(gate-28,0,gate+28,0);
+    glow.addColorStop(0,"rgba(88,166,255,0)");
+    glow.addColorStop(.5,"rgba(88,166,255,.07)");
+    glow.addColorStop(1,"rgba(88,166,255,0)");
+    ctx.fillStyle=glow;ctx.fillRect(gate-28,0,56,height);
+    ctx.strokeStyle=line;ctx.lineWidth=1;ctx.setLineDash([3,7]);
+    ctx.beginPath();ctx.moveTo(gate,0);ctx.lineTo(gate,height);ctx.stroke();ctx.setLineDash([]);
+    ctx.textBaseline="middle";
+
+    for(var i=0;i<tokens.length;i++){
+      var token=tokens[i];
+      if(!token.priced&&token.x>=gate){token.priced=true;token.born=ts;}
+      token.x+=token.vx*(token.priced?.35:1);
+      token.alpha=Math.min(token.alpha+.02,1);
+      ctx.globalAlpha=token.alpha*(token.priced?.7:.55);
+      ctx.fillStyle=token.priced?price:soft;
+      ctx.font=token.priced?'500 11px ui-monospace,SFMono-Regular,Menlo,monospace':'400 11px ui-monospace,SFMono-Regular,Menlo,monospace';
+      ctx.fillText(token.priced?token.stamp:token.g,token.x,token.y);
+      ctx.globalAlpha=1;
+      if((token.priced&&ts-token.born>3600)||token.x>width+40)tokens[i]=spawn();
+    }
+    schedule();
+  }
+
+  resize();
+  window.addEventListener("resize",resize,{passive:true});
+  for(var i=0;i<80;i++){var token=spawn();token.x=Math.random()*gate;tokens.push(token);}
+  if(reduced)draw(0);else schedule();
+  document.addEventListener("visibilitychange",function(){
+    if(reduced)return;
+    if(document.hidden){
+      running=false;
+      if(frameId!==null){window.cancelAnimationFrame(frameId);frameId=null;}
+    }else{
+      running=true;
+      schedule();
+    }
+  });
+})();
+</script>
+
 <script>
 (function () {
-  var state = {tab:'usage', range:'mtd', from:'', to:'', keys:[], models:[], overview:null, revokeId:'', animateUsage:true, modelMetric:'cost', splitMetric:'cost', tableSort:{key:'cost',dir:'desc'}};
+  var state = {tab:'usage', range:'mtd', from:'', to:'', keys:[], models:[], overview:null, revokeId:'', animateUsage:true, modelMetric:'cost', splitMetric:'cost', tableSort:{key:'cost',dir:'desc'}, timeline:[], tlMetric:'tokens'};
   var COLORS = ['#4da0f8','#eba830','#a88cf8','#38d4c2','#e8554e','#f778ba','#b8d94a','#6e7bf2','#b07a48','#ff8c69','#79c0ff','#d2a8ff','#56d4dd','#e3b341','#8090a8'];
+  var selfTlChart = null;
 
   function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){
@@ -542,6 +645,13 @@
       renderModels('split');
     };
   });
+  document.querySelectorAll('#self-tl-toggle [data-tl-metric]').forEach(function(btn){
+    btn.onclick=function(){
+      state.tlMetric=this.getAttribute('data-tl-metric') || 'tokens';
+      document.querySelectorAll('#self-tl-toggle [data-tl-metric]').forEach(function(b){ b.classList.toggle('on',b===btn); });
+      renderSelfTimeline();
+    };
+  });
   document.querySelectorAll('[data-table-sort]').forEach(function(th){
     th.classList.add('sortable');
     th.onclick=function(){
@@ -614,6 +724,14 @@
       $('model-rows').innerHTML='<tr><td colspan="6"><div class="empty">Could not load model usage.</div></td></tr>';
     });
 
+    api('/api/v1/me/usage/timeline?'+rangeQuery()).then(function(buckets){
+      state.timeline = buckets || [];
+      renderSelfTimeline();
+    }).catch(function(){
+      state.timeline = [];
+      renderSelfTimeline();
+    });
+
     loadRecent();
   }
 
@@ -648,6 +766,72 @@
       return 'range=custom&from='+encodeURIComponent(state.from)+'&to='+encodeURIComponent(state.to);
     }
     return 'range='+encodeURIComponent(state.range);
+  }
+
+  // Daily per-model timeline for the caller. Same shape and interactions as
+  // the team view's "Daily model usage" panel, but fed by the self-pinned
+  // /api/v1/me/usage/timeline endpoint so a regular user can see their own
+  // split without admin access.
+  function renderSelfTimeline(){
+    var wrap=$('self-tl-wrap'), empty=$('self-tl-empty'), canvas=$('self-model-timeline');
+    var buckets=state.timeline||[];
+    var metric=state.tlMetric;
+    function val(b){ return metric==='cost' ? (b.total_cost_usd||0) : (b.total_tokens||0); }
+    function fmtAxis(v){ return metric==='cost' ? preciseMoney(v) : compact(v); }
+    var byDay={}, totals={};
+    buckets.forEach(function(b){
+      var day=String(b.bucket||'').slice(0,10);
+      var series=b.series || '(unknown)';
+      if(!day) return;
+      byDay[day]=byDay[day]||{};
+      byDay[day][series]=(byDay[day][series]||0)+val(b);
+      totals[series]=(totals[series]||0)+val(b);
+    });
+    var days=Object.keys(byDay).sort();
+    var ranked=Object.keys(totals).filter(function(n){ return totals[n]>0; }).sort(function(a,b){ return totals[b]-totals[a]; });
+    var top=ranked.slice(0,7), tail=ranked.slice(7);
+    if(!days.length || !ranked.length){
+      if(selfTlChart){ selfTlChart.destroy(); selfTlChart=null; }
+      wrap.hidden=true; empty.hidden=false;
+      empty.textContent='No usage in this period.';
+      return;
+    }
+    if(typeof Chart==='undefined'){
+      if(selfTlChart){ selfTlChart.destroy(); selfTlChart=null; }
+      wrap.hidden=true; empty.hidden=false;
+      empty.textContent='Chart library did not load.';
+      return;
+    }
+    wrap.hidden=false; empty.hidden=true;
+    var series=top.concat(tail.length?['__other__']:[]);
+    function dataFor(day,n){
+      if(n==='__other__') return tail.reduce(function(s,x){ return s+((byDay[day]&&byDay[day][x])||0); },0);
+      return (byDay[day]&&byDay[day][n])||0;
+    }
+    var labels=days.map(function(d){
+      var dt=new Date(d+'T00:00:00');
+      return isNaN(dt) ? d : dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    });
+    var ds=series.map(function(n,i){
+      var other=n==='__other__';
+      var color=other?'#5b6b82':COLORS[i%COLORS.length];
+      return {label:other?'Other':n,data:days.map(function(d){ return dataFor(d,n); }),
+        borderColor:color,backgroundColor:color+'22',tension:.3,fill:false,pointRadius:2,borderWidth:2};
+    });
+    if(selfTlChart) selfTlChart.destroy();
+    selfTlChart=new Chart(canvas,{type:'line',
+      data:{labels:labels,datasets:ds},
+      options:{responsive:true,maintainAspectRatio:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{
+          legend:{position:'bottom',labels:{color:'#e2e6ec',boxWidth:10,usePointStyle:true}},
+          tooltip:{callbacks:{label:function(c){
+            var v=c.parsed.y||0;
+            return c.dataset.label+': '+(metric==='cost'?preciseMoney(v):compact(v));
+          }}}
+        },
+        scales:{x:{ticks:{color:'#8090a8',maxRotation:0,autoSkip:true},grid:{color:'#1a2030'}},
+                y:{beginAtZero:true,ticks:{color:'#8090a8',callback:fmtAxis},grid:{color:'#1a2030'}}}}});
   }
 
   function isoDate(d){

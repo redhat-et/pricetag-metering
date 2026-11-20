@@ -95,3 +95,59 @@ func TestMeUsageSummaryIncludesHostedSavings(t *testing.T) {
 		t.Fatalf("saved_usd = %v, want ~0.51", got)
 	}
 }
+
+// The personal "Daily model usage" chart reads the same timeline query the
+// team view uses, but pinned to the caller. The handler must never leak
+// another user's series even when the request asks for one.
+func TestMeUsageTimelineIsSelfScoped(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set — self timeline test needs a Postgres")
+	}
+	store := openFreshStore(t, dsn)
+	ctx := context.Background()
+
+	const (
+		me      = "self-timeline@example.com"
+		other   = "other-timeline@example.com"
+		myModel = "timeline-mine"
+	)
+	now := time.Now().UTC()
+	for i, ev := range []storage.UsageEvent{
+		{EventID: "self-timeline-1", Timestamp: now, Username: me, GroupName: "test",
+			Provider: "vllm", Model: myModel, PromptTokens: 1000, CompletionTokens: 500, TotalTokens: 1500, Source: "test"},
+		{EventID: "self-timeline-2", Timestamp: now, Username: other, GroupName: "test",
+			Provider: "vllm", Model: "timeline-theirs", PromptTokens: 9000, CompletionTokens: 9000, TotalTokens: 18000, Source: "test"},
+	} {
+		ev.Timestamp = now.Add(time.Duration(i) * time.Millisecond)
+		if err := store.InsertEvent(ctx, ev); err != nil {
+			t.Fatalf("InsertEvent: %v", err)
+		}
+	}
+
+	cfg := config.Config{UserHeader: "X-Forwarded-User"}
+	h := NewMeUsageHandler(store, cfg)
+	// ?user= is a decoy: the endpoint must scope to the caller regardless.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/usage/timeline?range=24h&user="+other, nil)
+	req.Header.Set(cfg.UserHeader, me)
+	rec := httptest.NewRecorder()
+	h.HandleTimeline(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("timeline status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	var buckets []storage.TimelineBucket
+	if err := json.Unmarshal(rec.Body.Bytes(), &buckets); err != nil {
+		t.Fatalf("decode timeline: %v", err)
+	}
+	var tokens int64
+	for _, b := range buckets {
+		if b.Series != myModel {
+			t.Fatalf("timeline leaked series %q; want only %q", b.Series, myModel)
+		}
+		tokens += b.TotalTokens
+	}
+	if tokens != 1500 {
+		t.Fatalf("timeline tokens = %d, want 1500 (caller only)", tokens)
+	}
+}

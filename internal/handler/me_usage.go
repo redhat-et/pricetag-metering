@@ -79,6 +79,28 @@ func (h *MeUsageHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, models)
 }
 
+// HandleTimeline returns the caller's own per-model usage buckets for the
+// selected window. It backs the "Daily model usage" chart on the personal
+// Usage page, which mirrors the team view's chart but is pinned to the
+// caller instead of trusting a ?user= filter.
+func (h *MeUsageHandler) HandleTimeline(w http.ResponseWriter, r *http.Request) {
+	user := h.selfScopeParam(r)
+	if user == "" {
+		http.Error(w, "who are you?", http.StatusUnauthorized)
+		return
+	}
+	since, until := parseTimeWindow(r)
+	buckets, err := h.store.GetDashboardTimeline(r.Context(), since, until, "", user, "", "model")
+	if err != nil {
+		http.Error(w, "could not load usage", http.StatusInternalServerError)
+		return
+	}
+	if buckets == nil {
+		buckets = []storage.TimelineBucket{}
+	}
+	writeJSON(w, buckets)
+}
+
 func (h *MeUsageHandler) HandleRecent(w http.ResponseWriter, r *http.Request) {
 	user := h.selfScopeParam(r)
 	if user == "" {

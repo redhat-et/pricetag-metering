@@ -375,3 +375,42 @@ func TestDashboardInlineScriptsParse(t *testing.T) {
 		t.Fatal("dashboard.html has no inline scripts to parse")
 	}
 }
+
+// The personal Usage page must show the same per-model daily split the team
+// view has, backed by the self-pinned endpoint (the dashboard APIs are
+// admin-only, so a regular user would get a 403 from /api/v1/dashboard/*).
+func TestAccountHasSelfDailyModelUsage(t *testing.T) {
+	data, err := FS.ReadFile("account.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Daily model usage",
+		`id="self-model-timeline"`,
+		"/api/v1/me/usage/timeline?",
+		"cdn.jsdelivr.net/npm/chart.js@4.4.4",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("account.html is missing %q for the self daily model usage chart", want)
+		}
+	}
+}
+
+// The decorative dollars/tokens flow is part of the Usage and My team views.
+func TestUserFacingUsagePagesHaveBackgroundFlow(t *testing.T) {
+	for _, file := range []string{"account.html", "manager.html"} {
+		data, err := FS.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{
+			`id="dashboard-flow"`,
+			`#dashboard-flow{position:fixed`,
+			`var prices=["$0.15","$0.47","$0.016","$1.20"];`,
+		} {
+			if !bytes.Contains(data, []byte(want)) {
+				t.Errorf("%s is missing %q from the background flow", file, want)
+			}
+		}
+	}
+}
