@@ -363,8 +363,8 @@ func TestDemoModeKeepsHeaderNavigationAnchored(t *testing.T) {
 	}
 	for _, want := range []string{
 		"@media(min-width:1201px)",
-		".demo-private .appbar nav{flex:0 0 auto;flex-shrink:0}",
-		".demo-private .appbar .ab-right{flex:1 1 0;min-width:0;justify-content:flex-end",
+		".demo-private .appbar{display:grid;grid-template-columns:auto auto minmax(0,1fr)",
+		".demo-private .appbar .ab-right{grid-column:3;width:100%;min-width:0;justify-content:flex-end",
 		".demo-private .appbar nav a{padding-left:10px;padding-right:10px}",
 	} {
 		if !bytes.Contains(data, []byte(want)) {

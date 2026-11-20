@@ -85,9 +85,8 @@ func TestManagerDemoPrivacyKeepsHeaderLayoutStable(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		".demo-private .appbar{flex-wrap:nowrap}",
-		".demo-private .appbar nav{flex:0 0 auto;flex-shrink:0}",
-		".demo-private .appbar .ab-right{flex:1 1 0;min-width:0;justify-content:flex-end",
+		".demo-private .appbar{display:grid;grid-template-columns:auto auto minmax(0,1fr)",
+		".demo-private .appbar .ab-right{grid-column:3;width:100%;min-width:0;justify-content:flex-end",
 		".demo-private .appbar .ab-btn,.demo-private .appbar .ab-out{padding-left:10px;padding-right:10px;white-space:nowrap",
 		".demo-private .appbar .ab-user{max-width:240px;overflow:hidden;text-overflow:ellipsis}",
 	} {

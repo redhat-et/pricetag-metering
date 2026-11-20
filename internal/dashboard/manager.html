@@ -41,10 +41,11 @@ a{color:inherit;text-decoration:none}
 /* Keep demo-mode navigation and controls stable when the privacy badge is
    shown. Without these rules the added badge reflows the manager header. */
 @media(min-width:1201px){
-  .demo-private .appbar{flex-wrap:nowrap}
-  .demo-private .appbar nav{flex:0 0 auto;flex-shrink:0}
+  .demo-private .appbar{display:grid;grid-template-columns:auto auto minmax(0,1fr);column-gap:16px;align-items:center}
+  .demo-private .appbar .logo{grid-column:1}
+  .demo-private .appbar nav{grid-column:2;min-width:0}
   .demo-private .appbar nav a{padding-left:10px;padding-right:10px}
-  .demo-private .appbar .ab-right{flex:1 1 0;min-width:0;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+  .demo-private .appbar .ab-right{grid-column:3;width:100%;min-width:0;justify-content:flex-end;gap:6px;flex-wrap:wrap}
   .demo-private .appbar .ab-btn,.demo-private .appbar .ab-out{padding-left:10px;padding-right:10px;white-space:nowrap;flex-shrink:0}
   .demo-private .appbar .ab-user,.demo-private .appbar .demo-badge{white-space:nowrap;flex-shrink:0}
   .demo-private .appbar .ab-user{max-width:240px;overflow:hidden;text-overflow:ellipsis}
