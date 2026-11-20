@@ -78,11 +78,7 @@
   .kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--t2);font-weight:700}
   .kpi-value{font-size:26px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}
   .kpi-value.blu{color:var(--blu)}.kpi-value.grn{color:var(--grn)}.kpi-value.org{color:var(--org)}.kpi-value.pur{color:var(--pur)}
-  .kpi-value.budget-ok{color:var(--grn)}.kpi-value.budget-over{color:var(--red)}
   .kpi-note{font-size:11px;color:var(--t2);margin-top:4px}
-  .bar{height:7px;border-radius:99px;background:var(--c3);margin-top:10px;overflow:hidden}
-  .bar span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--grn),var(--org));transition:width .4s}
-  .bar span.over{background:linear-gradient(90deg,var(--org),var(--red))}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
   .card{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;padding:20px}
   .card h2{font-size:13px;font-weight:700;margin-bottom:2px}
@@ -273,15 +269,12 @@
       <div class="kpi"><div class="kpi-label">My spend</div><div class="kpi-value org" id="kpi-spend">—</div><div class="kpi-note" id="kpi-spend-note">Calculated by EnMaaS</div></div>
       <div class="kpi"><div class="kpi-label">Requests</div><div class="kpi-value blu" id="kpi-requests">—</div><div class="kpi-note" id="kpi-requests-note">in this period</div></div>
       <div class="kpi"><div class="kpi-label">Tokens</div><div class="kpi-value grn" id="kpi-tokens">—</div><div class="kpi-note" id="kpi-tokens-note">prompt + completion</div></div>
-      <div class="kpi"><div class="kpi-label">Monthly budget</div><div class="kpi-value pur" id="kpi-budget">—</div>
-        <div class="bar"><span id="kpi-budget-bar" style="width:0%"></span></div>
-        <div class="kpi-note" id="kpi-budget-note">quota usage</div></div>
     </div>
 
     <div class="grid2">
       <div class="card">
         <h2>Spend by model</h2>
-        <div class="hint">Which models are consuming your budget</div>
+        <div class="hint">Which models account for your usage</div>
         <div class="donut-wrap">
           <div class="donut-column">
             <div class="donut" id="model-donut"><div class="donut-center"><div><b id="model-total">—</b><span id="model-total-label">cost</span></div></div></div>
@@ -667,9 +660,7 @@
     return api('/api/v1/whoami').then(function(d){
       $('who-name').textContent = d.display_name || d.user || '—';
       var parts=[]; if(d.isSuperAdmin)parts.push('super admin'); else if(d.isAdmin)parts.push('admin');
-      if(d.quota && typeof d.quota.limit_usd === 'number' && d.quota.limit_usd>0) parts.push('budget $'+Math.round(d.quota.limit_usd));
       $('who-sub').textContent = parts.join(' · ');
-      if(d.quota) state.quota=d.quota;
       // Workspace links mirror the role-gated tabs on every other page:
       // everyone has this personal page; managers get My team; admins get
       // the org-wide usage page; super admins also get the operator pages.
@@ -687,34 +678,10 @@
     $('usage-sub').textContent = rangeLabel() + ' · updated ' + new Date().toLocaleTimeString();
     api('/api/v1/me/usage/summary?'+rangeQuery()).then(function(d){
       state.overview = d.overview || {};
-      var q = d.quota || state.quota;
       var o = state.overview;
       $('kpi-spend').textContent = preciseMoney(o.total_cost_usd);
       $('kpi-requests').textContent = compact(o.total_requests);
       $('kpi-tokens').textContent = compact(o.total_tokens);
-      if(q && typeof q.limit_usd === 'number' && q.limit_usd>0){
-        var pct = Math.round((q.spent_usd||0)/q.limit_usd*100);
-        $('kpi-budget').className = 'kpi-value ' + (pct > 100 ? 'budget-over' : 'budget-ok');
-        $('kpi-budget-bar').className = pct > 100 ? 'over' : '';
-        var budgetWidth = Math.min(100, pct);
-        if(state.animateUsage){
-          $('kpi-budget').textContent = '0%';
-          setBudgetColor($('kpi-budget'), 0, pct);
-          $('kpi-budget-bar').style.width = '0%';
-          animateBudget('kpi-budget', 0, pct, 1100);
-          animateWidth('kpi-budget-bar', budgetWidth, 1100);
-        } else {
-          $('kpi-budget').textContent = pct+'%';
-          setBudgetColor($('kpi-budget'), pct, pct);
-          $('kpi-budget-bar').style.width = budgetWidth+'%';
-        }
-        $('kpi-budget-note').textContent = money(q.spent_usd)+' of '+money(q.limit_usd);
-      } else {
-        $('kpi-budget').textContent = '—';
-        $('kpi-budget-note').textContent = 'no dollar budget configured';
-        $('kpi-budget-bar').className = '';
-        $('kpi-budget-bar').style.width = '0%';
-      }
     }).catch(function(){ toast('Could not load usage', true); });
 
     api('/api/v1/me/usage/models?'+rangeQuery()).then(function(rows){
@@ -931,45 +898,6 @@
     function tick(now){
       var p=Math.min(1,(now-start)/duration), eased=p;
       el.textContent=format(from+(to-from)*eased);
-      if(p<1) el._animationFrame=requestAnimationFrame(tick); else el._animationFrame=null;
-    }
-    el._animationFrame=requestAnimationFrame(tick);
-  }
-
-  function animateWidth(id, to, duration){
-    var el=$(id), start=performance.now();
-    if(el._animationFrame) cancelAnimationFrame(el._animationFrame);
-    // Width is driven frame-by-frame below; the CSS transition would add a
-    // second, lagging animation and make the bar trail the percentage.
-    el.style.transition='none';
-    el.style.width='0%';
-    function tick(now){
-      var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3);
-      el.style.width=(to*eased)+'%';
-      if(p<1) el._animationFrame=requestAnimationFrame(tick);
-      else { el.style.width=to+'%'; el._animationFrame=null; }
-    }
-    el._animationFrame=requestAnimationFrame(tick);
-  }
-
-  function setBudgetColor(el, value, target){
-    if(target > 100){ el.style.color='var(--red)'; return; }
-    var p=Math.max(0,Math.min(1,value/100));
-    var r=Math.round(61+(235-61)*p), g=Math.round(204+(168-204)*p), b=Math.round(110+(48-110)*p);
-    el.style.color='rgb('+r+','+g+','+b+')';
-  }
-
-  function animateBudget(id, from, to, duration){
-    var el=$(id), start=performance.now(), reduced=window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(el._animationFrame) cancelAnimationFrame(el._animationFrame);
-    if(reduced){ el.textContent=Math.round(to)+'%'; setBudgetColor(el,to,to); return; }
-    function tick(now){
-      var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3), value=from+(to-from)*eased;
-      // Keep the displayed integer behind the bar until the animation reaches
-      // the same endpoint; rounding would show 43% while the bar is still at
-      // roughly 42.5%.
-      el.textContent=(p < 1 ? Math.floor(value) : Math.round(to))+'%';
-      setBudgetColor(el,value,to);
       if(p<1) el._animationFrame=requestAnimationFrame(tick); else el._animationFrame=null;
     }
     el._animationFrame=requestAnimationFrame(tick);

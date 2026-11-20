@@ -373,6 +373,22 @@ func TestDemoModeKeepsHeaderNavigationAnchored(t *testing.T) {
 	}
 }
 
+// Policy-backed budgets are intentionally not exposed in the user-facing
+// Usage and My team views until the policy model is ready for general use.
+func TestUserAndManagerViewsHidePolicyBudgetUI(t *testing.T) {
+	for _, file := range []string{"account.html", "manager.html"} {
+		data, err := FS.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, unwanted := range []string{`id="kpi-budget"`, `id="kpiBudgetTile"`, `>Monthly budget<`, `>Team budget<`} {
+			if bytes.Contains(data, []byte(unwanted)) {
+				t.Errorf("%s still exposes policy-backed budget UI %q", file, unwanted)
+			}
+		}
+	}
+}
+
 // Structural string checks cannot catch a misplaced brace: one syntax error
 // makes the browser discard the entire inline script, so the dashboard renders
 // its skeletons but never issues a single API request. Parse every inline

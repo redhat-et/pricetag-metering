@@ -45,7 +45,7 @@ func TestManagerShowsTeamSpendKPI(t *testing.T) {
 		`tokens · '+spendReq+' requests this window'`,
 		`personView?'Person spend':(adminScope&&!drillSlug?'Org spend':'Team spend')`,
 		`document.getElementById('kSpendL').textContent='My spend';`,
-		`.demo-private #kpiSpendTile,.demo-private #kpiBudgetTile`,
+		`.demo-private #kpiSpendTile,.demo-private #approvals,.demo-private #apprBanner`,
 		// Self view must be self-pinned: /dashboard/* is admin-only and
 		// unscoped for admins, so it cannot source "My spend".
 		`/api/v1/me/usage/summary?range='+range+'&ref='+encodeURIComponent(savingsRef)`,
