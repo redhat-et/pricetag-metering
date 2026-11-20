@@ -118,6 +118,17 @@ func TestTopUsersRankUsesOnlyTheColumnsTheListNeeds(t *testing.T) {
 // must not poll. Both pages keep an explicit Refresh control instead.
 // Token counts on the org view already exceed a trillion, so the compact
 // formatter must step up past billions instead of printing "1924.1B".
+// Money KPIs must group thousands: "$169,845.03", not "$169845.03".
+func TestMoneyFormatterGroupsThousands(t *testing.T) {
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte("toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})")) {
+		t.Error("fmtC must group thousands in the cost/saved KPIs")
+	}
+}
+
 func TestTokenFormattersShowTrillions(t *testing.T) {
 	for _, file := range []string{"dashboard.html", "manager.html", "admin.html", "account.html"} {
 		data, err := FS.ReadFile(file)
