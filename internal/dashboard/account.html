@@ -5,16 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>My usage — EnMaaS</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script>
-  (function () {
-    try {
-      var params = new URLSearchParams(location.search);
-      if (params.get('tab') === 'keys' || params.get('first') === '1') {
-        document.documentElement.classList.add('preload-keys');
-      }
-    } catch (e) {}
-  })();
-</script>
+
 <style>
   :root{
     --bg:#0b0e11;--c1:#141820;--c2:#1a2030;--c3:#232d40;--bdr:#2e3848;
@@ -81,6 +72,7 @@
   .kpi-note{font-size:11px;color:var(--t2);margin-top:4px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
   .card{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;padding:20px}
+  .coming-soon-card{text-align:center;padding:72px 24px}.coming-soon-title{font-size:24px;font-weight:800;color:var(--blu);margin:18px 0 8px}
   .card h2{font-size:13px;font-weight:700;margin-bottom:2px}
   .card .hint{font-size:11px;color:var(--t2);margin-bottom:16px}
   .metric-toggle{display:flex;gap:3px;margin:2px 0 12px;background:var(--c2);border:1px solid var(--bdr);border-radius:7px;padding:3px;width:max-content}
@@ -197,10 +189,6 @@
   .toast.show{opacity:1;transform:none}
   .toast.err{background:var(--red);color:#fff}
   .hidden{display:none!important}
-  html.preload-keys #view-usage{display:none!important}
-  html.preload-keys #view-keys{display:block!important}
-  html.preload-keys #tab-usage{color:var(--t2);background:none}
-  html.preload-keys #tab-keys{color:var(--t);background:#22262c}
   @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
   @media(max-width:640px){.pg{padding:18px 14px 60px}.appbar{top:8px;padding:10px 14px;gap:10px}.identity{display:none}.kpis{grid-template-columns:1fr}}
 </style>
@@ -214,7 +202,6 @@
   <a class="logo" href="/account"><span class="en">En</span><em>MaaS</em></a>
   <nav>
     <button class="tab" id="tab-usage" data-tab="usage">My usage</button>
-    <button class="tab" id="tab-keys" data-tab="keys">API keys</button>
     <a href="/dashboard" id="nav-org" style="display:none" title="Usage for the whole organisation">Org usage</a>
     <a href="/manager" id="nav-team" style="display:none" title="Usage for everyone on your team">My team</a>
     <a href="/routing" id="nav-routing" style="display:none">Routing</a>
@@ -369,90 +356,17 @@
     </div>
   </section>
 
-  <!-- ============================== KEYS ============================== -->
+  <!-- API key management is temporarily unavailable while the production
+       identity flow is being updated. Keep the direct URL useful for old
+       bookmarks without calling the broken key endpoint. -->
   <section id="view-keys" class="hidden">
-    <div class="pg-head">
-      <div>
-        <h1>API keys</h1>
-        <div class="sub">Keys authenticate your tools against the EnMaaS gateway. They are shown only once.</div>
-      </div>
-      <button class="btn btn-primary" id="create-btn">+ Create key</button>
+    <div class="card coming-soon-card">
+      <h1>API keys</h1>
+      <p class="coming-soon-title">Coming soon</p>
+      <p class="hint">API key management is being updated and will be available here soon.</p>
     </div>
-
-    <div class="card">
-      <div class="keys-head">
-        <div>
-          <h2>My keys</h2>
-          <div class="hint" style="margin-bottom:0">Active, expiring, and revoked keys for your account</div>
-        </div>
-      </div>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>Name</th><th>Group</th><th>Status</th><th>Created</th><th>Expires</th><th>Last used</th><th></th></tr></thead>
-          <tbody id="key-rows"><tr><td colspan="7"><div class="loading"><span class="spinner"></span>Loading keys…</div></td></tr></tbody>
-        </table>
-      </div>
-    </div>
-
   </section>
 </main>
-
-<!-- Create key modal -->
-<div class="overlay" id="create-overlay">
-  <div class="modal">
-    <button class="close" data-close="create-overlay">×</button>
-    <div id="create-step">
-      <h3>Create API key</h3>
-      <div class="hint">Name it after the tool or machine that will use it.</div>
-      <div class="field"><label for="key-name">Name</label><input id="key-name" maxlength="64" placeholder="e.g. my-laptop-claude-code" autocomplete="off"></div>
-      <div class="field"><label for="key-expiry">Expires</label>
-        <select id="key-expiry">
-          <option value="2160h" selected>90 days (default)</option>
-          <option value="720h">30 days</option>
-          <option value="4320h">180 days</option>
-        </select>
-      </div>
-      <div class="warn">⚠ The key is shown once and cannot be retrieved later.</div>
-      <div class="err" id="create-err"></div>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" data-close="create-overlay">Cancel</button>
-        <button class="btn btn-primary" id="create-submit">Create key</button>
-      </div>
-    </div>
-
-    <div id="reveal-step" class="hidden">
-      <h3>Your new API key</h3>
-      <div class="hint">Copy it now. This is the only time it will be displayed.</div>
-      <div class="secret">
-        <div class="lbl">API key</div>
-        <code id="reveal-key">••••••••••••••••••••</code>
-        <button class="secret-show" id="reveal-show" type="button" aria-pressed="false">Show</button>
-        <button class="secret-copy" id="reveal-copy" type="button" aria-label="Copy API key" title="Copy"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"></rect><path d="M16 8V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h2"></path></svg></button>
-        <div class="warn">⚠ Do not share it or commit it to a repository.</div>
-      </div>
-      <div class="key-success">
-        <strong>Congratulations — you’re ready to use EnMaaS.</strong>
-        Start using your key with your local tools. Come back anytime to review your usage in the <a href="/account?tab=usage">My usage tab</a>, or <a href="/welcome" target="_blank" rel="noopener">see how to set up your tools ↗</a>.
-      </div>
-      <div class="saved"><input type="checkbox" id="reveal-saved"><label for="reveal-saved">I've saved this key in a safe place</label></div>
-      <div class="modal-actions"><button class="btn btn-primary" id="reveal-done" disabled>Done</button></div>
-    </div>
-  </div>
-</div>
-
-<!-- Revoke confirm -->
-<div class="overlay" id="revoke-overlay">
-  <div class="modal" style="max-width:440px">
-    <button class="close" data-close="revoke-overlay">×</button>
-    <h3>Revoke key?</h3>
-    <div class="hint" id="revoke-copy">This cannot be undone. Tools using this key will stop working immediately.</div>
-    <div class="err" id="revoke-err"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" data-close="revoke-overlay">Cancel</button>
-      <button class="btn btn-danger" id="revoke-confirm">Revoke key</button>
-    </div>
-  </div>
-</div>
 
 <div class="overlay" id="pricing-overlay">
   <div class="modal pricing-modal">
@@ -610,7 +524,6 @@
   function setTab(tab, push){
     state.tab = tab === 'keys' ? 'keys' : 'usage';
     $('tab-usage').className = 'tab' + (state.tab==='usage'?' on':'');
-    $('tab-keys').className = 'tab' + (state.tab==='keys'?' on':'');
     $('view-usage').className = state.tab==='usage' ? '' : 'hidden';
     $('view-keys').className = state.tab==='keys' ? '' : 'hidden';
     if(push !== false){
@@ -618,11 +531,9 @@
       if(state.tab!=='keys') url.searchParams.delete('first');
       history.replaceState(null,'',url.pathname+url.search);
     }
-    if(state.tab==='keys') loadKeys();
     if(state.tab==='usage') { state.animateUsage=true; loadUsage(); }
   }
   $('tab-usage').onclick=function(){ setTab('usage'); };
-  $('tab-keys').onclick=function(){ setTab('keys'); };
   $('recent-refresh').onclick=function(){ loadRecent(); };
   document.querySelectorAll('[data-model-metric]').forEach(function(btn){
     btn.onclick=function(){
@@ -1021,115 +932,6 @@
     }).join('');
   }
 
-  /* ---------------- keys ---------------- */
-  function loadKeys(){
-    api('/api/v1/me/keys').then(function(d){
-      state.keys = (d && (d.data || d.keys)) || [];
-      renderKeys();
-    }).catch(function(){
-      $('key-rows').innerHTML='<tr><td colspan="7"><div class="empty">Could not load your keys.</div></td></tr>';
-    });
-  }
-
-  function statusOf(k){
-    var s=(k.status||'active').toLowerCase();
-    if(s==='revoked'||s==='expired') return s;
-    var exp=k.expirationDate ? new Date(k.expirationDate) : null;
-    if(exp && !isNaN(exp)){
-      if(exp.getTime() < Date.now()) return 'expired';
-      if(exp.getTime()-Date.now() < 14*86400*1000) return 'expiring';
-    }
-    return 'active';
-  }
-
-  function renderKeys(){
-    if(!state.keys.length){
-      $('key-rows').innerHTML='<tr><td colspan="7"><div class="empty"><b>No keys yet</b>Follow the EnMaaS onboarding process to get started. If onboarding is already complete, create a key here.<div style="margin-top:14px"><button class="btn btn-primary" onclick="document.getElementById(\'create-btn\').click()">Create key</button></div></div></td></tr>';
-      return;
-    }
-    state.keys.sort(function(a,b){ return new Date(b.creationDate||0)-new Date(a.creationDate||0); });
-    $('key-rows').innerHTML = state.keys.map(function(k){
-      var st=statusOf(k);
-      var label = st==='expiring'?'Expiring soon':st;
-      var action = (st==='active'||st==='expiring') && k.id
-        ? '<button class="btn btn-danger btn-sm" data-revoke="'+esc(k.id)+'" data-name="'+esc(k.name||'')+'">Revoke</button>' : '';
-      return '<tr>'+
-        '<td style="font-weight:600">'+esc(k.name||'—')+'</td>'+
-        '<td style="color:var(--t2)">'+esc(k.subscription||k.group||'—')+'</td>'+
-        '<td><span class="pill '+st+'">'+esc(label)+'</span></td>'+
-        '<td style="color:var(--t2)">'+when(k.creationDate||k.created_at)+'</td>'+
-        '<td style="color:var(--t2)">'+dateOnly(k.expirationDate)+'</td>'+
-        '<td style="color:var(--t2)">'+(k.lastUsedAt?when(k.lastUsedAt):'never')+'</td>'+
-        '<td style="text-align:right">'+action+'</td></tr>';
-    }).join('');
-    Array.prototype.forEach.call(document.querySelectorAll('[data-revoke]'), function(btn){
-      btn.onclick=function(){
-        state.revokeId=btn.getAttribute('data-revoke');
-        $('revoke-copy').textContent='Revoke “'+(btn.getAttribute('data-name')||'this key')+'”? Tools using it will stop working immediately. This cannot be undone.';
-        $('revoke-err').textContent='';
-        $('revoke-overlay').className='overlay show';
-      };
-    });
-  }
-
-  $('create-btn').onclick=function(){
-    $('create-step').className=''; $('reveal-step').className='hidden';
-    $('key-name').value=''; $('key-expiry').value='2160h'; $('create-err').textContent='';
-    $('create-overlay').className='overlay show'; $('key-name').focus();
-  };
-
-  $('create-submit').onclick=function(){
-    var name=$('key-name').value.trim();
-    if(!name){ $('create-err').textContent='Give the key a name.'; return; }
-    var btn=this; btn.disabled=true;
-    api('/api/v1/me/keys',{method:'POST',body:{name:name,expiresIn:$('key-expiry').value}}).then(function(k){
-      $('reveal-key').textContent = '••••••••••••••••••••';
-      $('reveal-key').dataset.shown = 'false';
-      $('reveal-show').textContent = 'Show';
-      $('reveal-show').setAttribute('aria-pressed','false');
-      $('create-step').className='hidden'; $('reveal-step').className='';
-      $('reveal-saved').checked=false; $('reveal-done').disabled=true;
-      state.lastKey = k.key||'';
-      loadKeys();
-    }).catch(function(err){
-      $('create-err').textContent = (err.message||'Could not create the key.').replace(/^maas-api[^:]*:\s*/,'').slice(0,200);
-    }).then(function(){ btn.disabled=false; });
-  };
-
-  $('reveal-saved').onchange=function(){ $('reveal-done').disabled=!this.checked; };
-  $('reveal-show').onclick=function(){
-    var shown=$('reveal-key').dataset.shown==='true';
-    $('reveal-key').textContent=shown ? '••••••••••••••••••••' : (state.lastKey || '');
-    $('reveal-key').dataset.shown=shown ? 'false' : 'true';
-    this.textContent=shown ? 'Show' : 'Hide';
-    this.setAttribute('aria-pressed',shown ? 'false' : 'true');
-  };
-  $('reveal-copy').onclick=function(){
-    var v=state.lastKey || '';
-    navigator.clipboard.writeText(v).then(function(){ toast('Key copied'); }).catch(function(){
-      var ta=document.createElement('textarea'); ta.value=v; document.body.appendChild(ta); ta.select();
-      document.execCommand('copy'); ta.remove(); toast('Key copied');
-    });
-  };
-  $('reveal-done').onclick=function(){
-    $('reveal-key').textContent='••••••••••••••••••••';
-    $('reveal-key').dataset.shown='false';
-    $('reveal-show').textContent='Show';
-    $('reveal-show').setAttribute('aria-pressed','false');
-    state.lastKey='';
-    $('create-overlay').className='overlay';
-    toast('Key created');
-  };
-
-  $('revoke-confirm').onclick=function(){
-    var btn=this; btn.disabled=true;
-    api('/api/v1/me/keys/'+encodeURIComponent(state.revokeId),{method:'DELETE'}).then(function(){
-      $('revoke-overlay').className='overlay';
-      toast('Key revoked'); loadKeys();
-    }).catch(function(){ $('revoke-err').textContent='Could not revoke the key.'; })
-      .then(function(){ btn.disabled=false; });
-  };
-
   /* ---------------- copy / close ---------------- */
   Array.prototype.forEach.call(document.querySelectorAll('[data-close]'),function(b){
     b.onclick=function(){ $(b.getAttribute('data-close')).className='overlay'; };
@@ -1189,7 +991,6 @@
   }
   loadWho();
   setTab((params.get('tab')==='keys'||params.get('first')==='1')?'keys':'usage', false);
-  document.documentElement.classList.remove('preload-keys');
 })();
 </script>
 </body>

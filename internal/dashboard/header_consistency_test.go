@@ -10,7 +10,7 @@ import (
 // The nav order is part of the visual contract: changing it makes the header
 // jump when the user moves between pages.
 func TestNavigationConsistency(t *testing.T) {
-	want := []string{"My usage", "API keys", "Org usage", "My team", "Routing", "Admin"}
+	want := []string{"My usage", "Org usage", "My team", "Routing", "Admin"}
 	files := []string{"account.html", "dashboard.html", "manager.html", "admin.html", "routing.html"}
 
 	headerRE := regexp.MustCompile(`(?s)<header class="appbar">.*?</header>`)

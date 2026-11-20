@@ -503,3 +503,28 @@ func TestUserFacingUsagePagesHaveBackgroundFlow(t *testing.T) {
 		}
 	}
 }
+
+func TestAPIKeysAreComingSoonInTheUserView(t *testing.T) {
+	data, err := FS.ReadFile("account.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`id="view-keys"`,
+		"Coming soon",
+		"API key management is being updated",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("account.html is missing API key coming-soon state %q", want)
+		}
+	}
+	for _, unwanted := range []string{
+		`id="tab-keys"`,
+		"/api/v1/me/keys",
+		`id="create-btn"`,
+	} {
+		if bytes.Contains(data, []byte(unwanted)) {
+			t.Errorf("account.html still exposes unavailable API key flow %q", unwanted)
+		}
+	}
+}
