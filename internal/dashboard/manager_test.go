@@ -79,6 +79,24 @@ func TestManagerShowsTeamSpendKPI(t *testing.T) {
 	}
 }
 
+func TestManagerDemoPrivacyKeepsHeaderLayoutStable(t *testing.T) {
+	data, err := FS.ReadFile("manager.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		".demo-private .appbar{flex-wrap:nowrap}",
+		".demo-private .appbar nav{flex:0 0 auto;flex-shrink:0}",
+		".demo-private .appbar .ab-right{flex:1 1 0;min-width:0;justify-content:flex-end",
+		".demo-private .appbar .ab-btn,.demo-private .appbar .ab-out{padding-left:10px;padding-right:10px;white-space:nowrap",
+		"@media(min-width:1201px) and (max-width:1280px)",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("manager.html is missing demo header layout rule %q", want)
+		}
+	}
+}
+
 func TestManagerDemoModeHidesActualSpend(t *testing.T) {
 	data, err := FS.ReadFile("manager.html")
 	if err != nil {
