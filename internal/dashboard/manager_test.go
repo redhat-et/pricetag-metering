@@ -89,7 +89,7 @@ func TestManagerDemoPrivacyKeepsHeaderLayoutStable(t *testing.T) {
 		".demo-private .appbar nav{flex:0 0 auto;flex-shrink:0}",
 		".demo-private .appbar .ab-right{flex:1 1 0;min-width:0;justify-content:flex-end",
 		".demo-private .appbar .ab-btn,.demo-private .appbar .ab-out{padding-left:10px;padding-right:10px;white-space:nowrap",
-		"@media(min-width:1201px) and (max-width:1280px)",
+		".demo-private .appbar .ab-user{max-width:240px;overflow:hidden;text-overflow:ellipsis}",
 	} {
 		if !bytes.Contains(data, []byte(want)) {
 			t.Errorf("manager.html is missing demo header layout rule %q", want)

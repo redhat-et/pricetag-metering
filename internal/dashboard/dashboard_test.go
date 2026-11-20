@@ -396,6 +396,24 @@ func TestUserAndManagerViewsHidePolicyBudgetUI(t *testing.T) {
 	}
 }
 
+func TestAdminShowsDailyModelUsageTimeline(t *testing.T) {
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`id="admin-timeline-panel"`,
+		`id="admin-model-timeline"`,
+		`id="admin-timeline-toggle"`,
+		`api('/api/v1/dashboard/timeline?'+filters+'&group_by=model',force)`,
+		`adminTimelineMetric='tokens'`,
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("dashboard.html is missing admin daily model usage feature %q", want)
+		}
+	}
+}
+
 // Structural string checks cannot catch a misplaced brace: one syntax error
 // makes the browser discard the entire inline script, so the dashboard renders
 // its skeletons but never issues a single API request. Parse every inline

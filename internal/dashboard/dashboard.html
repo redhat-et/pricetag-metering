@@ -99,6 +99,9 @@ tr.clickable{cursor:pointer}
 .charts-row.four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .chart-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px}
 .chart-box canvas{max-height:280px}
+.timeline-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:24px}
+.timeline-wrap{position:relative;height:300px}
+.timeline-wrap canvas{width:100%!important;height:100%!important}
 .pie-split{display:flex;align-items:center;gap:18px;min-height:240px}
 .pie-canvas{flex:0 0 220px;width:220px;height:220px;display:block}
 .pie-column{flex:0 0 220px;width:220px;display:flex;flex-direction:column;align-items:stretch}
@@ -329,13 +332,11 @@ tr.clickable{cursor:pointer}
   .demo-private .appbar{flex-wrap:nowrap}
   .demo-private .appbar nav{flex:0 0 auto;flex-shrink:0}
   .demo-private .appbar nav a{padding-left:10px;padding-right:10px}
-  .demo-private .appbar .ab-right{flex:1 1 0;min-width:0;justify-content:flex-end;gap:6px;flex-wrap:nowrap}
+  .demo-private .appbar .ab-right{flex:1 1 0;min-width:0;justify-content:flex-end;gap:6px;flex-wrap:wrap}
   .demo-private .appbar .ab-btn,.demo-private .appbar .ab-out{padding-left:10px;padding-right:10px;white-space:nowrap;flex-shrink:0}
   .demo-private .appbar .ab-clock,.demo-private .appbar .ab-user,.demo-private .appbar .demo-badge{white-space:nowrap;flex-shrink:0}
+  .demo-private .appbar .ab-user{max-width:240px;overflow:hidden;text-overflow:ellipsis}
   .demo-private .appbar .demo-badge{padding-left:6px;padding-right:6px;font-size:9px;letter-spacing:.3px}
-}
-@media(min-width:1201px) and (max-width:1280px){
-  .demo-private .appbar .ab-right{flex-wrap:wrap;row-gap:4px}
 }
 @media(max-width:640px){.appbar{top:8px;padding:10px 14px;gap:10px}}
 @media(max-width:1200px){.appbar{align-items:flex-start}.appbar nav{flex:1 1 auto;min-width:0}.ab-right{flex:1 1 100%;margin-left:0;justify-content:flex-start}}
@@ -541,6 +542,20 @@ tr.clickable{cursor:pointer}
   </div>
 </div>
 
+<div class="timeline-box" id="admin-timeline-panel">
+  <div class="chart-head">
+    <div>
+      <h2>Daily model usage</h2>
+      <div style="font-size:12px;color:var(--text2)">Your tokens or spend per model over the selected period</div>
+    </div>
+    <div class="tl-toggle" id="admin-timeline-toggle" style="margin-bottom:0">
+      <button data-atm="tokens" class="active">Tokens</button>
+      <button data-atm="cost" class="demo-cost">Dollars</button>
+    </div>
+  </div>
+  <div class="timeline-wrap"><canvas id="admin-model-timeline" aria-label="Daily model usage chart"></canvas></div>
+</div>
+
 <div class="charts-row user-map-row" id="bottom-analytics">
   <div class="section geo-section">
     <div class="chart-head">
@@ -664,6 +679,7 @@ let range='mtd', groupFilter='', userFilter=[], modelFilter='';
 let isAdmin=false;        // org-wide Usage view (all users)
 let isSuperAdmin=false;   // operator tools: Routing/Compression/Admin nav + "view as"
 let modelMetric='tokens', userPieMetric='cost', toolMetric='tokens';
+let adminTimelineMetric='tokens', adminTimelineChart=null, cachedAdminTimeline=[];
 let savingsRef='claude-opus-4-8';
 let tokenChart=null, userCostChart=null, toolChart=null, costCenterChart=null;
 let cachedGroups=[], cachedModels=[], cachedTools=[], chartUsers=[], directoryUsers=[];
@@ -762,7 +778,7 @@ async function refresh(force){
   // the list of things you can still pick.
   try {
     const chartSort=userPieMetric==='cost'?'cost_usd':userPieMetric==='requests'?'requests':'total_tokens';
-      const [ov,gr,chartUs,mo,tools,geo,cc,rc,rosterCat,modelCat,directory]=await Promise.all([
+      const [ov,gr,chartUs,mo,tools,geo,cc,rc,rosterCat,modelCat,tl,directory]=await Promise.all([
        api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
        api('/api/v1/dashboard/groups?'+filters,force),
          api('/api/v1/dashboard/users?'+filters+'&sort='+chartSort+'&order=desc&limit=30&offset=0&savings=false',force),
@@ -773,6 +789,7 @@ async function refresh(force){
       api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
        api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200&savings=false',force),
        api('/api/v1/dashboard/models?'+rangeOnly,force),
+       api('/api/v1/dashboard/timeline?'+filters+'&group_by=model',force),
        api('/api/v1/dashboard/directory-users',force)
        ]);
   cachedOverview=ov;
@@ -785,6 +802,7 @@ async function refresh(force){
   // cache ratio in renderSavings, so a user/group filter that contains no
   // paid traffic doesn't silently drop the cache assumption.
    catalogModels=modelCat;
+     cachedAdminTimeline=Array.isArray(tl)?tl:[];
      directoryUsers=directory||[];
      chartUsers=collapseUsageUsers(Array.isArray(chartUs)?chartUs:[]);
    renderKPI(ov);
@@ -799,12 +817,42 @@ async function refresh(force){
    renderGeoMap();
    renderCostCenterChart();
    renderUserCostChart();
+   renderAdminTimeline();
   renderSavings();
   renderRecent(rc);
     document.getElementById('last-refresh').textContent=' • '+new Date().toLocaleTimeString();
   } finally {
     if(force&&refreshBtn){refreshBtn.disabled=false;refreshBtn.textContent='Refresh';}
   }
+}
+
+function renderAdminTimeline(){
+  var buckets=cachedAdminTimeline||[], metric=adminTimelineMetric;
+  var byDay={}, totals={};
+  function value(b){return metric==='cost'?(b.total_cost_usd||0):(b.total_tokens||0);}
+  buckets.forEach(function(b){
+    var day=String(b.bucket||'').slice(0,10), series=b.series||'(unknown)';
+    if(!day)return;
+    if(!byDay[day])byDay[day]={};
+    byDay[day][series]=(byDay[day][series]||0)+value(b);
+    totals[series]=(totals[series]||0)+value(b);
+  });
+  var days=Object.keys(byDay).sort();
+  var ranked=Object.keys(totals).filter(function(s){return totals[s]>0}).sort(function(a,b){return totals[b]-totals[a]});
+  var top=ranked.slice(0,7), tail=ranked.slice(7), series=top.concat(tail.length?['__other__']:[]);
+  var panel=document.getElementById('admin-timeline-panel'),canvas=document.getElementById('admin-model-timeline');
+  if(!panel||!canvas)return;
+  if(!days.length||!series.length){panel.style.display='none';if(adminTimelineChart){adminTimelineChart.destroy();adminTimelineChart=null}return;}
+  panel.style.display='';
+  function point(day,name){
+    if(name==='__other__')return tail.reduce(function(sum,s){return sum+((byDay[day]&&byDay[day][s])||0)},0);
+    return (byDay[day]&&byDay[day][name])||0;
+  }
+  var labels=days.map(function(day){var d=new Date(day+'T00:00:00');return isNaN(d)?day:d.toLocaleDateString('en-US',{month:'short',day:'numeric'});});
+  var palette=['#4da0f8','#eba830','#a88cf8','#38d4c2','#e8554e','#f778ba','#b8d94a'];
+  var datasets=series.map(function(name,i){var other=name==='__other__',color=other?'#5b6b82':palette[i%palette.length];return {label:other?'Other':name,data:days.map(function(day){return point(day,name)}),borderColor:color,backgroundColor:color+'22',tension:.3,fill:false,pointRadius:2,borderWidth:2};});
+  if(adminTimelineChart)adminTimelineChart.destroy();
+  adminTimelineChart=new Chart(canvas,{type:'line',data:{labels:labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom',labels:{color:'#e0e3e8',boxWidth:10,usePointStyle:true}},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+(metric==='cost'?fmtC(ctx.parsed.y||0):fmtN(ctx.parsed.y||0));}}}},scales:{x:{ticks:{color:'#8b949e',maxRotation:0,autoSkip:true},grid:{color:'#22262c'}},y:{beginAtZero:true,ticks:{color:'#8b949e',callback:function(v){return metric==='cost'?fmtC(v):fmtN(v)}},grid:{color:'#22262c'}}}}});
 }
 
 function timeAgo(ts){
@@ -1926,6 +1974,14 @@ document.getElementById('tool-metric-toggle').addEventListener('click',e=>{
   document.querySelectorAll('#tool-metric-toggle button').forEach(x=>x.classList.toggle('active',x===b));
   toolMetric=b.dataset.tm;
   renderToolChart();
+});
+
+document.getElementById('admin-timeline-toggle').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(demoPrivacyEnabled()&&b.dataset.atm==='cost')return;
+  document.querySelectorAll('#admin-timeline-toggle button').forEach(x=>x.classList.toggle('active',x===b));
+  adminTimelineMetric=b.dataset.atm;
+  renderAdminTimeline();
 });
 
 document.getElementById('user-metric-toggle').addEventListener('click',e=>{
