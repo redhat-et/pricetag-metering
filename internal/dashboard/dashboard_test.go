@@ -387,6 +387,13 @@ func TestUserAndManagerViewsHidePolicyBudgetUI(t *testing.T) {
 			}
 		}
 	}
+	data, err := FS.ReadFile("account.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte(".kpis{display:grid;grid-template-columns:repeat(3,1fr)")) {
+		t.Error("account.html must use three equal KPI columns after removing Monthly budget")
+	}
 }
 
 // Structural string checks cannot catch a misplaced brace: one syntax error
