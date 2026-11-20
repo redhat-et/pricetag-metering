@@ -547,7 +547,7 @@ tr.clickable{cursor:pointer}
   <div class="chart-head">
     <div>
       <h2>Daily model usage</h2>
-      <div style="font-size:12px;color:var(--text2)">Your tokens or spend per model over the selected period</div>
+      <div style="font-size:12px;color:var(--text2)">Tokens or spend per model over the selected period</div>
     </div>
     <div class="tl-toggle" id="admin-timeline-toggle" style="margin-bottom:0">
       <button data-atm="tokens" class="active">Tokens</button>
@@ -1351,6 +1351,7 @@ function syncDemoMetrics(){
   var changed=false;
   if(modelMetric==='cost'){modelMetric='tokens';setMetricToggle('model-metric-toggle','mm','tokens');changed=true;}
   if(userPieMetric==='cost'){userPieMetric='tokens';setMetricToggle('user-metric-toggle','um','tokens');changed=true;}
+  if(adminTimelineMetric==='cost'){adminTimelineMetric='tokens';setMetricToggle('admin-timeline-toggle','atm','tokens');changed=true;}
   return changed;
 }
 window.refreshDemoPrivacy=function(){
@@ -1360,6 +1361,7 @@ window.refreshDemoPrivacy=function(){
   renderModelChart();
   renderCostCenterChart();
   renderUserCostChart();
+  renderAdminTimeline();
   if(changed&&typeof refreshUserChartOnly==='function')refreshUserChartOnly().catch(function(){renderUserCostChart();});
   if(typeof updateUserFilterLabel==='function')updateUserFilterLabel();
   if(demoPrivacyEnabled()&&typeof closeQuotaModal==='function')closeQuotaModal();
@@ -1980,7 +1982,7 @@ document.getElementById('tool-metric-toggle').addEventListener('click',e=>{
 document.getElementById('admin-timeline-toggle').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(demoPrivacyEnabled()&&b.dataset.atm==='cost')return;
-  document.querySelectorAll('#admin-timeline-toggle button').forEach(x=>x.classList.toggle('active',x===b));
+  setMetricToggle('admin-timeline-toggle','atm',b.dataset.atm);
   adminTimelineMetric=b.dataset.atm;
   renderAdminTimeline();
 });

@@ -407,6 +407,9 @@ func TestAdminShowsDailyModelUsageTimeline(t *testing.T) {
 		`id="admin-timeline-toggle"`,
 		`api('/api/v1/dashboard/timeline?'+filters+'&group_by=model',force)`,
 		`adminTimelineMetric='tokens'`,
+		`if(adminTimelineMetric==='cost'){adminTimelineMetric='tokens';setMetricToggle('admin-timeline-toggle','atm','tokens');changed=true;}`,
+		`renderAdminTimeline();`,
+		`setMetricToggle('admin-timeline-toggle','atm',b.dataset.atm);`,
 	} {
 		if !bytes.Contains(data, []byte(want)) {
 			t.Errorf("dashboard.html is missing admin daily model usage feature %q", want)
