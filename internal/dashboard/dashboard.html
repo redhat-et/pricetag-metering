@@ -370,6 +370,7 @@ tr.clickable{cursor:pointer}
   <a class="logo" href="/dashboard"><span class="en">En</span><em>MaaS</em></a>
   <nav>
     <a href="/account">My usage</a>
+    <a href="/account?tab=keys" class="admin-key-link" style="display:none">API keys</a>
     <a href="/dashboard" class="on">Org usage</a>
     <a href="/manager" id="tab-team" style="display:none" title="Usage for everyone on your team">My team</a>
     <a href="/routing" id="tab-routing" style="display:none">Routing</a>
@@ -2089,7 +2090,8 @@ fetch('/api/v1/whoami').then(function(r){return r.json()}).then(function(d){
     // branch there) and super-admins, who alone see the whole organisation
     // under it. A plain admin gets NO team tab: their all-visibility view
     // is this Usage page, not a team view.
-    if(d.isSuperAdmin||d.isManager)document.getElementById('tab-team').style.display='';
+     if(d.isSuperAdmin||d.isManager)document.getElementById('tab-team').style.display='';
+     if(isAdmin)document.querySelectorAll('.admin-key-link').forEach(function(el){el.style.display='';});
     if(isSuperAdmin){
       ['tab-routing','tab-admin'].forEach(function(id){document.getElementById(id).style.display='';});
 //MODE:standalone

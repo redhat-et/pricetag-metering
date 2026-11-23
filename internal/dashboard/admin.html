@@ -550,6 +550,7 @@ td .tag{white-space:nowrap}
   <a class="logo" href="/dashboard"><span class="en">En</span><em>MaaS</em></a>
   <nav>
     <a href="/account">My usage</a>
+    <a href="/account?tab=keys" class="admin-key-link" style="display:none">API keys</a>
     <a href="/dashboard">Org usage</a>
     <a href="/manager" id="team-tab" style="display:none" title="Usage for everyone on your team">My team</a>
 <!--MODE:cluster-->
@@ -4724,7 +4725,8 @@ fetch("/whoami").then(function(r){return r.json()}).then(function(d){
   if(d.user&&el){
     var name=d.display_name?d.display_name:d.user;
      el.innerHTML='<span class="demo-pii">'+esc(name)+'</span>'+(d.isSuperAdmin?' <span class="role">(super admin)</span>':d.isAdmin?' <span class="role">(admin)</span>':'');
-     if(typeof initDemoPrivacy==='function')initDemoPrivacy(!!d.isSuperAdmin);
+      document.querySelectorAll('.admin-key-link').forEach(function(el){el.style.display=(d.isAdmin||d.isSuperAdmin)?'':'none';});
+      if(typeof initDemoPrivacy==='function')initDemoPrivacy(!!d.isSuperAdmin);
   }
   var mvb=document.getElementById("my-view-btn");
   if(mvb&&d.user){mvb.href="/admin/impersonate?as="+encodeURIComponent(d.user);}

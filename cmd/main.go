@@ -483,10 +483,15 @@ func main() {
 		mux.HandleFunc("/api/v1/me/usage/models", auth(meUsageHandler.HandleModels))
 		mux.HandleFunc("/api/v1/me/usage/timeline", auth(meUsageHandler.HandleTimeline))
 		mux.HandleFunc("/api/v1/me/usage/recent", auth(meUsageHandler.HandleRecent))
-		mux.HandleFunc("/api/v1/me/keys", auth(adminHandler.HandleMyKeys))
-		mux.HandleFunc("/api/v1/me/keys/", auth(adminHandler.HandleMyKeys))
-		mux.HandleFunc("/me/keys", auth(adminHandler.HandleMyKeys))
-		mux.HandleFunc("/me/keys/", auth(adminHandler.HandleMyKeys))
+		// Personal key management is temporarily restricted to administrators
+		// while the production identity/group flow is being validated.
+		adminKeys := func(next http.HandlerFunc) http.HandlerFunc {
+			return auth(handler.RequirePartnerAdminAPI(cfg, store, next))
+		}
+		mux.HandleFunc("/api/v1/me/keys", adminKeys(adminHandler.HandleMyKeys))
+		mux.HandleFunc("/api/v1/me/keys/", adminKeys(adminHandler.HandleMyKeys))
+		mux.HandleFunc("/me/keys", adminKeys(adminHandler.HandleMyKeys))
+		mux.HandleFunc("/me/keys/", adminKeys(adminHandler.HandleMyKeys))
 		mux.HandleFunc("/me/whoami", auth(keysHandler.HandleWhoAmI))
 		mux.HandleFunc("/api/v1/whoami", auth(keysHandler.HandleWhoAmI))
 		mux.HandleFunc("/whoami", auth(keysHandler.HandleWhoAmI))

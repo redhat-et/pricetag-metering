@@ -13,10 +13,10 @@ import (
 // silently shipping a divergent page. The marker scan in mode_test.go cannot
 // catch that class of drift; only a byte compare can.
 var clusterGoldenHashes = map[string]string{
-	"account.html":   "32d69e97bc1f687c319cf8446d5673b9efe5165e8ca78f7969344ca8f0431e97",
-	"admin.html":     "78324e1dd892925a84e7c50454b7e10f3a53e92aec60953a5eb757a7fea8438b",
-	"dashboard.html": "b424f525fbffc23189f9cd74978191fd3ae9e7eaa478273aff3f5a83d42c6477",
-	"manager.html":   "72bbba6e5825be481a6c7061b09e4e2aebc1049d58a48c2d2353f859597301d8",
+	"account.html":   "07d21f9ba230dab650012db6853e9d268e8d76f31af1dcd2eb7abec3eae84374",
+	"admin.html":     "cc5afec1cf9b3ee5b4ea2b69db24a6ec06111e357eb30fe057bf2422a15f488c",
+	"dashboard.html": "859b19e9b22597adf3d5a8443db5cfe2dfaab6eb1f9118516f6608a86c790c85",
+	"manager.html":   "4e50f5ffcbd3135e43d5fdddad56df9a69b6a1cfc850e9adbe00306b719aaf1c",
 }
 
 // TestClusterModeBytesMatchMain guards the byte-identical guarantee.

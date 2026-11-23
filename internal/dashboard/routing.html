@@ -149,6 +149,7 @@ body{background:var(--bg);color:var(--t);font-family:'Inter',-apple-system,sans-
   <a class="logo" href="/dashboard"><span class="en">En</span><em>MaaS</em></a>
   <nav>
     <a href="/account">My usage</a>
+    <a href="/account?tab=keys" class="admin-key-link" style="display:none">API keys</a>
     <a href="/dashboard">Org usage</a>
     <a href="/manager" id="tab-team" style="display:none" title="Usage for everyone on your team">My team</a>
     <a href="/routing" class="on" id="tab-routing">Routing</a>
@@ -416,6 +417,7 @@ fetch('/api/v1/whoami').then(function(r){return r.json()}).then(function(d){
   ab.style.display='';
   document.getElementById('abOut').style.display='';
   if(d.isSuperAdmin||d.isManager)document.getElementById('tab-team').style.display='';
+  if(d.isAdmin||d.isSuperAdmin)document.querySelectorAll('.admin-key-link').forEach(function(el){el.style.display='';});
   document.getElementById('tab-admin').style.display='';
   var mvb=document.getElementById('my-view-btn');
   mvb.href='/admin/impersonate?as='+encodeURIComponent(d.user);

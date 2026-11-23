@@ -515,6 +515,22 @@ func TestAccountHasSelfDailyModelUsage(t *testing.T) {
 	}
 }
 
+func TestAccountKeysAreAdminOnly(t *testing.T) {
+	data, err := FS.ReadFile("account.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`class="tab admin-key-tab"`,
+		"state.admin = !!(d.isAdmin || d.isSuperAdmin);",
+		"if(state.admin) $('tab-keys').style.display=''",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("account.html is missing admin-only API key guard %q", want)
+		}
+	}
+}
+
 // The decorative dollars/tokens flow is part of the Usage and My team views.
 func TestUserFacingUsagePagesHaveBackgroundFlow(t *testing.T) {
 	for _, file := range []string{"account.html", "manager.html"} {
@@ -534,27 +550,18 @@ func TestUserFacingUsagePagesHaveBackgroundFlow(t *testing.T) {
 	}
 }
 
-func TestAPIKeysAreComingSoonInTheUserView(t *testing.T) {
+func TestAPIKeysAreAdminOnlyInTheUserView(t *testing.T) {
 	data, err := FS.ReadFile("account.html")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		`id="view-keys"`,
-		"Coming soon",
-		"API key management is being updated",
+		`class="tab admin-key-tab"`,
+		"state.admin = !!(d.isAdmin || d.isSuperAdmin);",
+		"if(state.admin) $('tab-keys').style.display=''",
 	} {
 		if !bytes.Contains(data, []byte(want)) {
-			t.Errorf("account.html is missing API key coming-soon state %q", want)
-		}
-	}
-	for _, unwanted := range []string{
-		`id="tab-keys"`,
-		"/api/v1/me/keys",
-		`id="create-btn"`,
-	} {
-		if bytes.Contains(data, []byte(unwanted)) {
-			t.Errorf("account.html still exposes unavailable API key flow %q", unwanted)
+			t.Errorf("account.html is missing admin-only API key guard %q", want)
 		}
 	}
 }
