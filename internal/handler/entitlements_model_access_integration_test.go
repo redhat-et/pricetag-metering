@@ -127,6 +127,54 @@ func TestEntitlementModelAccessModes(t *testing.T) {
 	}
 }
 
+// AIBH keeps calling the legacy allowlist API. In enforce mode the entitlement
+// endpoint reads the v2 verdict, so the resolver must fold that allowlist in:
+// a set narrows the role/grants set and a clear restores it.
+func TestEntitlementEnforceHonorsAIBHAllowlist(t *testing.T) {
+	store, ctx := openHandlerTestStore(t)
+	tenant, err := store.EnsureDefaultTenant(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const username = "aibh-allowlist@example.com"
+	userID := uuid.NewString()
+	if _, err := store.CreatePartnerUser(ctx, "test", userID, map[string]any{
+		"email": username, "first_name": "AIBH", "last_name": "Allowlist",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateModelAccessRole(ctx, tenant, "test", "Engineering", "", []string{"model-a", "model-b"}, true, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SyncPartnerUserSubjects(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewEntitlementsHandler(store, config.Config{ModelAccessEnforcement: "enforce"})
+	if got := entitlementFor(t, h, username, "model-b"); !got.HasAccess || !got.ModelAllowed {
+		t.Fatalf("baseline model-b = %#v", got)
+	}
+
+	// AIBH restricts the person to a subset of the v2 set.
+	if _, err := store.SetPartnerUserModelAllowlist(ctx, "partner-m2m", userID, []string{"model-a"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := entitlementFor(t, h, username, "model-b"); got.HasAccess || got.ModelAllowed {
+		t.Fatalf("AIBH subset must deny model-b = %#v", got)
+	}
+	if got := entitlementFor(t, h, username, "model-a"); !got.HasAccess || !got.ModelAllowed {
+		t.Fatalf("AIBH subset must allow model-a = %#v", got)
+	}
+
+	// AIBH clears its row when the budget is raised; the v2 set returns.
+	if err := store.DeletePartnerUserModelAllowlist(ctx, "partner-m2m", userID); err != nil {
+		t.Fatal(err)
+	}
+	if got := entitlementFor(t, h, username, "model-b"); !got.HasAccess || !got.ModelAllowed {
+		t.Fatalf("AIBH clear must restore model-b = %#v", got)
+	}
+}
+
 // A platform super-admin keeps dashboard/admin authority but is no longer
 // exempt from model access or budget enforcement. Broad inference access must
 // come from a normal role like everyone else.

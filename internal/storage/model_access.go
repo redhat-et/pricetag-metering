@@ -59,8 +59,15 @@ type EffectiveModelAccess struct {
 	DirectModels       []string             `json:"direct_models,omitempty"`
 	RestrictionEnabled bool                 `json:"restriction_enabled"`
 	RestrictionModels  []string             `json:"restriction_models,omitempty"`
-	EffectiveModels    []string             `json:"effective_models"`
-	PolicyVersion      int64                `json:"policy_version"`
+	// LegacyAllowlistEnabled reports that the AI Budget Help (v1) per-user
+	// allowlist is layered on top of the role policy for this subject.
+	// LegacyAllowlistModels is its exact-match list; EffectiveModels is
+	// already intersected with it. Deny-overrides: the allowlist can narrow
+	// the v2 set, never widen it.
+	LegacyAllowlistEnabled bool     `json:"legacy_allowlist_enabled"`
+	LegacyAllowlistModels  []string `json:"legacy_allowlist_models,omitempty"`
+	EffectiveModels        []string `json:"effective_models"`
+	PolicyVersion          int64    `json:"policy_version"`
 }
 
 func (s *Store) migrateModelAccess(ctx context.Context) error {
@@ -467,10 +474,10 @@ func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID
 		return result, ErrModelAccessTenantSuspended
 	}
 
-	var subjectStatus string
+	var subjectStatus, externalID string
 	var partnerActive sql.NullBool
 	if err := s.db.QueryRowContext(ctx, `
-		SELECT ps.principal_type, ps.status,
+		SELECT ps.principal_type, ps.external_id, ps.status,
 		       CASE
 		         WHEN ps.principal_type <> 'partner_user' THEN NULL
 		         WHEN pu.user_id IS NULL THEN FALSE
@@ -484,7 +491,7 @@ func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID
 		       THEN ps.external_id::uuid
 		     END
 		WHERE ps.tenant_id = $1 AND ps.subject_id = $2`, tenantID, subjectID).
-		Scan(&result.PrincipalType, &subjectStatus, &partnerActive); err != nil {
+		Scan(&result.PrincipalType, &externalID, &subjectStatus, &partnerActive); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return result, ErrModelAccessSubjectNotFound
 		}
@@ -581,6 +588,32 @@ func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID
 	} else {
 		result.EffectiveModels = base
 	}
+
+	// AI Budget Help still drives the legacy per-user allowlist through the v1
+	// partner API. Once MODEL_ACCESS_ENFORCEMENT=enforce, this resolver answers
+	// the entitlement and decision paths, so without this step an AIBH set or
+	// clear would be silently ignored. Apply the allowlist here as one more
+	// deny-overrides restriction: a set narrows the v2 set, a clear restores it,
+	// and AIBH can never widen beyond what roles and grants allow. Keeping it in
+	// the resolver makes the entitlement endpoint, /api/v2/policy/decide and the
+	// admin effective-access view agree on the answer.
+	if result.PrincipalType == PrincipalPartnerUser {
+		policy, err := s.GetPartnerUserModelAllowlist(ctx, externalID)
+		switch {
+		case err == nil:
+			result.LegacyAllowlistEnabled = policy.Enabled
+			if policy.Enabled {
+				result.LegacyAllowlistModels = policy.Models
+				result.EffectiveModels = intersectModels(result.EffectiveModels, policy.Models)
+			}
+		case errors.Is(err, ErrPartnerUserNotFound), errors.Is(err, ErrInvalidPartnerUser):
+			// The subject check above already fails closed when the partner
+			// row is missing or inactive; there is nothing to layer on here.
+		default:
+			return result, fmt.Errorf("legacy model allowlist lookup: %w", err)
+		}
+	}
+
 	if result.EffectiveModels == nil {
 		result.EffectiveModels = []string{}
 	}

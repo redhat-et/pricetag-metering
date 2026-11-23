@@ -227,6 +227,106 @@ func TestModelAccessEmptyRestrictionDeniesAll(t *testing.T) {
 	}
 }
 
+// AI Budget Help keeps driving the v1 per-user allowlist through the partner
+// API. Once MODEL_ACCESS_ENFORCEMENT=enforce the entitlement and decision paths
+// read the v2 resolver instead, so the resolver must layer that allowlist on
+// top: a set narrows the role/grants set, a clear restores it, and the
+// allowlist can never widen beyond what v2 grants.
+func TestModelAccessLegacyAllowlistOnTopOfRolePolicy(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a", "model-b")
+	userID := uuid.NewString()
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, userID, "active")
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a", "model-b"}) {
+		t.Fatalf("v2 baseline effective = %v", got.EffectiveModels)
+	}
+	if got.LegacyAllowlistEnabled {
+		t.Fatal("legacy allowlist must be inactive without an AIBH row")
+	}
+
+	// AIBH restricts to a subset of the v2 set.
+	if _, err := s.SetPartnerUserModelAllowlist(ctx, "partner-m2m", userID, []string{"model-a"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.LegacyAllowlistEnabled || !slices.Equal(got.LegacyAllowlistModels, []string{"model-a"}) {
+		t.Fatalf("legacy allowlist state = %#v", got)
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a"}) {
+		t.Fatalf("effective with AIBH subset = %v", got.EffectiveModels)
+	}
+	allow, err := s.DecideModelAccess(ctx, tenant, subject, "model-a", "invoke", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allow.Decision != PolicyDecisionAllow {
+		t.Fatalf("model-a decision = %#v", allow)
+	}
+	deny, err := s.DecideModelAccess(ctx, tenant, subject, "model-b", "invoke", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deny.Decision != PolicyDecisionDeny || deny.Reason != PolicyReasonModelNotAllowed {
+		t.Fatalf("model-b decision = %#v", deny)
+	}
+	list, err := s.DecideModelAccess(ctx, tenant, subject, "", "list", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(list.AllowedModels, []string{"model-a"}) {
+		t.Fatalf("list decision allowed models = %v", list.AllowedModels)
+	}
+
+	// AIBH cannot widen: a model outside the v2 set stays denied.
+	if _, err := s.SetPartnerUserModelAllowlist(ctx, "partner-m2m", userID, []string{"model-a", "model-z"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a"}) {
+		t.Fatalf("effective with widening attempt = %v", got.EffectiveModels)
+	}
+
+	// An explicit empty list is AIBH's "block all" contract.
+	if _, err := s.SetPartnerUserModelAllowlist(ctx, "partner-m2m", userID, []string{}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.EffectiveModels) != 0 {
+		t.Fatalf("effective with empty AIBH list = %v, want none", got.EffectiveModels)
+	}
+
+	// Clearing the AIBH row restores the v2 set, exactly as the v1 clear
+	// behaved before enforcement moved to v2.
+	if err := s.DeletePartnerUserModelAllowlist(ctx, "partner-m2m", userID); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LegacyAllowlistEnabled {
+		t.Fatal("legacy allowlist still enabled after clear")
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a", "model-b"}) {
+		t.Fatalf("effective after AIBH clear = %v", got.EffectiveModels)
+	}
+}
+
 func TestModelAccessDefaultExclusion(t *testing.T) {
 	s, ctx := openTestStore(t)
 	tenant, _ := s.EnsureDefaultTenant(ctx)

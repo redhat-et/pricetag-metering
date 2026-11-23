@@ -82,3 +82,30 @@ existing row without provisioning a new user. Unresolved manager DNs leave the
 existing manager untouched. The job never changes `updated_at`, only creates
 these scoped manager placeholders, and writes a rollback artifact before every
 apply. See [deploy/ldap-sync/README.md](../deploy/ldap-sync/README.md).
+
+## Model allowlist (AI Budget Help)
+
+AI Budget Help restricts over-budget people through a separate partner
+endpoint, authenticated with `MODEL_POLICY_API_SECRET` (or
+`MODEL_POLICY_API_SECRET_AIBT`):
+
+| Method | Path | Semantics |
+|---|---|---|
+| `GET` | `/api/v1/model-policies/users/{user_id}/allowlist` | Read the stored allowlist |
+| `PUT` | `/api/v1/model-policies/users/{user_id}/allowlist` | Replace the list; `{"models": []}` blocks every model |
+| `DELETE` | `/api/v1/model-policies/users/{user_id}/allowlist` | Clear the restriction |
+
+The list is an exact-match, deny-overrides restriction on top of the v2 role
+policy. With `MODEL_ACCESS_ENFORCEMENT=enforce`, the v2 resolver intersects the
+allowlist with the subject's role/grants set, so:
+
+- a list equal to the v2 set changes nothing;
+- a subset narrows the person to those models;
+- `DELETE` restores the full v2 set (for example after a budget increase);
+- a model the v2 policy does not grant stays denied — the allowlist can only
+  narrow, never widen.
+
+The entitlement endpoint, `/api/v2/policy/decide`, and the admin
+effective-access drawer all read the same intersection. Updates invalidate the
+quota-decision cache immediately, so a `PUT`/`DELETE` takes effect on the next
+request.
