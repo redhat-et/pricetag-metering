@@ -109,3 +109,8 @@ The entitlement endpoint, `/api/v2/policy/decide`, and the admin
 effective-access drawer all read the same intersection. Updates invalidate the
 quota-decision cache immediately, so a `PUT`/`DELETE` takes effect on the next
 request.
+
+A partner user with `key_revocation_pending` set fails closed: the resolver
+returns no effective models until the revocation completes, matching the
+legacy entitlement endpoint. This is distinct from `PUT {"models": []}`, which
+is AIBH's explicit block-all, and from `DELETE`, which clears the restriction.

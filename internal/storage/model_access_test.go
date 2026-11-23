@@ -325,6 +325,24 @@ func TestModelAccessLegacyAllowlistOnTopOfRolePolicy(t *testing.T) {
 	if !slices.Equal(got.EffectiveModels, []string{"model-a", "model-b"}) {
 		t.Fatalf("effective after AIBH clear = %v", got.EffectiveModels)
 	}
+
+	// A pending key revocation fails closed, matching the legacy allowlist
+	// endpoint and the pre-v2 entitlement contract.
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE partner_users SET key_revocation_pending = TRUE WHERE user_id = $1`, userID); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.LegacyAllowlistEnabled || len(got.EffectiveModels) != 0 {
+		t.Fatalf("pending revocation effective = %#v, want none", got)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE partner_users SET key_revocation_pending = FALSE WHERE user_id = $1`, userID); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestModelAccessDefaultExclusion(t *testing.T) {
