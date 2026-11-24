@@ -44,10 +44,14 @@ func (h *DashboardPolicyHandler) changed() {
 }
 
 type dashboardPolicyResponse struct {
-	Blocked  []string `json:"blocked"`
-	ISO      []string `json:"iso"`
-	Impacted int      `json:"impacted"`
-	People   int      `json:"people"`
+	Blocked             []string `json:"blocked"`
+	EnmaasBlocked       []string `json:"enmaas_blocked"`
+	RequiredGroups      []string `json:"required_groups"`
+	AllowUnknownCountry bool     `json:"allow_unknown_country"`
+	ISO                 []string `json:"iso"`
+	Impacted            int      `json:"impacted"`
+	EnmaasImpacted      int      `json:"enmaas_impacted"`
+	People              int      `json:"people"`
 }
 
 func (h *DashboardPolicyHandler) response(w http.ResponseWriter, r *http.Request) {
@@ -63,15 +67,36 @@ func (h *DashboardPolicyHandler) response(w http.ResponseWriter, r *http.Request
 		http.Error(w, "policy query failed", http.StatusInternalServerError)
 		return
 	}
+	enmaasBlocked, err := h.store.EnmaasBlockedCountries(r.Context())
+	if err != nil {
+		slog.Error("enmaas policy list failed", "error", err)
+		http.Error(w, "policy query failed", http.StatusInternalServerError)
+		return
+	}
+	policy, err := h.store.GetAccessPolicy(r.Context())
+	if err != nil {
+		slog.Error("access policy read failed", "error", err)
+		http.Error(w, "policy query failed", http.StatusInternalServerError)
+		return
+	}
+	groups := policy.RequiredGroups
+	if !policy.Configured {
+		groups = h.cfg.Access.RequiredGroups
+	}
 	writeJSON(w, dashboardPolicyResponse{
-		Blocked:  storage.SortedCountries(blocked),
-		ISO:      isoCountryCodes(),
-		Impacted: impacted,
-		People:   people,
+		Blocked:             storage.SortedCountries(blocked),
+		EnmaasBlocked:       storage.SortedCountries(enmaasBlocked),
+		RequiredGroups:      groups,
+		AllowUnknownCountry: policy.AllowUnknownCountry,
+		ISO:                 isoCountryCodes(),
+		Impacted:            impacted,
+		People:              people,
 	})
 }
 
-// Handle serves GET (read the policy) and POST (block a country).
+// Handle serves GET (read the policy) and POST (update one country's
+// dashboard and EnMaaS eligibility). POST keeps its historical shape:
+// {country: "NL"} blocks the dashboard, while the admin UI sends both flags.
 func (h *DashboardPolicyHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		h.response(w, r)
@@ -83,7 +108,9 @@ func (h *DashboardPolicyHandler) Handle(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var body struct {
-		Country string `json:"country"`
+		Country   string `json:"country"`
+		Dashboard *bool  `json:"dashboard"`
+		Enmaas    *bool  `json:"enmaas"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
@@ -93,17 +120,90 @@ func (h *DashboardPolicyHandler) Handle(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "country must be an ISO 3166-1 alpha-2 code", http.StatusBadRequest)
 		return
 	}
-	added, err := h.store.AddDashboardBlockedCountry(r.Context(), caller(r, h.cfg), country)
-	if err != nil {
-		slog.Error("dashboard policy add failed", "country", country, "error", err)
-		http.Error(w, "policy update failed", http.StatusInternalServerError)
-		return
+	// Backward compatible default: a bare country blocks dashboard access.
+	dashboard := true
+	if body.Dashboard != nil {
+		dashboard = *body.Dashboard
 	}
-	if added && h.gate != nil {
+	actor := caller(r, h.cfg)
+	changedDashboard := false
+	if dashboard {
+		added, err := h.store.AddDashboardBlockedCountry(r.Context(), actor, country)
+		if err != nil {
+			slog.Error("dashboard policy add failed", "country", country, "error", err)
+			http.Error(w, "policy update failed", http.StatusInternalServerError)
+			return
+		}
+		changedDashboard = added
+	} else {
+		removed, err := h.store.RemoveDashboardBlockedCountry(r.Context(), actor, country)
+		if err != nil {
+			slog.Error("dashboard policy remove failed", "country", country, "error", err)
+			http.Error(w, "policy update failed", http.StatusInternalServerError)
+			return
+		}
+		changedDashboard = removed
+	}
+	changedEnmaas := false
+	if body.Enmaas != nil {
+		blockedEnmaas := !*body.Enmaas
+		changed, err := h.store.SetEnmaasCountryBlocked(r.Context(), actor, country, blockedEnmaas)
+		if err != nil {
+			slog.Error("enmaas policy update failed", "country", country, "error", err)
+			http.Error(w, "policy update failed", http.StatusInternalServerError)
+			return
+		}
+		changedEnmaas = changed
+	}
+	if (changedDashboard || changedEnmaas) && h.gate != nil {
 		h.gate.Invalidate()
 	}
-	if added {
+	if changedDashboard || changedEnmaas {
 		h.changed()
+	}
+	h.response(w, r)
+}
+
+// HandlePolicy serves PUT /api/v1/admin/dashboard-policies/policy: the EnMaaS
+// guest-list groups and the unknown-country verdict.
+func (h *DashboardPolicyHandler) HandlePolicy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		w.Header().Set("Allow", "PUT")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		RequiredGroups      []string `json:"required_groups"`
+		AllowUnknownCountry *bool    `json:"allow_unknown_country"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	current, err := h.store.GetAccessPolicy(r.Context())
+	if err != nil {
+		http.Error(w, "policy query failed", http.StatusInternalServerError)
+		return
+	}
+	allowUnknown := current.AllowUnknownCountry
+	if body.AllowUnknownCountry != nil {
+		allowUnknown = *body.AllowUnknownCountry
+	} else if !current.Configured {
+		allowUnknown = h.cfg.Access.AllowUnknownCountry
+	}
+	groups := body.RequiredGroups
+	if groups == nil {
+		groups = current.RequiredGroups
+		if !current.Configured {
+			groups = h.cfg.Access.RequiredGroups
+		}
+	}
+	if _, err := h.store.SaveAccessPolicy(r.Context(), storage.AccessPolicy{
+		RequiredGroups:      groups,
+		AllowUnknownCountry: allowUnknown,
+	}, caller(r, h.cfg)); err != nil {
+		slog.Error("save access policy failed", "error", err)
+		http.Error(w, "policy update failed", http.StatusInternalServerError)
+		return
 	}
 	h.response(w, r)
 }

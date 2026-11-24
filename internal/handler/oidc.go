@@ -434,7 +434,11 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		h.renderOIDCClaims(w, claims, h.loginDestination(r, username), "", rawClaims)
 		return
 	}
-	http.Redirect(w, r, h.loginDestination(r, username), http.StatusFound)
+	dest := h.loginDestination(r, username)
+	if h.onboardingGate != nil && h.onboardingGate.NeedsOnboarding(r.Context(), username, claims.Groups) {
+		dest = "/onboarding"
+	}
+	http.Redirect(w, r, dest, http.StatusFound)
 }
 
 // persistOIDCProfile merges the IdP's profile claims into partner-user tags.

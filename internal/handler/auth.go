@@ -53,7 +53,14 @@ type AuthHandler struct {
 	// and lands everyone on /dashboard.
 	orgStore  *storage.Store
 	oidcStore oidcPartnerStore
+	// onboardingGate, when set, sends a just-authenticated user who has not
+	// cleared the EnMaaS eligibility gates to /onboarding instead of the
+	// dashboard. Optional so login stays constructible without a directory.
+	onboardingGate *AccessGate
 }
+
+// SetOnboardingGate wires the eligibility gate used by the login redirect.
+func (h *AuthHandler) SetOnboardingGate(g *AccessGate) { h.onboardingGate = g }
 
 type oidcPartnerStore interface {
 	GetPartnerUser(context.Context, string) (storage.PartnerUser, error)

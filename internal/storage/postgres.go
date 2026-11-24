@@ -1812,7 +1812,13 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.migrateQuota(ctx); err != nil {
 		return err
 	}
+	if err := s.migrateOnboarding(ctx); err != nil {
+		return fmt.Errorf("onboarding migration failed: %w", err)
+	}
 	if err := s.migrateDashboardPolicy(ctx); err != nil {
+		return err
+	}
+	if err := s.seedEnmaasBlockedCountries(ctx); err != nil {
 		return err
 	}
 	if err := s.migrateUserModelPolicy(ctx); err != nil {
