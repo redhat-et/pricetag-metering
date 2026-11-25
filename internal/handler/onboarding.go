@@ -168,7 +168,7 @@ func (h *OnboardingHandler) HandleAcceptTerms(w http.ResponseWriter, r *http.Req
 			"version": current,
 			"method":  loginMethod(r),
 		})
-		slog.Info("terms accepted", "user", state.Username, "version", current)
+		slog.Info("terms accepted", "user_id", state.UserID, "version", current)
 	}
 
 	next, err := h.gate.StateForRequest(r)
