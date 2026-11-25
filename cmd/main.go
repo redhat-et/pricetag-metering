@@ -466,11 +466,18 @@ func main() {
 		// host-free. Root sends newcomers here; signed-in users navigate on.
 		mux.HandleFunc("/welcome", dashboardHandler.ServeWelcome)
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/" {
-				http.Redirect(w, r, "/welcome", http.StatusFound)
+			if r.URL.Path != "/" {
+				http.NotFound(w, r)
 				return
 			}
-			http.NotFound(w, r)
+			// Signed-in users land on their personal account page; the account
+			// gate forwards a pending policy acknowledgement to /onboarding.
+			// Newcomers keep the public welcome page.
+			if authHandler.AuthenticatedUser(r) != "" {
+				http.Redirect(w, r, "/account", http.StatusFound)
+				return
+			}
+			http.Redirect(w, r, "/welcome", http.StatusFound)
 		})
 
 		// User pages — session required. /whoami backs both the legacy pages and
