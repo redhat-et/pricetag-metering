@@ -315,7 +315,7 @@
     <span class="kicker">Access status</span>
     <h2 id="blocked-title">You're signed in, but not enabled yet.</h2>
     <p id="blocked-copy"></p>
-    <div class="next-steps">
+    <div class="next-steps" id="next-steps-wrap">
       <b>What to do next</b>
       <ul id="next-steps">
         <li>Ask your manager or the EnMaaS team to add you to an authorized group.</li>
@@ -491,7 +491,14 @@
       // trusted template as HTML. Dynamic values are URL-encoded above.
       $('blocked-copy').innerHTML = blockedCopy(state.blocked_reason);
       var steps = $('next-steps');
-      if (state.blocked_reason === 'group_required') {
+      var stepsWrap = $('next-steps-wrap');
+      stepsWrap.style.display = '';
+      if (state.blocked_reason === 'country_blocked') {
+        // The paragraph already carries the Jira link and instructions; a
+        // generic "contact the EnMaaS team" list would contradict it.
+        stepsWrap.style.display = 'none';
+        steps.innerHTML = '';
+      } else if (state.blocked_reason === 'group_required') {
         steps.innerHTML = '<li>Ask your manager or the EnMaaS team to add you to an authorized group.</li><li>Sign out and back in so your groups claim refreshes.</li><li>Use “Check again” below.</li>';
       } else if (state.blocked_reason === 'country_blocked' || state.blocked_reason === 'country_unknown') {
         steps.innerHTML = '<li>Contact the EnMaaS team if you believe your region is recorded incorrectly.</li><li>Include your Red Hat username and the country on your employee profile.</li>';
