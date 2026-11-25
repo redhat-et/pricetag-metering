@@ -487,7 +487,9 @@
       var blocked = $('blocked-card');
       blocked.classList.remove('hidden');
       blocked.classList.toggle('bad', state.blocked_reason !== 'directory_unavailable');
-      $('blocked-copy').textContent = blockedCopy(state.blocked_reason);
+      // The copy contains the policy links (Jira, Rover group); render the
+      // trusted template as HTML. Dynamic values are URL-encoded above.
+      $('blocked-copy').innerHTML = blockedCopy(state.blocked_reason);
       var steps = $('next-steps');
       if (state.blocked_reason === 'group_required') {
         steps.innerHTML = '<li>Ask your manager or the EnMaaS team to add you to an authorized group.</li><li>Sign out and back in so your groups claim refreshes.</li><li>Use “Check again” below.</li>';
