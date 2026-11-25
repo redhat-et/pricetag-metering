@@ -53,9 +53,16 @@ type OnboardingState struct {
 	UserID        string      `json:"user_id,omitempty"`
 	Groups        []string    `json:"groups"`
 	DisplayName   string      `json:"display_name,omitempty"`
-	Country       string      `json:"-"` // never serialised
-	CountryState  string      `json:"-"`
-	GroupState    string      `json:"-"`
+	// Impersonating reports that a super-admin is viewing as this person.
+	// The acknowledgement endpoint refuses in that mode: consent must be the
+	// person's own action, so the page disables the submit instead.
+	Impersonating bool `json:"impersonating"`
+	// GuestListGroup is the configured Rover group shown in the ineligible
+	// copy. It is policy, not a claim; empty hides the Rover link.
+	GuestListGroup string `json:"guest_list_group,omitempty"`
+	Country        string `json:"-"` // never serialised
+	CountryState   string `json:"-"`
+	GroupState     string `json:"-"`
 }
 
 // TermsInfo describes the document the user must accept.
@@ -250,6 +257,9 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 	// The allowlist is case-insensitive; an empty allowlist accepts any
 	// non-technical group ("whatever group the user has").
 	policy := g.EffectivePolicy(ctx)
+	if len(policy.RequiredGroups) > 0 {
+		state.GuestListGroup = policy.RequiredGroups[0]
+	}
 	// Super-admins keep the operator surface reachable: the dashboard gate
 	// already exempts them, and locking them out of the account page because
 	// their Rover groups lag would make the console unusable. The country and
@@ -384,7 +394,11 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 // request. The impersonated identity is intentionally used here: a
 // super-admin "viewing as" should see exactly what that person sees.
 func (g *AccessGate) StateForRequest(r *http.Request) (OnboardingState, error) {
-	return g.Evaluate(r.Context(), caller(r, g.cfg), sessionGroups(r, g.cfg))
+	state, err := g.Evaluate(r.Context(), caller(r, g.cfg), sessionGroups(r, g.cfg))
+	if err == nil {
+		state.Impersonating = r.Header.Get(realUserHeader) != ""
+	}
+	return state, err
 }
 
 // RequireAccount page gate. Unready users are sent to /onboarding, which is

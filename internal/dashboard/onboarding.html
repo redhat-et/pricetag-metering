@@ -576,9 +576,17 @@
   function blockedCopy(reason) {
     switch (reason) {
       case 'group_required':
-        return 'Your account is not in an authorized EnMaaS group. Access is granted by group, so the EnMaaS team needs to add you before you can continue.';
+        var group = state && state.guest_list_group ? state.guest_list_group : '';
+        var link = group
+          ? '<a href="https://rover.redhat.com/groups/group/' + encodeURIComponent(group) + '" target="_blank" rel="noopener">EnMaaS guest list Rover Group</a>'
+          : 'EnMaaS guest list Rover Group';
+        return 'You are not on the EnMaaS guest list. EnMaaS is being gradually rolled out across Engineering. ' +
+          'To access it, you must be a member of the ' + link + '. If you need access, file a General EnMaaS ' +
+          'support ticket with your team name and cost center.';
       case 'country_blocked':
-        return "EnMaaS isn't available in your region. Contact the EnMaaS team if you believe this is a mistake.";
+        return 'Access is not yet available in The Netherlands while Red Hat completes the required Works Council ' +
+          'approval process. To be notified when it is approved, open <a href="https://redhat.atlassian.net/browse/PCO-2112" ' +
+          'target="_blank" rel="noopener">PCO-2112</a> in Jira and add yourself to the Watch list (eye icon).';
       case 'country_unknown':
         return 'We could not verify your region. Contact the EnMaaS team to have your employee profile corrected.';
       case 'inactive':
@@ -595,7 +603,7 @@
   function load() {
     fetch('/api/v1/me/onboarding', {credentials:'same-origin'})
       .then(function (r) { if (r.status === 401) { location.href = '/login'; throw new Error('auth'); } return r.json(); })
-      .then(function (j) { state = j; render(); })
+      .then(function (j) { state = j; render(); applyImpersonation(); })
       .catch(function () {});
   }
 
@@ -612,7 +620,7 @@
   });
 
   $('accept').addEventListener('change', function () {
-    $('start').disabled = !this.checked;
+    $('start').disabled = !this.checked || !!state.impersonating;
   });
 
   $('start').addEventListener('click', function () {
@@ -625,10 +633,15 @@
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({version: state.terms.version, accepted: true})
     }).then(function (r) {
-      return r.json().then(function (j) { return {ok: r.ok, body: j}; });
+      return r.text().then(function (text) {
+        var body = null;
+        try { body = JSON.parse(text); } catch (e) {}
+        return {ok: r.ok, body: body, text: text};
+      });
     }).then(function (res) {
       if (!res.ok) {
-        $('err').textContent = (res.body && res.body.error) || 'Could not record acceptance.';
+        $('err').textContent = (res.body && (res.body.error || res.body.reason)) ||
+          (res.text && res.text.trim()) || 'Could not record acceptance.';
         btn.disabled = false;
         return;
       }
