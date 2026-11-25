@@ -397,7 +397,11 @@ func (g *AccessGate) RequireAccount(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "onboarding check failed", http.StatusInternalServerError)
 			return
 		}
-		if !state.Allowed {
+		// A pending policy acknowledgement always sends the person to the
+		// checklist: it is a self-service step, not a denial, so it applies in
+		// observe mode too. Group/country denials only redirect when the mode
+		// actually enforces them.
+		if state.State == OnboardingNeedsTerms || (state.Mode == config.OnboardingEnforce && !state.Allowed) {
 			http.Redirect(w, r, "/onboarding", http.StatusFound)
 			return
 		}
@@ -415,7 +419,7 @@ func (g *AccessGate) RequireOnboardedAPI(next http.HandlerFunc) http.HandlerFunc
 			http.Error(w, "onboarding check failed", http.StatusInternalServerError)
 			return
 		}
-		if !state.Allowed || state.State != OnboardingReady {
+		if state.Mode == config.OnboardingEnforce && (!state.Allowed || state.State != OnboardingReady) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(map[string]any{

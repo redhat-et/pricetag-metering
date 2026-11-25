@@ -214,7 +214,7 @@
   <a class="logo" href="/account"><span class="en">En</span><em>MaaS</em></a>
   <nav>
     <button class="tab" id="tab-usage" data-tab="usage">My usage</button>
-    <button class="tab admin-key-tab" id="tab-keys" data-tab="keys" style="display:none">API keys</button>
+    <button class="tab" id="tab-keys" data-tab="keys">API keys</button>
     <a href="/dashboard" id="nav-org" style="display:none" title="Usage for the whole organisation">Org usage</a>
     <a href="/manager" id="nav-team" style="display:none" title="Usage for everyone on your team">My team</a>
     <a href="/routing" id="nav-routing" style="display:none">Routing</a>
@@ -608,7 +608,7 @@
 
   /* ---------------- tabs ---------------- */
   function setTab(tab, push){
-    state.tab = tab === 'keys' && state.admin ? 'keys' : 'usage';
+    state.tab = tab === 'keys' ? 'keys' : 'usage';
     $('tab-usage').className = 'tab' + (state.tab==='usage'?' on':'');
     $('tab-keys').className = 'tab' + (state.tab==='keys'?' on':'');
     $('view-usage').className = state.tab==='usage' ? '' : 'hidden';
@@ -659,8 +659,6 @@
   function loadWho(){
     return api('/api/v1/whoami').then(function(d){
       $('who-name').textContent = d.display_name || d.user || '—';
-      state.admin = !!(d.isAdmin || d.isSuperAdmin);
-      if(state.admin) $('tab-keys').style.display='';
       var parts=[]; if(d.isSuperAdmin)parts.push('super admin'); else if(d.isAdmin)parts.push('admin');
       $('who-sub').textContent = parts.join(' · ');
       // Workspace links mirror the role-gated tabs on every other page:
@@ -672,7 +670,7 @@
         $('nav-routing').style.display='';
         $('nav-admin').style.display='';
       }
-      if(state.admin && params && (params.get('tab')==='keys'||params.get('first')==='1')) setTab('keys', false);
+      if(params && (params.get('tab')==='keys'||params.get('first')==='1')) setTab('keys', false);
     }).catch(function(){});
   }
 

@@ -376,10 +376,7 @@ func (h *AuthHandler) HandleImpersonate(w http.ResponseWriter, r *http.Request) 
 	// self-view; never route an impersonated session to organization usage.
 	// ?to= lets the admin land on /manager instead, to see exactly what a
 	// manager on their team sees. Strict allowlist — never an open redirect.
-	dest := "/dashboard"
-	if h.cfg.StandaloneManagement() {
-		dest = "/account"
-	}
+	dest := "/account"
 	switch r.URL.Query().Get("to") {
 	case "/manager", "manager":
 		dest = "/manager"

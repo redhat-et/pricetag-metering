@@ -1,9 +1,14 @@
 package handler
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/redhat-et/pricetag-metering/internal/config"
+	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
 func TestNormalizeGroupsDropsTechnicalRoles(t *testing.T) {
@@ -99,5 +104,41 @@ func TestWorksCouncilOverride(t *testing.T) {
 	}
 	if hasWorksCouncilOverride(map[string]any{"works_council_override": "false"}) {
 		t.Fatal("false override must not pass")
+	}
+}
+
+func TestRequireAccountRedirectsForPendingTermsInObserve(t *testing.T) {
+	store, ctx := openHandlerTestStore(t)
+	const username = "observe-terms@example.com"
+	userID := uuid.NewString()
+	if _, err := store.CreatePartnerUser(ctx, "test", userID, map[string]any{
+		"email": username, "first_name": "Observe", "last_name": "Terms", "country": "US",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{
+		UserHeader:   "X-Auth-Username",
+		GroupsHeader: "X-Auth-Groups",
+		Onboarding:   config.Onboarding{Mode: config.OnboardingObserve, TermsVersion: "v1"},
+		Access:       config.Access{RequiredGroups: []string{"enmaas-users"}},
+	}
+	gate := NewAccessGate(cfg, store)
+	next := func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/account", nil)
+	req.Header.Set(cfg.UserHeader, username)
+	req.Header.Set(cfg.GroupsHeader, `["enmaas-users"]`)
+	gate.RequireAccount(next)(rec, req)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/onboarding" {
+		t.Fatalf("pending terms must redirect to onboarding in observe: code=%d loc=%q", rec.Code, rec.Header().Get("Location"))
+	}
+
+	if _, err := store.RecordAgreement(ctx, storage.Agreement{UserID: userID, DocType: "terms", Version: "v1", Method: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	gate.RequireAccount(next)(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("observed-ready user must reach the account page: %d", rec.Code)
 	}
 }

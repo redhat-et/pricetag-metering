@@ -495,18 +495,17 @@ func main() {
 		mux.HandleFunc("/api/v1/me/usage/models", auth(meUsageHandler.HandleModels))
 		mux.HandleFunc("/api/v1/me/usage/timeline", auth(meUsageHandler.HandleTimeline))
 		mux.HandleFunc("/api/v1/me/usage/recent", auth(meUsageHandler.HandleRecent))
-		// Personal key management is temporarily restricted to administrators
-		// while the production identity/group flow is being validated.
-		adminKeys := func(next http.HandlerFunc) http.HandlerFunc {
-			return auth(handler.RequirePartnerAdminAPI(cfg, store, next))
-		}
+		// Personal key management is self-service again. The onboarding gate
+		// replaces the temporary administrator-only restriction: any eligible
+		// user can mint their own key, and an enforced onboarding failure
+		// returns the machine-readable 403 instead.
 		onboardedKeys := func(next http.HandlerFunc) http.HandlerFunc {
 			return accessGate.RequireOnboardedAPI(next)
 		}
-		mux.HandleFunc("/api/v1/me/keys", adminKeys(onboardedKeys(adminHandler.HandleMyKeys)))
-		mux.HandleFunc("/api/v1/me/keys/", adminKeys(onboardedKeys(adminHandler.HandleMyKeys)))
-		mux.HandleFunc("/me/keys", adminKeys(onboardedKeys(adminHandler.HandleMyKeys)))
-		mux.HandleFunc("/me/keys/", adminKeys(onboardedKeys(adminHandler.HandleMyKeys)))
+		mux.HandleFunc("/api/v1/me/keys", auth(onboardedKeys(adminHandler.HandleMyKeys)))
+		mux.HandleFunc("/api/v1/me/keys/", auth(onboardedKeys(adminHandler.HandleMyKeys)))
+		mux.HandleFunc("/me/keys", auth(onboardedKeys(adminHandler.HandleMyKeys)))
+		mux.HandleFunc("/me/keys/", auth(onboardedKeys(adminHandler.HandleMyKeys)))
 		mux.HandleFunc("/me/whoami", auth(keysHandler.HandleWhoAmI))
 		mux.HandleFunc("/api/v1/whoami", auth(keysHandler.HandleWhoAmI))
 		mux.HandleFunc("/whoami", auth(keysHandler.HandleWhoAmI))
