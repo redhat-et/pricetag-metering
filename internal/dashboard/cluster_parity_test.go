@@ -13,7 +13,7 @@ import (
 // silently shipping a divergent page. The marker scan in mode_test.go cannot
 // catch that class of drift; only a byte compare can.
 var clusterGoldenHashes = map[string]string{
-	"account.html":   "07d21f9ba230dab650012db6853e9d268e8d76f31af1dcd2eb7abec3eae84374",
+	"account.html":   "77515dafb18188d308ddbc45003fb9b1346d9e58698c415a7643361f5c21ac6c",
 	"admin.html":     "cc5afec1cf9b3ee5b4ea2b69db24a6ec06111e357eb30fe057bf2422a15f488c",
 	"dashboard.html": "859b19e9b22597adf3d5a8443db5cfe2dfaab6eb1f9118516f6608a86c790c85",
 	"manager.html":   "4e50f5ffcbd3135e43d5fdddad56df9a69b6a1cfc850e9adbe00306b719aaf1c",

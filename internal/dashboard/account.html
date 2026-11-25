@@ -326,8 +326,8 @@
       <div class="hint">Spend and tokens for the selected period</div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th data-table-sort="model">Model</th><th>Type</th><th class="num" data-table-sort="requests">Requests</th><th class="num" data-table-sort="tokens">Tokens</th><th class="num" data-table-sort="cost">Spend</th><th class="num" data-table-sort="share">Share</th></tr></thead>
-          <tbody id="model-rows"><tr><td colspan="6"><div class="loading"><span class="spinner"></span>Loading usage…</div></td></tr></tbody>
+          <thead><tr><th data-table-sort="model">Model</th><th>Type</th><th class="num" data-table-sort="requests">Requests</th><th class="num" title="Prompt / input tokens">Input</th><th class="num" title="Completion / output tokens">Output</th><th class="num" title="Prompt tokens served from cache">Cached</th><th class="num" title="Tokens written to the cache">Cache write</th><th class="num" data-table-sort="tokens" title="Input + output tokens">Total</th><th class="num" data-table-sort="cost">Spend</th><th class="num" data-table-sort="share">Share</th></tr></thead>
+          <tbody id="model-rows"><tr><td colspan="10"><div class="loading"><span class="spinner"></span>Loading usage…</div></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -691,7 +691,7 @@
       state.models = rows || [];
       renderModels();
     }).catch(function(){
-      $('model-rows').innerHTML='<tr><td colspan="6"><div class="empty">Could not load model usage.</div></td></tr>';
+      $('model-rows').innerHTML='<tr><td colspan="10"><div class="empty">Could not load model usage.</div></td></tr>';
     });
 
     api('/api/v1/me/usage/timeline?'+rangeQuery()).then(function(buckets){
@@ -873,7 +873,7 @@
   function renderModelTable(){
     var rows=state.models.slice(), sort=state.tableSort;
     if(!rows.length){
-      $('model-rows').innerHTML='<tr><td colspan="6"><div class="empty"><b>No usage yet</b>Create a key and send a request to see your spend here.</div></td></tr>';
+      $('model-rows').innerHTML='<tr><td colspan="10"><div class="empty"><b>No usage yet</b>Create a key and send a request to see your spend here.</div></td></tr>';
       return;
     }
     var metric=function(r){
@@ -886,10 +886,20 @@
     var total=rows.reduce(function(s,r){return s+(r.cost_usd||0);},0);
     $('model-rows').innerHTML=rows.map(function(r){
       var share=total>0?Math.round((r.cost_usd||0)/total*100):0;
+      // Token split mirrors the recent-transactions feed: prompt tokens include
+      // the cached ones, so Input is what the provider billed as prompt and
+      // Cached / Cache write break that subset out instead of adding to it.
+      var input=r.prompt_tokens||0, output=r.completion_tokens||0;
+      var cached=r.cached_input_tokens||0, cacheWrite=r.cache_creation_tokens||0;
+      var rowTotal=r.total_tokens||(input+output);
       return '<tr><td>'+modelChip(r.model)+'</td>'+ 
         '<td><span class="pill '+(r.hosted?'hosted':'frontier')+'">'+(r.hosted?'Hosted':'Frontier')+'</span></td>'+
         '<td class="num">'+compact(r.requests)+'</td>'+ 
-        '<td class="num">'+compact(r.total_tokens)+'</td>'+ 
+        '<td class="num tok-in" title="'+exact(input)+' input tokens">'+compact(input)+'</td>'+
+        '<td class="num tok-out" title="'+exact(output)+' output tokens">'+compact(output)+'</td>'+
+        '<td class="num tok-cached" title="'+exact(cached)+' cached input tokens">'+compact(cached)+'</td>'+
+        '<td class="num tok-cache-write" title="'+exact(cacheWrite)+' cache write tokens">'+compact(cacheWrite)+'</td>'+
+        '<td class="num tok-total" title="'+exact(rowTotal)+' total tokens">'+compact(rowTotal)+'</td>'+ 
         '<td class="num">'+preciseMoney(r.cost_usd)+'</td>'+ 
         '<td class="num">'+share+'%</td></tr>';
     }).join('');
