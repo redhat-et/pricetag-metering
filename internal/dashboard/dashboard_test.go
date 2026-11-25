@@ -565,3 +565,13 @@ func TestAPIKeysAreAdminOnlyInTheUserView(t *testing.T) {
 		}
 	}
 }
+
+// The onboarding pages are served from the embedded FS; a missing embed
+// pattern compiles and builds but 500s at runtime.
+func TestOnboardingAssetsEmbedded(t *testing.T) {
+	for _, name := range []string{"onboarding.html", "terms.html"} {
+		if _, err := FS.ReadFile(name); err != nil {
+			t.Errorf("%s is not embedded: %v", name, err)
+		}
+	}
+}
