@@ -22,15 +22,6 @@ func TestNormalizeGroupsDropsTechnicalRoles(t *testing.T) {
 	}
 }
 
-func TestKnownISO3(t *testing.T) {
-	if !knownISO3("IRN") || !knownISO3("USA") {
-		t.Fatal("expected IRN and USA to be known ISO3 codes")
-	}
-	if knownISO3("IR") || knownISO3("ZZZ") {
-		t.Fatal("alpha-2 or unknown codes must not validate as ISO3")
-	}
-}
-
 func TestSameOrigin(t *testing.T) {
 	r := httptest.NewRequest("POST", "http://dashboard.example/api", nil)
 	r.Host = "dashboard.example"
@@ -140,5 +131,27 @@ func TestRequireAccountRedirectsForPendingTermsInObserve(t *testing.T) {
 	gate.RequireAccount(next)(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("observed-ready user must reach the account page: %d", rec.Code)
+	}
+}
+
+func TestNormalizeGroupsHandlesDNsAndPaths(t *testing.T) {
+	got := NormalizeGroups([]string{
+		"CN=enmaas-users,OU=Groups,DC=redhat,DC=com",
+		"/enmaas-users",
+		" enmaas-users ",
+		"CN=Other Group,OU=Groups,DC=redhat,DC=com",
+	})
+	want := []string{"enmaas-users", "Other Group"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("NormalizeGroups = %#v, want %#v", got, want)
+	}
+}
+
+func TestTagStringListKeepsDNsIntact(t *testing.T) {
+	raw := "CN=enmaas-users,OU=Groups,DC=redhat,DC=com\nCN=other,OU=Groups,DC=redhat,DC=com"
+	got := NormalizeGroups(tagStringList(raw))
+	want := []string{"enmaas-users", "other"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("DN memberOf list = %#v, want %#v", got, want)
 	}
 }

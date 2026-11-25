@@ -50,7 +50,6 @@ type dashboardPolicyResponse struct {
 	AllowUnknownCountry bool     `json:"allow_unknown_country"`
 	ISO                 []string `json:"iso"`
 	Impacted            int      `json:"impacted"`
-	EnmaasImpacted      int      `json:"enmaas_impacted"`
 	People              int      `json:"people"`
 }
 
@@ -80,14 +79,16 @@ func (h *DashboardPolicyHandler) response(w http.ResponseWriter, r *http.Request
 		return
 	}
 	groups := policy.RequiredGroups
+	allowUnknown := policy.AllowUnknownCountry
 	if !policy.Configured {
 		groups = h.cfg.Access.RequiredGroups
+		allowUnknown = h.cfg.Access.AllowUnknownCountry
 	}
 	writeJSON(w, dashboardPolicyResponse{
 		Blocked:             storage.SortedCountries(blocked),
 		EnmaasBlocked:       storage.SortedCountries(enmaasBlocked),
 		RequiredGroups:      groups,
-		AllowUnknownCountry: policy.AllowUnknownCountry,
+		AllowUnknownCountry: allowUnknown,
 		ISO:                 isoCountryCodes(),
 		Impacted:            impacted,
 		People:              people,
@@ -120,33 +121,39 @@ func (h *DashboardPolicyHandler) Handle(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "country must be an ISO 3166-1 alpha-2 code", http.StatusBadRequest)
 		return
 	}
-	// Backward compatible default: a bare country blocks dashboard access.
-	dashboard := true
-	if body.Dashboard != nil {
-		dashboard = *body.Dashboard
+	// Apply only the flags the caller sent; a bare {country} keeps the legacy
+	// meaning of "block the dashboard" (older clients).
+	applyDashboard := body.Dashboard != nil
+	applyEnmaas := body.Enmaas != nil
+	if !applyDashboard && !applyEnmaas {
+		applyDashboard = true
 	}
 	actor := caller(r, h.cfg)
 	changedDashboard := false
-	if dashboard {
-		added, err := h.store.AddDashboardBlockedCountry(r.Context(), actor, country)
-		if err != nil {
-			slog.Error("dashboard policy add failed", "country", country, "error", err)
-			http.Error(w, "policy update failed", http.StatusInternalServerError)
-			return
+	if applyDashboard {
+		if *body.Dashboard {
+			added, err := h.store.AddDashboardBlockedCountry(r.Context(), actor, country)
+			if err != nil {
+				slog.Error("dashboard policy add failed", "country", country, "error", err)
+				http.Error(w, "policy update failed", http.StatusInternalServerError)
+				return
+			}
+			changedDashboard = added
+		} else {
+			removed, err := h.store.RemoveDashboardBlockedCountry(r.Context(), actor, country)
+			if err != nil {
+				slog.Error("dashboard policy remove failed", "country", country, "error", err)
+				http.Error(w, "policy update failed", http.StatusInternalServerError)
+				return
+			}
+			changedDashboard = removed
 		}
-		changedDashboard = added
-	} else {
-		removed, err := h.store.RemoveDashboardBlockedCountry(r.Context(), actor, country)
-		if err != nil {
-			slog.Error("dashboard policy remove failed", "country", country, "error", err)
-			http.Error(w, "policy update failed", http.StatusInternalServerError)
-			return
-		}
-		changedDashboard = removed
 	}
 	changedEnmaas := false
-	if body.Enmaas != nil {
-		blockedEnmaas := !*body.Enmaas
+	if applyEnmaas {
+		// Both flags carry the *blocked* state: dashboard preserves its legacy
+		// bare-{country} meaning, enmaas mirrors it for the admin matrix.
+		blockedEnmaas := *body.Enmaas
 		changed, err := h.store.SetEnmaasCountryBlocked(r.Context(), actor, country, blockedEnmaas)
 		if err != nil {
 			slog.Error("enmaas policy update failed", "country", country, "error", err)
@@ -197,14 +204,19 @@ func (h *DashboardPolicyHandler) HandlePolicy(w http.ResponseWriter, r *http.Req
 			groups = h.cfg.Access.RequiredGroups
 		}
 	}
+	actor := caller(r, h.cfg)
 	if _, err := h.store.SaveAccessPolicy(r.Context(), storage.AccessPolicy{
 		RequiredGroups:      groups,
 		AllowUnknownCountry: allowUnknown,
-	}, caller(r, h.cfg)); err != nil {
+	}, actor); err != nil {
 		slog.Error("save access policy failed", "error", err)
 		http.Error(w, "policy update failed", http.StatusInternalServerError)
 		return
 	}
+	_ = h.store.RecordAccessAudit(r.Context(), "", actor, "access_policy_updated", "", "", map[string]any{
+		"required_groups":       groups,
+		"allow_unknown_country": allowUnknown,
+	})
 	h.response(w, r)
 }
 

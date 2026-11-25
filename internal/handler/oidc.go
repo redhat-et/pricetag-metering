@@ -428,7 +428,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	username = strings.TrimSpace(canonicalLogin)
-	h.setCookie(w, username, claims.Groups, "")
+	h.setCookie(w, username, claims.Groups, "", "oidc")
 	slog.Info("user logged in with OIDC", "username", username)
 	if h.oidcClaimsDebugEnabled() {
 		h.renderOIDCClaims(w, claims, h.loginDestination(r, username), "", rawClaims)

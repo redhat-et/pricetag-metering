@@ -38,8 +38,11 @@ type sessionPayload struct {
 	Groups   []string `json:"groups"`
 	// As, when set by an admin via HandleImpersonate, swaps the identity
 	// header to this user for the rest of the session.
-	As  string `json:"as,omitempty"`
-	Exp int64  `json:"exp"`
+	As string `json:"as,omitempty"`
+	// Method records how the session authenticated (oidc or api_key) so the
+	// policy acknowledgement can persist it as evidence.
+	Method string `json:"method,omitempty"`
+	Exp    int64  `json:"exp"`
 }
 
 type AuthHandler struct {
@@ -135,11 +138,12 @@ func (h *AuthHandler) verify(data []byte, sig string) bool {
 	return hmac.Equal([]byte(expected), []byte(sig))
 }
 
-func (h *AuthHandler) setCookie(w http.ResponseWriter, username string, groups []string, as string) {
+func (h *AuthHandler) setCookie(w http.ResponseWriter, username string, groups []string, as, method string) {
 	payload := sessionPayload{
 		Username: username,
 		Groups:   groups,
 		As:       as,
+		Method:   method,
 		Exp:      time.Now().Add(cookieMaxAge).Unix(),
 	}
 	data, _ := json.Marshal(payload)
@@ -273,7 +277,7 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("user logged in", "username", result.Username)
-	h.setCookie(w, result.Username, result.Groups, "")
+	h.setCookie(w, result.Username, result.Groups, "", "api_key")
 	http.Redirect(w, r, h.loginDestination(r, result.Username), http.StatusFound)
 }
 
@@ -322,7 +326,7 @@ func (h *AuthHandler) HandleImpersonate(w http.ResponseWriter, r *http.Request) 
 
 	target := strings.TrimSpace(r.URL.Query().Get("as"))
 	if target == "" {
-		h.setCookie(w, session.Username, session.Groups, "")
+		h.setCookie(w, session.Username, session.Groups, "", session.Method)
 		http.Redirect(w, r, "/dashboard", http.StatusFound)
 		return
 	}
@@ -371,7 +375,7 @@ func (h *AuthHandler) HandleImpersonate(w http.ResponseWriter, r *http.Request) 
 		target = canonical
 	}
 	slog.Info("admin viewing as user", "admin", session.Username, "as", target)
-	h.setCookie(w, session.Username, session.Groups, target)
+	h.setCookie(w, session.Username, session.Groups, target, session.Method)
 	// The upstream account page is always personal, including administrator
 	// self-view; never route an impersonated session to organization usage.
 	// ?to= lets the admin land on /manager instead, to see exactly what a
@@ -484,7 +488,11 @@ func (h *AuthHandler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		r.Header.Del(h.cfg.UserHeader)
 		r.Header.Del(h.cfg.GroupsHeader)
 		r.Header.Del(realUserHeader)
+		r.Header.Del(authMethodHeader)
 		r.Header.Set(h.cfg.UserHeader, session.Username)
+		if session.Method != "" {
+			r.Header.Set(authMethodHeader, session.Method)
+		}
 		if len(session.Groups) > 0 {
 			groups, err := json.Marshal(session.Groups)
 			if err != nil {

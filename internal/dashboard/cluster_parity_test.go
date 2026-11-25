@@ -14,7 +14,7 @@ import (
 // catch that class of drift; only a byte compare can.
 var clusterGoldenHashes = map[string]string{
 	"account.html":   "9ec0c16a17aded36ec548073595fee3fc623d0e1e477b766898546cd24cb884d",
-	"admin.html":     "32eed669b443935cd1ffc9c3ecfbe4bfc8abd37d5c427e517ed4f58a85a946e2",
+	"admin.html":     "3b9004cab7d8f096efcf63c8b243f39dba21fa86c83054f8c6049058051e8d6d",
 	"dashboard.html": "cb84b28c486c654020d4b30e72412c4d397e0a1188f0e3d06b954ab70c036bc5",
 	"manager.html":   "e61803baa41434fb090bd7122e4278ff8d2994be744f364a833dacc7ea5dfff5",
 }

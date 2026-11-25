@@ -31,25 +31,6 @@ func (h *OnboardingHandler) ServeOnboarding(w http.ResponseWriter, r *http.Reque
 	h.servePage(w, "onboarding.html")
 }
 
-// ServeAccount renders the user account shell (Usage + API Keys tabs). The
-// gateway host is injected at serve time, exactly like /welcome, so no
-// cluster-specific URL enters the repository.
-func (h *OnboardingHandler) ServeAccount(w http.ResponseWriter, r *http.Request) {
-	data, err := fs.ReadFile(dashboard.FS, "account.html")
-	if err != nil {
-		http.Error(w, "page not found", http.StatusInternalServerError)
-		return
-	}
-	gateway := h.gate.cfg.Welcome.GatewayURL
-	if gateway == "" {
-		gateway = welcomeGatewayFallback
-	}
-	page := strings.NewReplacer("{{GATEWAY_URL}}", htmlEscape(gateway)).Replace(string(data))
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write([]byte(page))
-}
-
 // ServeAccessPolicyPage keeps the old standalone URL working by sending
 // super admins to the Access tab inside the admin console.
 func (h *OnboardingHandler) ServeAccessPolicyPage(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +48,7 @@ func (h *OnboardingHandler) ServeTerms(w http.ResponseWriter, r *http.Request) {
 	version := h.gate.cfg.Onboarding.TermsVersion
 	page := strings.NewReplacer(
 		"{{TERMS_VERSION}}", htmlEscape(version),
-		"{{TERMS_STATUS}}", termsStatus(version),
+		"{{TERMS_STATUS}}", htmlEscape(termsStatus(version)),
 	).Replace(string(data))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -142,7 +123,7 @@ func (h *OnboardingHandler) HandleAcceptTerms(w http.ResponseWriter, r *http.Req
 		http.Error(w, "no provisioned user for this identity", http.StatusForbidden)
 		return
 	}
-	if !state.Allowed && state.BlockedReason != "" && state.BlockedReason != "terms_required" {
+	if state.State == OnboardingBlocked {
 		// Group/country failures are not fixable by accepting terms.
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
@@ -202,65 +183,6 @@ func (h *OnboardingHandler) audit(r *http.Request, state OnboardingState) {
 
 // --- Admin policy endpoints -------------------------------------------------
 
-// HandleAccessPolicy lets a super admin read and update the EnMaaS guest-list
-// groups without a redeploy. The per-country dashboard/EnMaaS matrix is served
-// by the dashboard policy API so both toggles live in one admin tab.
-func (h *OnboardingHandler) HandleAccessPolicy(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		policy := h.gate.EffectivePolicy(r.Context())
-		if h.store != nil {
-			if stored, err := h.store.GetAccessPolicy(r.Context()); err == nil {
-				if stored.Configured {
-					policy = stored
-				}
-			} else {
-				http.Error(w, "could not read policy", http.StatusInternalServerError)
-				return
-			}
-		}
-		writeJSON(w, policy)
-	case http.MethodPut:
-		if !sameOrigin(r) {
-			http.Error(w, "cross-origin request refused", http.StatusForbidden)
-			return
-		}
-		var body struct {
-			RequiredGroups      []string `json:"required_groups"`
-			AllowUnknownCountry bool     `json:"allow_unknown_country"`
-		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, 32<<10)).Decode(&body); err != nil {
-			http.Error(w, "invalid JSON body", http.StatusBadRequest)
-			return
-		}
-		saved, err := h.store.SaveAccessPolicy(r.Context(), storage.AccessPolicy{
-			RequiredGroups:      body.RequiredGroups,
-			AllowUnknownCountry: body.AllowUnknownCountry,
-		}, caller(r, h.gate.cfg))
-		if err != nil {
-			slog.Error("save access policy failed", "error", err)
-			http.Error(w, "could not save policy", http.StatusInternalServerError)
-			return
-		}
-		_ = h.store.RecordAccessAudit(r.Context(), "", caller(r, h.gate.cfg), "access_policy_updated", "", "", map[string]any{
-			"required_groups":       saved.RequiredGroups,
-			"allow_unknown_country": saved.AllowUnknownCountry,
-		})
-		writeJSON(w, saved)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func knownISO3(code string) bool {
-	for _, v := range iso2ToISO3 {
-		if v == code {
-			return true
-		}
-	}
-	return false
-}
-
 func sameOrigin(r *http.Request) bool {
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
 	if origin == "" {
@@ -291,11 +213,16 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
+// authMethodHeader carries the server-derived login method from RequireAuth.
+const authMethodHeader = "X-Auth-Method"
+
 func loginMethod(r *http.Request) string {
-	if r.Header.Get("X-Auth-Method") == "oidc" {
-		return "oidc"
+	switch r.Header.Get(authMethodHeader) {
+	case "oidc", "api_key":
+		return r.Header.Get(authMethodHeader)
+	default:
+		return "session"
 	}
-	return "session"
 }
 
 func truncate(s string, max int) string {

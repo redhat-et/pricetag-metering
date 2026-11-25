@@ -25,7 +25,7 @@ func TestRequireAuthClearsSpoofedIdentityHeaders(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			cookieResponse := httptest.NewRecorder()
-			h.setCookie(cookieResponse, "alice@example.com", tc.groups, "")
+			h.setCookie(cookieResponse, "alice@example.com", tc.groups, "", "")
 
 			request := httptest.NewRequest(http.MethodGet, "/api/v1/me/keys", nil)
 			request.AddCookie(cookieResponse.Result().Cookies()[0])
@@ -60,7 +60,7 @@ func TestRequireAuthGroupsHeaderIsValidJSON(t *testing.T) {
 	groups := []string{`a","b`, "GE"}
 
 	cookieResponse := httptest.NewRecorder()
-	h.setCookie(cookieResponse, "alice@example.com", groups, "")
+	h.setCookie(cookieResponse, "alice@example.com", groups, "", "")
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.AddCookie(cookieResponse.Result().Cookies()[0])
 

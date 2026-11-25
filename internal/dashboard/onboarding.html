@@ -500,7 +500,7 @@
         steps.innerHTML = '';
       } else if (state.blocked_reason === 'group_required') {
         steps.innerHTML = '<li>Ask your manager or the EnMaaS team to add you to an authorized group.</li><li>Sign out and back in so your groups claim refreshes.</li><li>Use “Check again” below.</li>';
-      } else if (state.blocked_reason === 'country_blocked' || state.blocked_reason === 'country_unknown') {
+      } else if (state.blocked_reason === 'country_unknown') {
         steps.innerHTML = '<li>Contact the EnMaaS team if you believe your region is recorded incorrectly.</li><li>Include your Red Hat username and the country on your employee profile.</li>';
       } else {
         steps.innerHTML = '<li>Confirm you are signed in with your Red Hat identity.</li><li>Contact the EnMaaS team if this persists.</li>';
@@ -593,9 +593,13 @@
           'To access it, you must be a member of the ' + link + '. If you need access, file a General EnMaaS ' +
           'support ticket with your team name and cost center.';
       case 'country_blocked':
-        return 'Access is not yet available in The Netherlands while Red Hat completes the required Works Council ' +
-          'approval process. To be notified when it is approved, open <a href="https://redhat.atlassian.net/browse/PCO-2112" ' +
-          'target="_blank" rel="noopener">PCO-2112</a> in Jira and add yourself to the Watch list (eye icon).';
+        if (state && state.country_code === 'NL') {
+          return 'Access is not yet available in The Netherlands while Red Hat completes the required Works Council ' +
+            'approval process. To be notified when it is approved, open <a href="https://redhat.atlassian.net/browse/PCO-2112" ' +
+            'target="_blank" rel="noopener">PCO-2112</a> in Jira and add yourself to the Watch list (eye icon).';
+        }
+        return 'Access is not yet available in your country while Red Hat completes the required Works Council ' +
+          'approval process. Contact the EnMaaS team if you believe your region is recorded incorrectly.';
       case 'country_unknown':
         return 'We could not verify your region. Contact the EnMaaS team to have your employee profile corrected.';
       case 'inactive':

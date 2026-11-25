@@ -57,6 +57,9 @@ type OnboardingState struct {
 	// The acknowledgement endpoint refuses in that mode: consent must be the
 	// person's own action, so the page disables the submit instead.
 	Impersonating bool `json:"impersonating"`
+	// CountryCode is the caller's own ISO-3166-1 alpha-2 code (policy input,
+	// not a directory dump). The UI uses it to name the blocked country.
+	CountryCode string `json:"country_code,omitempty"`
 	// GuestListGroup is the configured Rover group shown in the ineligible
 	// copy. It is policy, not a claim; empty hides the Rover link.
 	GuestListGroup string `json:"guest_list_group,omitempty"`
@@ -112,8 +115,11 @@ func tagStringList(value any) []string {
 				return parsed
 			}
 		}
+		// LDAP memberOf values are DNs, which contain commas. Only split on
+		// commas when the value is not DN-shaped.
+		splitCommas := !strings.Contains(s, "=")
 		parts := strings.FieldsFunc(s, func(r rune) bool {
-			return r == ',' || r == '\n' || r == ';'
+			return r == '\n' || r == ';' || (r == ',' && splitCommas)
 		})
 		out := make([]string, 0, len(parts))
 		for _, part := range parts {
@@ -272,7 +278,9 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 	} else if len(policy.RequiredGroups) > 0 {
 		required := make(map[string]struct{}, len(policy.RequiredGroups))
 		for _, a := range policy.RequiredGroups {
-			required[strings.ToLower(strings.TrimSpace(a))] = struct{}{}
+			if name := groupCommonName(a); name != "" {
+				required[strings.ToLower(name)] = struct{}{}
+			}
 		}
 		matched := false
 		for _, ug := range state.Groups {
@@ -305,6 +313,7 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 	}
 	iso2, iso3 := normalizeCountryAlpha2(rawCountry)
 	state.Country = iso3
+	state.CountryCode = iso2
 	if superAdminExempt {
 		country.Status = GatePass
 		country.Detail = "Super-admin exemption."

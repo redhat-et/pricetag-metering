@@ -118,3 +118,23 @@ Code parity is in place. Closing the operational gaps requires these steps:
    has not acknowledged the policy.
 6. **Merge hygiene:** remove the temporary dev-login scaffolding before this
    branch is marked ready; it can force onboarding for test identities.
+
+## Scope and review follow-ups
+
+- **Group matching** accepts the three shapes the directory and IdP can
+  produce: a bare name (`enmaas-users`), an LDAP DN
+  (`CN=enmaas-users,OU=Groups,DC=redhat,DC=com`), and a path-shaped OIDC group
+  (`/enmaas-users`). Each entry is reduced to its `CN`/last path segment before
+  the case-insensitive comparison. A DN-valued string tag is not split on its
+  commas.
+- **Scope:** these gates control onboarding and key issuance (`/account`,
+  `/me/keys`, and the login redirect). Inference remains governed by the
+  gateway entitlement policy (`/api/v1/customers`, `/api/v2/policy/decide`);
+  wiring the Works Council country verdict into those paths is a follow-up.
+- **Observe mode** still redirects a person with a *pending policy
+  acknowledgement* to `/onboarding`; that is a self-service step, not a denial.
+  Identity/group/country verdicts only redirect when
+  `ONBOARDING_MODE=enforce`. Minus acknowledgement, nothing is blocked.
+- **Self-service keys:** this change supersedes the temporary administrator-only
+  key restriction (#165). `RequireOnboardedAPI` is a no-op unless enforcement is
+  on, so `off`/`observe` restore the pre-#165 behaviour.

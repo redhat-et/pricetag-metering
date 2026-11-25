@@ -901,7 +901,7 @@ td .tag{white-space:nowrap}
 <div class="tab-panel" id="tab-dashboard-policies">
   <div class="card">
     <div class="card-hdr"><div><span class="card-title">Access policies</span><span class="card-count" id="dashboard-policies-meta"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadDashboardPolicies()">Refresh</button></div>
-    <div class="ts" style="margin-bottom:14px">Per-country eligibility for the dashboard and for EnMaaS inference. <strong>Dashboard</strong> controls the usage pages only; <strong>EnMaaS</strong> controls onboarding, key creation and inference eligibility. Super-admins are always exempt from the dashboard gate.</div>
+    <div class="ts" style="margin-bottom:14px">Per-country eligibility for the dashboard and for EnMaaS inference. <strong>Dashboard</strong> controls the usage pages only; <strong>EnMaaS</strong> controls onboarding and key issuance. Inference gating is handled by the gateway entitlement policy. Super-admins are always exempt from the dashboard gate.</div>
 
     <div class="card" style="margin-bottom:16px;padding:14px">
       <label for="dp-groups" style="display:block;font-size:11px;color:var(--t2);margin-bottom:4px">Required EnMaaS group(s)</label>
@@ -1200,7 +1200,6 @@ var dpISO = [];
 var dpNames = null;
 var dpBlocked = {};      // dashboard-disabled set
 var dpEnmaas = {};       // enmaas-disabled set
-var dpImpact = { dashboard: 0, enmaas: 0, people: 0 };
 function dpName(code) {
   try {
     if (!dpNames) dpNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -1213,7 +1212,6 @@ function dpApply(data) {
   (data.blocked || []).forEach(function (c) { dpBlocked[c] = true; });
   dpEnmaas = {};
   (data.enmaas_blocked || []).forEach(function (c) { dpEnmaas[c] = true; });
-  dpImpact = { dashboard: data.impacted || 0, enmaas: data.enmaas_impacted || 0, people: data.people || 0 };
   document.getElementById('dashboard-policies-meta').textContent =
     Object.keys(dpBlocked).length + ' dashboard-off · ' + Object.keys(dpEnmaas).length + ' enmaas-off · ' + (data.people || 0) + ' people';
   var groups = document.getElementById('dp-groups');
@@ -1231,8 +1229,8 @@ function dpRenderRows() {
     var dash = !dpBlocked[code];
     var enm = !dpEnmaas[code];
     return '<tr><td>' + esc(dpName(code)) + '</td><td class="dim">' + esc(code) + '</td>' +
-      '<td style="text-align:center"><input type="checkbox" ' + (dash ? 'checked' : '') + ' onchange="setCountryAccess(\'' + esc(code) + '\', this.checked, null)"></td>' +
-      '<td style="text-align:center"><input type="checkbox" ' + (enm ? 'checked' : '') + ' onchange="setCountryAccess(\'' + esc(code) + '\', null, this.checked)"></td></tr>';
+      '<td style="text-align:center"><input type="checkbox" ' + (dash ? 'checked' : '') + ' onchange="setCountryAccess(\'' + esc(code) + '\', !this.checked, dpEnmaas[\'' + esc(code) + '\'])"></td>' +
+      '<td style="text-align:center"><input type="checkbox" ' + (enm ? 'checked' : '') + ' onchange="setCountryAccess(\'' + esc(code) + '\', dpBlocked[\'' + esc(code) + '\'], !this.checked)"></td></tr>';
   });
   document.getElementById('dp-rows').innerHTML = rows.join('') ||
     '<tr><td colspan="4" class="dim">No countries match the filter.</td></tr>';
@@ -1245,11 +1243,11 @@ function loadDashboardPolicies() {
     document.getElementById('dp-status').textContent = e.message;
   });
 }
-function setCountryAccess(code, dashboard, enmaas) {
-  var body = { country: code };
-  if (dashboard !== null) body.dashboard = dashboard;
-  if (enmaas !== null) body.enmaas = enmaas;
-  var label = dashboard !== null ? 'dashboard' : 'EnMaaS';
+function setCountryAccess(code, dashboardBlocked, enmaasBlocked) {
+  // Both flags carry the blocked state; the handler applies only what is sent
+  // and keeps the legacy bare-{country} block-dashboard meaning.
+  var body = { country: code, dashboard: !!dashboardBlocked, enmaas: !!enmaasBlocked };
+  var label = 'dashboard and EnMaaS';
   var status = document.getElementById('dp-status');
   status.textContent = 'Updating ' + dpName(code) + ' (' + label + ')...';
   updateJSON('/api/v1/admin/dashboard-policies', 'POST', body).then(function (data) {

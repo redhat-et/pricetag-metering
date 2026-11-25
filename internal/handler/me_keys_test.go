@@ -61,7 +61,7 @@ func TestPersonalKeysDoNotInheritOldAdministratorSession(t *testing.T) {
 	auth := NewAuthHandler(cfg)
 	auth.SetOrgStore(store)
 	cookie := httptest.NewRecorder()
-	auth.setCookie(cookie, "alice", []string{"system:masters"}, "")
+	auth.setCookie(cookie, "alice", []string{"system:masters"}, "", "")
 	if _, err := store.ProvisionLogin(t.Context(), "test", storage.LoginProvision{Subject: "alice", Role: storage.PartnerRoleUser}); err != nil {
 		t.Fatal(err)
 	}
