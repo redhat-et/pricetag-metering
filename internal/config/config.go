@@ -308,7 +308,40 @@ type Config struct {
 	Kubernetes Kubernetes
 	Welcome    Welcome
 	OIDC       OIDC
+	Onboarding Onboarding
+	Access     Access
 	KeyPolicy  KeyPolicy
+}
+
+// Onboarding modes. The feature ships disabled: shipping the code must not
+// change who can reach the account page or create keys until a deployment
+// opts in with ONBOARDING_MODE=enforce.
+const (
+	OnboardingOff     = "off"
+	OnboardingObserve = "observe"
+	OnboardingEnforce = "enforce"
+)
+
+// Onboarding controls the self-service first-run experience and the AI policy
+// acknowledgement.
+type Onboarding struct {
+	Mode         string
+	TermsVersion string
+	TermsURL     string
+}
+
+// Access is the EnMaaS eligibility policy. The database-backed policy managed
+// by a super admin in the admin console overrides these env values when
+// present, so opening or closing access does not need a redeploy.
+type Access struct {
+	// RequiredGroups is the guest list. A person needs at least one of these
+	// Rover/LDAP groups (matched case-insensitively). Empty disables the
+	// group gate.
+	RequiredGroups []string
+	// AllowUnknownCountry decides the outcome when neither the directory nor
+	// the IdP supplies a country. Default is false (deny), matching Atlas's
+	// Works Council gate except for the missing-data case.
+	AllowUnknownCountry bool
 }
 
 // MaaSAPITLS configures verification for the internal MaaS API client.
@@ -567,6 +600,15 @@ func Load() Config {
 			GatewayURL:   strings.TrimSuffix(os.Getenv("WELCOME_GATEWAY_URL"), "/"),
 			DashboardURL: strings.TrimSuffix(os.Getenv("WELCOME_DASHBOARD_URL"), "/"),
 		},
+		Onboarding: Onboarding{
+			Mode:         strings.ToLower(envDefault("ONBOARDING_MODE", OnboardingOff)),
+			TermsVersion: envDefault("ONBOARDING_TERMS_VERSION", "redhat-ai-policy-v1"),
+			TermsURL:     envDefault("ONBOARDING_TERMS_URL", "/legal/terms"),
+		},
+		Access: Access{
+			RequiredGroups:      envListDefault("ACCESS_REQUIRED_GROUPS", []string{"enmaas-users"}),
+			AllowUnknownCountry: envBool("ACCESS_UNKNOWN_COUNTRY_ALLOW", false),
+		},
 		OIDC: OIDC{
 			Enabled:               envBool("OIDC_ENABLED", false),
 			ClaimsDebug:           envBool("OIDC_CLAIMS_DEBUG", false),
@@ -632,6 +674,11 @@ func (c Config) Validate() error {
 		if _, err := os.ReadFile(c.MaaSAPITLS.CAFile); err != nil {
 			return fmt.Errorf("MAAS_API_CA_FILE %q cannot be read: %w", c.MaaSAPITLS.CAFile, err)
 		}
+	}
+	switch strings.ToLower(strings.TrimSpace(c.Onboarding.Mode)) {
+	case "", "off", "observe", "enforce":
+	default:
+		return fmt.Errorf("ONBOARDING_MODE must be off, observe, or enforce, got %q", c.Onboarding.Mode)
 	}
 	switch strings.ToLower(strings.TrimSpace(c.ModelAccessEnforcement)) {
 	case "", "off", "observe", "enforce":

@@ -29,7 +29,7 @@ func TestImpersonationStoresCanonicalLogin(t *testing.T) {
 	auth := NewAuthHandler(cfg)
 	auth.SetOrgStore(store)
 	cookie := httptest.NewRecorder()
-	auth.setCookie(cookie, "admin", nil, "")
+	auth.setCookie(cookie, "admin", nil, "", "")
 	// A case-variant target passes the case-insensitive directory lookup;
 	// the session it produces must still key exact-match usage rows.
 	r := httptest.NewRequest("POST", "/admin/impersonate?as=ALICE", nil)

@@ -266,6 +266,28 @@ var iso3Codes = func() map[string]bool {
 	return codes
 }()
 
+// normalizeCountryAlpha2 returns the ISO 3166-1 alpha-2 code plus the alpha-3
+// code for a directory/IdP country value. Alpha-2 is the policy vocabulary;
+// alpha-3 is kept for audit/trace messages.
+func normalizeCountryAlpha2(raw string) (iso2, iso3 string) {
+	v := strings.ToUpper(strings.TrimSpace(raw))
+	switch len(v) {
+	case 2:
+		if code, ok := iso2ToISO3[v]; ok {
+			return v, code
+		}
+	case 3:
+		if iso3Codes[v] {
+			for two, three := range iso2ToISO3 {
+				if three == v {
+					return two, v
+				}
+			}
+		}
+	}
+	return "", ""
+}
+
 // normalizeCountry returns an ISO 3166-1 alpha-3 code, or "" when the
 // input is not a recognised country code. Alpha-3 input is accepted only
 // when it appears in the ISO list; unknown three-letter values fail closed

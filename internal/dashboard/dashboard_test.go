@@ -515,22 +515,6 @@ func TestAccountHasSelfDailyModelUsage(t *testing.T) {
 	}
 }
 
-func TestAccountKeysAreAdminOnly(t *testing.T) {
-	data, err := FS.ReadFile("account.html")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{
-		`class="tab admin-key-tab"`,
-		"state.admin = !!(d.isAdmin || d.isSuperAdmin);",
-		"if(state.admin) $('tab-keys').style.display=''",
-	} {
-		if !bytes.Contains(data, []byte(want)) {
-			t.Errorf("account.html is missing admin-only API key guard %q", want)
-		}
-	}
-}
-
 // The decorative dollars/tokens flow is part of the Usage and My team views.
 func TestUserFacingUsagePagesHaveBackgroundFlow(t *testing.T) {
 	for _, file := range []string{"account.html", "manager.html"} {
@@ -550,18 +534,34 @@ func TestUserFacingUsagePagesHaveBackgroundFlow(t *testing.T) {
 	}
 }
 
-func TestAPIKeysAreAdminOnlyInTheUserView(t *testing.T) {
+// API keys are self-service again: every signed-in user gets the tab, and the
+// onboarding gate (not an admin role) decides who may mint one.
+func TestAPIKeysAvailableToEveryUser(t *testing.T) {
 	data, err := FS.ReadFile("account.html")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		`class="tab admin-key-tab"`,
-		"state.admin = !!(d.isAdmin || d.isSuperAdmin);",
-		"if(state.admin) $('tab-keys').style.display=''",
+		`<button class="tab" id="tab-keys" data-tab="keys">API keys</button>`,
+		"state.tab = tab === 'keys' ? 'keys' : 'usage';",
 	} {
 		if !bytes.Contains(data, []byte(want)) {
-			t.Errorf("account.html is missing admin-only API key guard %q", want)
+			t.Errorf("account.html is missing self-service API key markup %q", want)
+		}
+	}
+	for _, unwanted := range []string{"admin-key-tab", "state.admin = !!"} {
+		if bytes.Contains(data, []byte(unwanted)) {
+			t.Errorf("account.html still hides API keys behind %q", unwanted)
+		}
+	}
+}
+
+// The onboarding pages are served from the embedded FS; a missing embed
+// pattern compiles and builds but 500s at runtime.
+func TestOnboardingAssetsEmbedded(t *testing.T) {
+	for _, name := range []string{"onboarding.html", "terms.html"} {
+		if _, err := FS.ReadFile(name); err != nil {
+			t.Errorf("%s is not embedded: %v", name, err)
 		}
 	}
 }

@@ -74,7 +74,7 @@ func TestManagementSessionRequiresDirectory(t *testing.T) {
 	cfg := config.Config{DeploymentMode: config.DeploymentModeStandalone, ManagementAPISecret: "operator-test-secret", UserHeader: "X-User"}
 	h := NewAuthHandler(cfg)
 	cookie := httptest.NewRecorder()
-	h.setCookie(cookie, "alice", nil, "")
+	h.setCookie(cookie, "alice", nil, "", "")
 	r := httptest.NewRequest("GET", "/management", nil)
 	r.AddCookie(cookie.Result().Cookies()[0])
 	w := httptest.NewRecorder()
@@ -88,7 +88,7 @@ func TestManagementSecretDoesNotEnableStandaloneSessionBehavior(t *testing.T) {
 	cfg := config.Config{ManagementAPISecret: "operator-test-secret", UserHeader: "X-User"}
 	h := NewAuthHandler(cfg)
 	issued := httptest.NewRecorder()
-	h.setCookie(issued, "alice", nil, "")
+	h.setCookie(issued, "alice", nil, "", "")
 	r := httptest.NewRequest("GET", "/management", nil)
 	r.AddCookie(issued.Result().Cookies()[0])
 	w := httptest.NewRecorder()
@@ -121,7 +121,7 @@ func TestManagementSessionChangesRequireConfirmedSameOriginPost(t *testing.T) {
 	cfg := config.Config{DeploymentMode: config.DeploymentModeStandalone, ManagementAPISecret: "test", ManagementPublicOrigin: "https://gateway.example", SuperAdminUsers: []string{"admin"}}
 	h := NewAuthHandler(cfg)
 	issued := httptest.NewRecorder()
-	h.setCookie(issued, "admin", nil, "")
+	h.setCookie(issued, "admin", nil, "", "")
 	for _, operation := range []struct {
 		path    string
 		handler http.HandlerFunc

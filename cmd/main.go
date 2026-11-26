@@ -391,6 +391,9 @@ func main() {
 			}
 		}
 		authHandler.SetOrgStore(store) // managers land on /manager after login
+		accessGate := handler.NewAccessGate(cfg, store)
+		onboardingHandler := handler.NewOnboardingHandler(accessGate, store)
+		authHandler.SetOnboardingGate(accessGate)
 		keysHandler := handler.NewKeysHandler(k8sClient, cfg, store)
 		usageReportHandler := handler.NewUsageReportHandler(store)
 		partnerUsersHandler := handler.NewPartnerUsersHandler(store, maasClient, cfg.PartnerUserKeyGroup)
@@ -463,11 +466,18 @@ func main() {
 		// host-free. Root sends newcomers here; signed-in users navigate on.
 		mux.HandleFunc("/welcome", dashboardHandler.ServeWelcome)
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/" {
-				http.Redirect(w, r, "/welcome", http.StatusFound)
+			if r.URL.Path != "/" {
+				http.NotFound(w, r)
 				return
 			}
-			http.NotFound(w, r)
+			// Signed-in users land on their personal account page; the account
+			// gate forwards a pending policy acknowledgement to /onboarding.
+			// Newcomers keep the public welcome page.
+			if authHandler.AuthenticatedUser(r) != "" {
+				http.Redirect(w, r, "/account", http.StatusFound)
+				return
+			}
+			http.Redirect(w, r, "/welcome", http.StatusFound)
 		})
 
 		// User pages — session required. /whoami backs both the legacy pages and
@@ -478,20 +488,31 @@ func main() {
 			http.Redirect(w, r, "/", http.StatusMovedPermanently)
 		})
 		// Authenticated personal Usage + API Keys surface.
-		mux.HandleFunc("/account", auth(accountHandler.ServeAccount))
+		// EnMaaS onboarding: the eligibility checklist, its state API, and the
+		// AI policy acknowledgement page. These stay outside the dashboard
+		// country gate so a region-blocked person still sees why.
+		plainAuth := func(next http.HandlerFunc) http.HandlerFunc { return authHandler.RequireAuth(next) }
+		mux.HandleFunc("/legal/terms", onboardingHandler.ServeTerms)
+		mux.HandleFunc("/onboarding", plainAuth(onboardingHandler.ServeOnboarding))
+		mux.HandleFunc("/api/v1/me/onboarding", plainAuth(onboardingHandler.HandleState))
+		mux.HandleFunc("/api/v1/me/onboarding/accept", plainAuth(onboardingHandler.HandleAcceptTerms))
+		mux.HandleFunc("/admin/access", auth(handler.RequirePartnerSuperAdmin(cfg, store, onboardingHandler.ServeAccessPolicyPage)))
+		mux.HandleFunc("/account", auth(accessGate.RequireAccount(accountHandler.ServeAccount)))
 		mux.HandleFunc("/api/v1/me/usage/summary", auth(meUsageHandler.HandleSummary))
 		mux.HandleFunc("/api/v1/me/usage/models", auth(meUsageHandler.HandleModels))
 		mux.HandleFunc("/api/v1/me/usage/timeline", auth(meUsageHandler.HandleTimeline))
 		mux.HandleFunc("/api/v1/me/usage/recent", auth(meUsageHandler.HandleRecent))
-		// Personal key management is temporarily restricted to administrators
-		// while the production identity/group flow is being validated.
-		adminKeys := func(next http.HandlerFunc) http.HandlerFunc {
-			return auth(handler.RequirePartnerAdminAPI(cfg, store, next))
+		// Personal key management is self-service again. The onboarding gate
+		// replaces the temporary administrator-only restriction: any eligible
+		// user can mint their own key, and an enforced onboarding failure
+		// returns the machine-readable 403 instead.
+		onboardedKeys := func(next http.HandlerFunc) http.HandlerFunc {
+			return accessGate.RequireOnboardedAPI(next)
 		}
-		mux.HandleFunc("/api/v1/me/keys", adminKeys(adminHandler.HandleMyKeys))
-		mux.HandleFunc("/api/v1/me/keys/", adminKeys(adminHandler.HandleMyKeys))
-		mux.HandleFunc("/me/keys", adminKeys(adminHandler.HandleMyKeys))
-		mux.HandleFunc("/me/keys/", adminKeys(adminHandler.HandleMyKeys))
+		mux.HandleFunc("/api/v1/me/keys", auth(onboardedKeys(adminHandler.HandleMyKeys)))
+		mux.HandleFunc("/api/v1/me/keys/", auth(onboardedKeys(adminHandler.HandleMyKeys)))
+		mux.HandleFunc("/me/keys", auth(onboardedKeys(adminHandler.HandleMyKeys)))
+		mux.HandleFunc("/me/keys/", auth(onboardedKeys(adminHandler.HandleMyKeys)))
 		mux.HandleFunc("/me/whoami", auth(keysHandler.HandleWhoAmI))
 		mux.HandleFunc("/api/v1/whoami", auth(keysHandler.HandleWhoAmI))
 		mux.HandleFunc("/whoami", auth(keysHandler.HandleWhoAmI))
@@ -564,6 +585,7 @@ func main() {
 		// blocked.
 		dashboardPolicyHandler := handler.NewDashboardPolicyHandler(store, cfg, dashboardGate)
 		mux.HandleFunc("/api/v1/admin/dashboard-policies", auth(handler.RequirePartnerSuperAdmin(cfg, store, dashboardPolicyHandler.Handle)))
+		mux.HandleFunc("/api/v1/admin/dashboard-policies/policy", auth(handler.RequirePartnerSuperAdmin(cfg, store, dashboardPolicyHandler.HandlePolicy)))
 		mux.HandleFunc("/api/v1/admin/dashboard-policies/", auth(handler.RequirePartnerSuperAdmin(cfg, store, dashboardPolicyHandler.HandleCountry)))
 		// OpenShift users/entitlements management (redesigned admin page).
 
