@@ -39,13 +39,14 @@ func groupCommonName(g string) string {
 	return strings.TrimSpace(g)
 }
 
-// NormalizeGroups trims, reduces DNs/paths to their name, drops technical
-// roles, de-duplicates, and sorts.
+// NormalizeGroups trims, drops technical roles, de-duplicates, and sorts. It
+// is also used for the MaaS group header, so it must not rewrite path/DN
+// values; the eligibility gate uses normalizeGateGroups instead.
 func NormalizeGroups(groups []string) []string {
 	seen := make(map[string]struct{}, len(groups))
 	out := make([]string, 0, len(groups))
 	for _, g := range groups {
-		g = groupCommonName(g)
+		g = strings.TrimSpace(g)
 		if g == "" {
 			continue
 		}
@@ -66,4 +67,16 @@ func NormalizeGroups(groups []string) []string {
 		return strings.ToLower(out[i]) < strings.ToLower(out[j])
 	})
 	return out
+}
+
+// normalizeGateGroups is NormalizeGroups plus the DN/path reduction used for
+// eligibility comparison only.
+func normalizeGateGroups(groups []string) []string {
+	reduced := make([]string, 0, len(groups))
+	for _, g := range groups {
+		if name := groupCommonName(g); name != "" {
+			reduced = append(reduced, name)
+		}
+	}
+	return NormalizeGroups(reduced)
 }

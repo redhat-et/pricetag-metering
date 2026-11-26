@@ -134,8 +134,8 @@ func TestRequireAccountRedirectsForPendingTermsInObserve(t *testing.T) {
 	}
 }
 
-func TestNormalizeGroupsHandlesDNsAndPaths(t *testing.T) {
-	got := NormalizeGroups([]string{
+func TestNormalizeGateGroupsHandlesDNsAndPaths(t *testing.T) {
+	got := normalizeGateGroups([]string{
 		"CN=enmaas-users,OU=Groups,DC=redhat,DC=com",
 		"/enmaas-users",
 		" enmaas-users ",
@@ -149,9 +149,18 @@ func TestNormalizeGroupsHandlesDNsAndPaths(t *testing.T) {
 
 func TestTagStringListKeepsDNsIntact(t *testing.T) {
 	raw := "CN=enmaas-users,OU=Groups,DC=redhat,DC=com\nCN=other,OU=Groups,DC=redhat,DC=com"
-	got := NormalizeGroups(tagStringList(raw))
+	got := normalizeGateGroups(tagStringList(raw))
 	want := []string{"enmaas-users", "other"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("DN memberOf list = %#v, want %#v", got, want)
+	}
+}
+
+func TestTagStringListSplitsCommaJoinedDNs(t *testing.T) {
+	raw := "CN=enmaas-users,OU=Groups,DC=redhat,DC=com,CN=other,OU=Groups,DC=redhat,DC=com"
+	got := normalizeGateGroups(tagStringList(raw))
+	want := []string{"enmaas-users", "other"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("comma-joined DN list = %#v, want %#v", got, want)
 	}
 }

@@ -122,16 +122,18 @@ func (h *DashboardPolicyHandler) Handle(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// Apply only the flags the caller sent; a bare {country} keeps the legacy
-	// meaning of "block the dashboard" (older clients).
-	applyDashboard := body.Dashboard != nil
-	applyEnmaas := body.Enmaas != nil
-	if !applyDashboard && !applyEnmaas {
-		applyDashboard = true
+	// meaning of "block the dashboard" (older clients), which is also what an
+	// admin tab left open across the deploy sends.
+	dashboardBlocked := true
+	if body.Dashboard != nil {
+		dashboardBlocked = *body.Dashboard
 	}
+	applyDashboard := body.Dashboard != nil || body.Enmaas == nil
+	applyEnmaas := body.Enmaas != nil
 	actor := caller(r, h.cfg)
 	changedDashboard := false
 	if applyDashboard {
-		if *body.Dashboard {
+		if dashboardBlocked {
 			added, err := h.store.AddDashboardBlockedCountry(r.Context(), actor, country)
 			if err != nil {
 				slog.Error("dashboard policy add failed", "country", country, "error", err)

@@ -44,6 +44,11 @@ func TestDashboardPolicyMatrixFlags(t *testing.T) {
 	}
 
 	const cc = "US"
+	// Legacy bare {country}: block the dashboard, leave EnMaaS alone.
+	post(map[string]any{"country": cc})
+	if d, e := state(cc); !d || e {
+		t.Fatalf("bare country = (%v,%v), want (true,false)", d, e)
+	}
 	post(map[string]any{"country": cc, "dashboard": true, "enmaas": false})
 	if d, e := state(cc); !d || e {
 		t.Fatalf("dashboard-only block = (%v,%v), want (true,false)", d, e)

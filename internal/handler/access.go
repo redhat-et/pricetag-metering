@@ -115,8 +115,11 @@ func tagStringList(value any) []string {
 				return parsed
 			}
 		}
-		// LDAP memberOf values are DNs, which contain commas. Only split on
-		// commas when the value is not DN-shaped.
+		// LDAP memberOf values are DNs, which contain commas. A sync that
+		// serialises several DNs into one string joins them at ",CN="; split
+		// there, and otherwise only split on commas when the value is not
+		// DN-shaped.
+		s = splitCNJoined(s)
 		splitCommas := !strings.Contains(s, "=")
 		parts := strings.FieldsFunc(s, func(r rune) bool {
 			return r == '\n' || r == ';' || (r == ',' && splitCommas)
@@ -143,11 +146,11 @@ func gateGroups(session []string, tags map[string]any) []string {
 	// the list is empty. An empty list means the user left every Rover Group;
 	// falling back to OIDC then would silently re-authorize them.
 	if raw, ok := tags["rover_groups"]; ok {
-		return NormalizeGroups(tagStringList(raw))
+		return normalizeGateGroups(tagStringList(raw))
 	}
 	groups := append([]string{}, session...)
 	groups = append(groups, tagStringList(tags["groups"])...)
-	return NormalizeGroups(groups)
+	return normalizeGateGroups(groups)
 }
 
 // tagTruthy accepts the encodings the partner tag API can carry: JSON true,
@@ -473,4 +476,15 @@ func (g *AccessGate) NeedsOnboarding(ctx context.Context, username string, group
 		return false
 	}
 	return !state.Allowed || state.State != OnboardingReady
+}
+
+// splitCNJoined turns "CN=a,OU=...,CN=b,OU=..." into one DN per line.
+func splitCNJoined(s string) string {
+	for {
+		i := strings.Index(strings.ToLower(s), ",cn=")
+		if i < 0 {
+			return s
+		}
+		s = s[:i] + "\n" + s[i+1:]
+	}
 }
